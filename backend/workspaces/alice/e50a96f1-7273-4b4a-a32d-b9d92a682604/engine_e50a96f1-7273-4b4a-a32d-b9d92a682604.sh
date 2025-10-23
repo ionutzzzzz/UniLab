@@ -1,1 +1,0 @@
-exec octave --interactive
