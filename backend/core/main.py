@@ -97,6 +97,8 @@ class VariableInfo:
     preview: Any = None
 
 
+from backend.core.engine import TranspilerEngine
+
 # ---------------------------
 # UniLabCore
 # ---------------------------
@@ -117,6 +119,8 @@ class UniLabCore:
         self.sessions: Dict[str, SessionInfo] = {}
         # Per-session engine processes (local prototyping)
         self._process_map: Dict[str, asyncio.subprocess.Process] = {}
+        # Per-session transpiler engines
+        self._transpiler_engines: Dict[str, TranspilerEngine] = {}
         # In-memory stdout buffers (per session)
         self._stdout_buffers: Dict[str, List[str]] = {}
         # Locks per session for concurrency control
@@ -222,6 +226,9 @@ class UniLabCore:
             if use_docker:
                 cid = await self._spawn_docker_for_session(s)
                 s.container_id = cid
+            elif engine == "transpiler":
+                self._transpiler_engines[session_id] = TranspilerEngine(workspace)
+                logger.info("Initialized transpiler engine for session %s", session_id)
             else:
                 await self._start_persistent_octave(s)
         except Exception:
@@ -395,6 +402,7 @@ class UniLabCore:
                 except Exception:
                     pass
             self._process_map.pop(session_id, None)
+        self._transpiler_engines.pop(session_id, None)
         if s.container_id and not s.container_id.startswith("local:"):
             try:
                 await self._docker_rm(s.container_id)
@@ -474,6 +482,30 @@ class UniLabCore:
             collected_lines: List[str] = []
             out_text = ""
             err_text = ""
+
+            t_engine = self._transpiler_engines.get(session_id)
+            if t_engine:
+                logger.debug("Running via transpiler engine for session %s", session_id)
+                res_data = await t_engine.run_code(code, timeout=timeout)
+                duration = time.time() - start_ts
+                result = ExecutionResult(
+                    success=res_data['success'],
+                    stdout=res_data['stdout'],
+                    stderr=res_data['stderr'],
+                    return_code=0 if res_data['success'] else 1,
+                    duration_s=duration,
+                    variables_snapshot=res_data['variables'],
+                    plots=[] # handled via stdout ::SAVED:: markers
+                )
+                # Parse stdout for plots
+                for line in res_data['stdout'].splitlines():
+                    if "::SAVED::" in line:
+                        p = line.split("::SAVED::", 1)[1].strip()
+                        result.plots.append(p)
+                
+                self._metrics["runs"] += 1
+                await self._emit_event("code.ran", {"session_id": session_id, "success": res_data['success'], "duration": duration})
+                return result
 
             proc = self._process_map.get(session_id)
             if proc and proc.stdin:
@@ -598,6 +630,11 @@ class UniLabCore:
         sometimes can't jsonencode complex objects, we use try/catch and fetch best-effort values.
         """
         session = self._get_session(session_id)
+        
+        t_engine = self._transpiler_engines.get(session_id)
+        if t_engine:
+            return t_engine._get_variables()
+
         wrapper = (
             "try\n"
             "  vars = whos();\n"
@@ -652,6 +689,18 @@ class UniLabCore:
         """
         Evaluate an expression and return a best-effort Python object (via jsonencode).
         """
+        t_engine = self._transpiler_engines.get(session_id)
+        if t_engine:
+            # For transpiler, we can just eval the expression in the engine's globals
+            # but we should transpile it first if it's MATLAB syntax
+            try:
+                # expression might be simple, but transpile it anyway
+                from backend.core.core import transpile
+                py_expr = transpile(expr)
+                return eval(py_expr, t_engine.globals)
+            except Exception as e:
+                raise RuntimeError(f"Expression evaluation failed: {e}")
+
         # wrap with try/jsonencode
         wrapper = (
             "try\n"
@@ -799,7 +848,14 @@ class UniLabCore:
         plots_dir.mkdir(parents=True, exist_ok=True)
         fname = f"plot_{session.session_id}_{int(time.time()*1000)}.{fmt}"
         target = plots_dir / fname
-        wrapper = user_plot_commands + "\n" + self._plot_save_snippet(str(target), fmt=fmt)
+        
+        t_engine = self._transpiler_engines.get(session_id)
+        if t_engine:
+            # For transpiler, use our save_plot helper
+            wrapper = user_plot_commands + f"\nsave_plot('{str(target)}');"
+        else:
+            wrapper = user_plot_commands + "\n" + self._plot_save_snippet(str(target), fmt=fmt)
+            
         res = await self.run_code(session_id, wrapper, timeout=timeout)
         if not res.success:
             raise RuntimeError("Plot export failed: " + (res.stderr or res.stdout))
@@ -1057,13 +1113,13 @@ if __name__ == "__main__":
     import asyncio
 
     async def demo():
-        cfg = BackendConfig(workspace_root=pathlib.Path("./demo_workspaces"), use_docker=False, octave_cmd=r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\GNU Octave 10.2.0")
+        cfg = BackendConfig(workspace_root=pathlib.Path("./demo_workspaces"), use_docker=False)
         core = UniLabCore(cfg)
         await core.start()
-        # create a session
-        s = await core.create_session(username="alice", engine="octave")
+        # create a session using the custom transpiler engine
+        s = await core.create_session(username="alice", engine="transpiler")
         # write a simple file
-        await core.write_file(s.session_id, "example.m", "x = 0:0.1:2*pi; y = sin(x); plot(x,y); print('-dpng','plots/sin.png');")
+        await core.write_file(s.session_id, "example.m", "x = 0:0.1:2*pi; y = sin(x); plot(x,y); save_plot('plots/sin.png');")
         # run the script
         res = await core.run_script_file(s.session_id, s.workspace_path / "example.m", timeout=20.0)
         print("Run success:", res.success)

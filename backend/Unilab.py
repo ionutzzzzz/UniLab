@@ -42,6 +42,7 @@ class EngineType(str, Enum):
     MATLAB = "matlab"
     OCTAVE_WASM = "octave-wasm"
     COMPILED = "compiled"
+    TRANSPILER = "transpiler"
 
 
 @dataclass
