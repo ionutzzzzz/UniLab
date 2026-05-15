@@ -4,3 +4,7 @@ matplotlib==3.10.9
 scipy>=1.10.0
 scikit-learn>=1.2.0
 pandas>=2.0.0
+fastapi
+uvicorn
+pydantic
+python-multipart

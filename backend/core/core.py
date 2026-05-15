@@ -21,26 +21,26 @@ MATLAB_GRAMMAR = r"""
     ?lhs: identifier -> single_lhs
         | LBRACKET identifier (COMMA identifier)* RBRACKET -> multi_lhs
 
-    clear_stmt: "clear" (identifier | "all")* SEMI?
+    clear_stmt: CLEAR (identifier | "all")* SEMI?
 
     command_call: identifier identifier+ SEMI?
 
-    if_stmt: "if" expression block elseif_clause* else_clause? "end"
-    elseif_clause: "elseif" expression block
-    else_clause: "else" block
+    if_stmt: IF expression block elseif_clause* else_clause? END
+    elseif_clause: ELSEIF expression block
+    else_clause: ELSE block
     
-    for_stmt: "for" identifier EQ expression block "end"
-    while_stmt: "while" expression block "end"
+    for_stmt: FOR identifier EQ expression block END
+    while_stmt: WHILE expression block END
     
-    switch_stmt: "switch" expression case_clause* otherwise_clause? "end"
-    case_clause: "case" expression block
-    otherwise_clause: "otherwise" block
+    switch_stmt: SWITCH expression case_clause* otherwise_clause? END
+    case_clause: CASE expression block
+    otherwise_clause: OTHERWISE block
     
-    try_stmt: "try" block "catch" identifier? block "end"
+    try_stmt: TRY block CATCH identifier? block END
     
-    global_stmt: "global" identifier (COMMA? identifier)* SEMI?
+    global_stmt: GLOBAL identifier (COMMA? identifier)* SEMI?
 
-    function_def: "function" function_ret? identifier LPAR arg_list? RPAR block "end"
+    function_def: FUNCTION function_ret? identifier LPAR arg_list? RPAR block END
     function_ret: ret_list EQ
     ret_list: identifier -> single_ret
             | LBRACKET identifier (COMMA identifier)* RBRACKET -> multi_ret
@@ -85,6 +85,7 @@ MATLAB_GRAMMAR = r"""
     ?power: atom
           | power POW atom           -> pow
           | power DOT_POW atom       -> dot_pow
+          | power TRANSPOSE          -> transpose
 
     ?atom: NUMBER                    -> number
          | STRING                    -> string
@@ -96,10 +97,25 @@ MATLAB_GRAMMAR = r"""
     matrix: LBRACKET row (SEMI row)* RBRACKET
     row: expression (COMMA? expression)*
 
-    function_call: identifier LPAR call_args? RPAR
+    function_call.2: identifier LPAR call_args? RPAR
     call_args: expression (COMMA expression)*
 
     identifier: CNAME
+
+    FUNCTION: "function"
+    END: "end"
+    IF: "if"
+    ELSEIF: "elseif"
+    ELSE: "else"
+    FOR: "for"
+    WHILE: "while"
+    SWITCH: "switch"
+    CASE: "case"
+    OTHERWISE: "otherwise"
+    TRY: "try"
+    CATCH: "catch"
+    GLOBAL: "global"
+    CLEAR: "clear"
 
     EQ: "="
     PLUS: "+"
@@ -110,6 +126,7 @@ MATLAB_GRAMMAR = r"""
     DOT_DIV: "./"
     POW: "^"
     DOT_POW: ".^"
+    TRANSPOSE: "'"
     LPAR: "("
     RPAR: ")"
     LBRACKET: "["
@@ -145,6 +162,7 @@ class MatlabToPython(Transformer):
 
     def _indent(self, lines):
         if not lines: return ["    pass"]
+        if isinstance(lines, str): lines = [lines]
         return ["    " + line for line in lines]
 
     def number(self, n): return str(n[0])
@@ -195,6 +213,7 @@ class MatlabToPython(Transformer):
     def dot_div(self, items): return f"({items[0]} / {items[2]})"
     def pow(self, items): return f"unilab_pow({items[0]}, {items[2]})"
     def dot_pow(self, items): return f"({items[0]} ** {items[2]})"
+    def transpose(self, items): return f"{items[0]}.T"
     def neg(self, items): return f"-{items[1]}"
     def not_op(self, items): return f"(not {items[1]})"
     def or_op(self, items): return f"({items[0]} or {items[2]})"
@@ -234,61 +253,54 @@ class MatlabToPython(Transformer):
         return [str(i) for i in items if str(i) != ","]
 
     def block(self, items):
-        raw_flattened = []
-        for s in items:
-            if isinstance(s, list): raw_flattened.extend(s)
-            elif s is not None: raw_flattened.append(s)
-        
         flattened = []
-        i = 0
-        while i < len(raw_flattened):
-            s = raw_flattened[i]
-            if i + 1 < len(raw_flattened) and isinstance(s, str) and isinstance(raw_flattened[i+1], str):
-                if raw_flattened[i+1].startswith("("):
-                    if s.isidentifier() or s.endswith("sin") or s.endswith("disp") or s.endswith("plot") or "=" in s:
-                        flattened.append(f"{s}{raw_flattened[i+1]}")
-                        i += 2
-                        continue
-                if s in ["grid", "hold"]:
-                    flattened.append(f"{s}('{raw_flattened[i+1]}')")
-                    i += 2
-                    continue
-            flattened.append(s)
-            i += 1
+        for s in items:
+            if isinstance(s, list):
+                flattened.extend(s)
+            elif s is not None:
+                flattened.append(s)
         return flattened
 
     def start(self, items):
         return "\n".join(self.block(items))
 
     def if_stmt(self, items):
+        # items: [IF, expression, block, elseif_clause*, else_clause?, END]
         cond = items[1]
         block = items[2]
         lines = [f"if {cond}:"]
         lines.extend(self._indent(block))
-        for i in range(3, len(items)-1):
-            if isinstance(items[i], list): lines.extend(items[i])
+        for i in range(3, len(items) - 1):
+            clause = items[i]
+            if isinstance(clause, list):
+                lines.extend(clause)
         return lines
 
     def elseif_clause(self, items):
+        # items: [ELSEIF, expression, block]
         return [f"elif {items[1]}:"] + self._indent(items[2])
 
     def else_clause(self, items):
+        # items: [ELSE, block]
         return ["else:"] + self._indent(items[1])
 
     def for_stmt(self, items):
+        # items: [FOR, identifier, EQ, expression, block, END]
         return [f"for {items[1]} in {items[3]}:"] + self._indent(items[4])
 
     def while_stmt(self, items):
+        # items: [WHILE, expression, block, END]
         return [f"while {items[1]}:"] + self._indent(items[2])
 
     def switch_stmt(self, items):
+        # items: [SWITCH, expression, case_clause*, otherwise_clause?, END]
         expr = items[1]
         self._switch_depth += 1
         var_name = f"_sw_{self._switch_depth}"
         lines = [f"{var_name} = {expr}"]
         
         first = True
-        for i in range(2, len(items)-1):
+        for i in range(2, len(items) - 1):
             clause = items[i]
             if clause is None: continue
             if first:
@@ -303,52 +315,68 @@ class MatlabToPython(Transformer):
         return lines
 
     def case_clause(self, items):
+        # items: [CASE, expression, block]
         return [f"elif _sw_tmp == {items[1]}:"] + self._indent(items[2])
 
     def otherwise_clause(self, items):
+        # items: [OTHERWISE, block]
         return ["else:"] + self._indent(items[1])
 
     def try_stmt(self, items):
+        # items: [TRY, block, CATCH, identifier?, block, END]
         lines = ["try:"]
         lines.extend(self._indent(items[1]))
-        catch_idx = items.index("catch")
-        if catch_idx + 1 < len(items) and str(items[catch_idx+1]) != "end" and not isinstance(items[catch_idx+1], list):
-            err_var = items[catch_idx+1]
-            catch_block = items[catch_idx+2]
-            lines.append(f"except Exception as {err_var}:")
-        else:
-            catch_block = items[catch_idx+1] if catch_idx + 1 < len(items) else []
-            lines.append("except Exception:")
         
-        lines.extend(self._indent(catch_block))
+        # Search for catch block
+        catch_idx = -1
+        for idx, item in enumerate(items):
+            if str(item) == "catch":
+                catch_idx = idx
+                break
+        
+        if catch_idx != -1:
+            if catch_idx + 2 < len(items) and str(items[catch_idx+2]) != "end":
+                err_var = items[catch_idx+1]
+                catch_block = items[catch_idx+2]
+                lines.append(f"except Exception as {err_var}:")
+            else:
+                catch_block = items[catch_idx+1]
+                lines.append("except Exception:")
+            lines.extend(self._indent(catch_block))
         return lines
 
     def global_stmt(self, items):
-        names = []
-        for i in range(1, len(items)):
-            s = str(items[i])
-            if s not in [";", ","]: names.append(s)
+        # items: [GLOBAL, identifier, identifier, ...]
+        names = [str(i) for i in items[1:]]
         for n in names: self.globals.add(n)
         return [f"global {', '.join(names)}"]
 
     def function_ret(self, items):
+        # items: [ret_list, EQ]
         return items[0]
 
     def single_ret(self, items): return str(items[0])
-    def multi_ret(self, items): return [str(i) for i in items if str(i) not in ["[", "]", ","]]
-    def arg_list(self, items): return [str(i) for i in items if str(i) != ","]
+    def multi_ret(self, items):
+        # items: [LBRACKET, identifier, COMMA, identifier, ..., RBRACKET]
+        return [str(i) for i in items if str(i) not in ["[", "]", ","]]
+
+    def arg_list(self, items):
+        return [str(i) for i in items if str(i) != ","]
 
     def function_def(self, items):
+        # items: [FUNCTION, function_ret?, identifier, LPAR, arg_list?, RPAR, block, END]
         try:
             lpar_idx = items.index("(")
             rpar_idx = items.index(")")
             name = items[lpar_idx - 1]
-            rets = None
-            if lpar_idx >= 4 and str(items[lpar_idx-2]) == "=":
-                rets = items[lpar_idx-3]
-            args = items[lpar_idx+1] if rpar_idx > lpar_idx + 1 else None
-            block = items[rpar_idx+1]
-        except:
+            rets = items[1] if lpar_idx == 3 else None
+            
+            args = None
+            if rpar_idx > lpar_idx + 1:
+                args = items[lpar_idx + 1]
+            
+            block = items[rpar_idx + 1]
+        except (ValueError, IndexError):
             name = "unknown"
             args = None
             block = []
