@@ -9,7 +9,7 @@ import pathlib
 import numpy as np
 from typing import Any, Dict, Optional
 from contextlib import redirect_stdout, redirect_stderr
-from ..core import MatlabTranspiler
+from ..core import UniLabTranspiler
 from .. import runtime
 from .base import BaseEngine
 from ..models import ExecutionResult, SessionInfo
@@ -17,7 +17,7 @@ from ..models import ExecutionResult, SessionInfo
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
-        self.transpiler = MatlabTranspiler()
+        self.transpiler = UniLabTranspiler()
         self.search_paths = [self.workspace_path]
         self.globals = {
             'np': np,

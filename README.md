@@ -26,7 +26,7 @@
 
 **UniLab** is a personal project designed for students and researchers. It focuses on the simulation, modeling, and analysis of mathematical systems, with deep applications in artificial intelligence, engineering, and data processing. 
 
-Historically, advanced mathematical modeling has been locked behind expensive, heavy, and visually outdated legacy software. The platform was built to provide an accessible and modern alternative to industry-standard tools such as MATLAB and Wolfram Alpha. By integrating computational methods, dynamic visualization, and algorithmic experimentation into a single unified environment, UniLab streamlines complex technical workflows.
+Historically, advanced mathematical modeling has been locked behind expensive, heavy, and visually outdated legacy software. The platform was built to provide an accessible and modern alternative to industry-standard tools such as UniLab and Wolfram Alpha. By integrating computational methods, dynamic visualization, and algorithmic experimentation into a single unified environment, UniLab streamlines complex technical workflows.
 
 Whether you are plotting multi-variable calculus equations, training a localized machine learning model, or analyzing signal processing data, UniLab provides the necessary horsepower in a lightweight, browser-accessible interface.
 

@@ -1,8 +1,8 @@
 from lark import Lark, Transformer, v_args, Tree
 import numpy as np
 
-# EBNF Grammar for a subset of MATLAB
-MATLAB_GRAMMAR = r"""
+# EBNF Grammar for a subset of UniLab
+UniLab_GRAMMAR = r"""
     start: statement*
 
     ?statement: if_stmt
@@ -161,7 +161,7 @@ MATLAB_GRAMMAR = r"""
     %ignore /%.*/
 """
 
-class MatlabToPython(Transformer):
+class UniLabToPython(Transformer):
     def __init__(self):
         self.variables = set()
         self.globals = set()
@@ -286,7 +286,7 @@ class MatlabToPython(Transformer):
         if not has_semi:
             if isinstance(lhs, list):
                 # For multi-lhs, we might want to print each? 
-                # MATLAB prints the first one usually or a summary.
+                # UniLab prints the first one usually or a summary.
                 # Let's just print the whole tuple for now.
                 lhs_str = f"[{', '.join([str(n) for n in lhs])}]"
                 return f"{stmt}; unilab_print_var('{lhs_str}', ({', '.join([str(n) for n in lhs])}))"
@@ -491,26 +491,26 @@ class MatlabToPython(Transformer):
             else: lines.append(f"    return {rets}")
         return lines
 
-class MatlabTranspiler:
+class UniLabTranspiler:
     def __init__(self):
-        self.parser = Lark(MATLAB_GRAMMAR, parser='earley')
-        self.transformer = MatlabToPython()
+        self.parser = Lark(UniLab_GRAMMAR, parser='earley')
+        self.transformer = UniLabToPython()
 
-    def transpile(self, matlab_code):
+    def transpile(self, UniLab_code):
         self.transformer.variables = set()
         self.transformer.globals = set()
         self.transformer.called_functions = set()
         self.transformer.added_paths = set()
-        tree = self.parser.parse(matlab_code)
+        tree = self.parser.parse(UniLab_code)
         result = self.transformer.transform(tree)
         return str(result), self.transformer.called_functions, self.transformer.added_paths
 
-def transpile(matlab_code):
-    transpiler = MatlabTranspiler()
-    return transpiler.transpile(matlab_code)
+def transpile(UniLab_code):
+    transpiler = UniLabTranspiler()
+    return transpiler.transpile(UniLab_code)
 
 if __name__ == "__main__":
-    t = MatlabTranspiler()
+    t = UniLabTranspiler()
     test_code = """
     function [y] = my_func(x)
         y = x * 2;

@@ -51,7 +51,7 @@ class TestUniLabCore(unittest.IsolatedAsyncioTestCase):
 
     async def test_error_handling(self):
         session = await self.core.create_session(username="testuser", engine="transpiler")
-        code = "this is not matlab code"
+        code = "this is not UniLab code"
         result = await self.core.run_code(session.session_id, code)
         
         self.assertFalse(result.success)

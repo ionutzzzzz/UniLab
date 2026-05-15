@@ -1,9 +1,9 @@
 import unittest
-from backend.core.core import MatlabTranspiler
+from backend.core.core import UniLabTranspiler
 
-class TestMatlabTranspiler(unittest.TestCase):
+class TestUniLabTranspiler(unittest.TestCase):
     def setUp(self):
-        self.transpiler = MatlabTranspiler()
+        self.transpiler = UniLabTranspiler()
 
     def test_basic_assignment(self):
         code = "x = 10;"

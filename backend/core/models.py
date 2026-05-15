@@ -7,7 +7,7 @@ from enum import Enum
 
 class EngineType(str, Enum):
     OCTAVE = "octave"
-    MATLAB = "matlab"
+    UniLab = "UniLab"
     OCTAVE_WASM = "octave-wasm"
     COMPILED = "compiled"
     TRANSPILER = "transpiler"

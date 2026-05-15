@@ -32,7 +32,7 @@ def figure():
     return plt.figure()
 
 def plot(*args, **kwargs):
-    # Replicate MATLAB plot behavior
+    # Replicate UniLab plot behavior
     # For now, just a wrapper around plt.plot
     res = plt.plot(*args, **kwargs)
     return res
@@ -165,6 +165,53 @@ def whos():
     # if it's called as a function.
     pass
 
+def factorial(n):
+    from math import factorial as f
+    if isinstance(n, (np.ndarray, list)):
+        return np.array([f(int(i)) for i in n])
+    return f(int(n))
+
+def mod(x, y):
+    return np.mod(x, y)
+
+import sympy
+
+def syms(*names):
+    """Define symbolic variables."""
+    if len(names) == 1 and isinstance(names[0], str) and ' ' in names[0]:
+        names = names[0].split()
+    
+    symbols = sympy.symbols(names)
+    if len(names) == 1:
+        return symbols
+    return symbols
+
+def diff_sym(expr, var, n=1):
+    """Symbolic differentiation."""
+    return sympy.diff(expr, var, n)
+
+def int_sym(expr, var, a=None, b=None):
+    """Symbolic integration."""
+    if a is None:
+        return sympy.integrate(expr, var)
+    return sympy.integrate(expr, (var, a, b))
+
+def solve_sym(eq, var):
+    """Solve symbolic equation eq == 0."""
+    return sympy.solve(eq, var)
+
+def simplify_sym(expr):
+    """Simplify symbolic expression."""
+    return sympy.simplify(expr)
+
+def expand_sym(expr):
+    """Expand symbolic expression."""
+    return sympy.expand(expr)
+
+def subs_sym(expr, old, new):
+    """Substitute old with new in expr."""
+    return expr.subs(old, new)
+
 # Matrix Analysis
 def length(x):
     if hasattr(x, '__len__'):
@@ -207,6 +254,70 @@ def min(*args, axis=None):
         return np.min(args[0], axis=axis)
     return np.minimum(*args)
 
+def sort(x, axis=-1):
+    # Returns only sorted array for now to avoid tuple issues
+    return np.sort(x, axis=axis)
+
+def mode(x, axis=None):
+    from scipy import stats
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = stats.mode(x, axis=axis, keepdims=True)
+    return m.mode
+
+def find(condition):
+    return np.where(condition)[0] + 1
+
+def unique(x):
+    return np.unique(x)
+
+def argsort(x, axis=-1):
+    return np.argsort(x, axis=axis) + 1
+
+def argmin(x, axis=None):
+    return np.argmin(x, axis=axis) + 1
+
+def argmax(x, axis=None):
+    return np.argmax(x, axis=axis) + 1
+
+def norm(x, ord=None):
+    return np.linalg.norm(x, ord=ord)
+
+def diag(x, k=0):
+    return np.diag(x, k=k)
+
+def isempty(x):
+    if hasattr(x, 'size'):
+        return x.size == 0
+    return len(x) == 0
+
+def isvector(x):
+    if isinstance(x, np.ndarray):
+        return x.ndim == 1 or (x.ndim == 2 and (x.shape[0] == 1 or x.shape[1] == 1))
+    return isinstance(x, (list, tuple))
+
+def ismatrix(x):
+    if isinstance(x, np.ndarray):
+        return x.ndim == 2
+    return False
+
+def any(x):
+    return np.any(x)
+
+def all(x):
+    return np.all(x)
+
+def reshape(x, *args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.reshape(x, tuple(int(i) for i in args[0]))
+    return np.reshape(x, tuple(int(i) for i in args))
+
+def repmat(x, *args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.tile(x, tuple(int(i) for i in args[0]))
+    return np.tile(x, tuple(int(i) for i in args))
+
 # Linear Algebra
 def inv(x):
     return np.linalg.inv(x)
@@ -217,10 +328,17 @@ def det(x):
 def eig(x):
     return np.linalg.eig(x)
 
+def svd(x):
+    U, S, Vh = np.linalg.svd(x)
+    return U, np.diag(S), Vh.T
+
 def num2str(x):
     if isinstance(x, (np.ndarray, list)):
         return str(x)
     return str(x)
+
+def strcmp(s1, s2):
+    return s1 == s2
 
 # Array Creation
 def linspace(start, stop, n=100):
@@ -229,11 +347,34 @@ def linspace(start, stop, n=100):
 def logspace(start, stop, n=50):
     return np.logspace(start, stop, n)
 
+def randperm(n):
+    return np.random.permutation(n) + 1
+
 # Other Math
 def abs(x): return np.abs(x)
 def round(x): return np.round(x)
 def floor(x): return np.floor(x)
 def ceil(x): return np.ceil(x)
+def fix(x): return np.trunc(x)
+def rem(x, y): return np.remainder(x, y)
+def logical(x): return np.asarray(x, dtype=bool)
+
+def rand(*args):
+    if len(args) == 0:
+        return np.random.rand()
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.random.rand(*tuple(int(i) for i in args[0]))
+    return np.random.rand(*tuple(int(i) for i in args))
+
+def randn(*args):
+    if len(args) == 0:
+        return np.random.randn()
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.random.randn(*tuple(int(i) for i in args[0]))
+    return np.random.randn(*tuple(int(i) for i in args))
+
+def real(x):
+    return np.real(x)
 
 # Signal Processing
 def fft_plot(x, fs):
@@ -293,6 +434,48 @@ def unilab_clear_variables(g, var_names):
         if name in g:
             del g[name]
 
+def list_libraries():
+    """List all available libraries and their functions."""
+    import pathlib
+    import os
+    
+    current_file = pathlib.Path(__file__).resolve()
+    # backend/core/runtime.py -> backend/libraries
+    libraries_dir = current_file.parent.parent / "libraries"
+    packages_dir = current_file.parent.parent / "packages"
+    
+    print("-" * 50)
+    print("🧪 UniLab Toolbox Explorer")
+    print("-" * 50)
+    
+    def scan_dir(base_dir, label):
+        if not base_dir.exists():
+            return
+            
+        print(f"\n[{label}]")
+        for item in sorted(base_dir.iterdir()):
+            if item.is_dir() and not item.name.startswith("__"):
+                funcs = sorted([f.stem for f in item.glob("*.m")])
+                if not funcs:
+                    # Check for __init__.py if it's a python package
+                    if (item / "__init__.py").exists():
+                        funcs = ["(Python Package)"]
+                
+                if funcs:
+                    print(f"  > {item.name}:")
+                    # Print functions in a clean wrapped format
+                    line = "    "
+                    for i, f in enumerate(funcs):
+                        if len(line) + len(f) + 2 > 80:
+                            print(line)
+                            line = "    "
+                        line += f + (", " if i < len(funcs) - 1 else "")
+                    print(line)
+
+    scan_dir(libraries_dir, "Standard Libraries (.m)")
+    scan_dir(packages_dir, "Custom Packages (.py)")
+    print("\n" + "-" * 50)
+
 # Built-in math functions
 def sin(x): return np.sin(x)
 def cos(x): return np.cos(x)
@@ -347,3 +530,18 @@ def randi(high, n=1, m=None):
             return np.random.randint(1, high + 1, size=shape)
         return np.random.randint(1, high + 1, size=(int(n), 1))
     return np.random.randint(1, high + 1, size=(int(n), int(m)))
+
+def cell(n, m=1):
+    if isinstance(n, (list, tuple, np.ndarray)):
+        size = 1
+        for i in n: size *= int(i)
+        return [None] * size
+    return [None] * (int(n) * int(m))
+
+def struct(*args):
+    # MATLAB struct('field1', val1, 'field2', val2, ...)
+    res = {}
+    for i in range(0, len(args), 2):
+        if i+1 < len(args):
+            res[args[i]] = args[i+1]
+    return res

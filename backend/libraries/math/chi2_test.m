@@ -1,0 +1,10 @@
+function [chi2, p_val] = chi2_test(observed, expected)
+    % CHI2_TEST Chi-square test for goodness of fit
+    
+    chi2 = sum((observed - expected).^2 ./ expected);
+    
+    % Degrees of freedom
+    df = length(observed) - 1;
+    % P-value approximation (simplified)
+    p_val = 1 - erf_approx(sqrt(chi2 / 2));
+end

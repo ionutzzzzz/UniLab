@@ -137,7 +137,7 @@ class UniLabCLIApp(tk.Tk):
     # UI helpers
     # ---------------------------
     def _print_banner(self):
-        self._write_terminal("UniLab CLI Client\nType Octave/Matlab commands and press Run. Create a session first.\n\n", "banner")
+        self._write_terminal("UniLab CLI Client\nType Octave/UniLab commands and press Run. Create a session first.\n\n", "banner")
 
     def _write_terminal(self, text: str, tag: str = None):
         self.terminal.configure(state=tk.NORMAL)
@@ -278,7 +278,7 @@ class UniLabCLIApp(tk.Tk):
         if not self.session_id:
             self._write_terminal("Create a session first.", "error")
             return
-        path = filedialog.askopenfilename(title="Choose .m script to run", filetypes=[("MATLAB/Octave files", "*.m"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(title="Choose .m script to run", filetypes=[("UniLab/Octave files", "*.m"), ("All files", "*.*")])
         if not path:
             return
         # copy script into workspace and run

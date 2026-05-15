@@ -19,11 +19,20 @@ if 'backend' not in os.listdir('.') and 'backend' in os.listdir('..'):
 
 try:
     from backend.core.main import UniLabCore, BackendConfig
-except ImportError:
-    try:
-        from core.main import UniLabCore, BackendConfig
-    except ImportError as e:
-        print(f"Error: Could not import UniLabCore. {e}")
+except ImportError as e:
+    # If it failed to find 'backend', it might be a path issue.
+    # Otherwise, it might be a missing dependency (like sympy).
+    if "No module named 'backend'" in str(e):
+        try:
+            from core.main import UniLabCore, BackendConfig
+        except ImportError as e2:
+            print(f"Error: Could not import UniLabCore. Ensure you are in the project root.")
+            print(f"Original error: {e}")
+            print(f"Fallback error: {e2}")
+            sys.exit(1)
+    else:
+        print(f"Error: Failed to import UniLabCore due to missing dependency: {e}")
+        print("Please ensure all requirements are installed: pip install -r backend/requirements.txt")
         sys.exit(1)
 
 async def run_console(engine_name: str = "transpiler"):

@@ -9,7 +9,7 @@ sys.path.insert(0, os.getcwd())
 
 from core.main import UniLabCore, BackendConfig
 
-async def run_matlab_script(script_path):
+async def run_UniLab_script(script_path):
     path = pathlib.Path(script_path)
     if not path.exists():
         print(f"Error: Script '{script_path}' not found.")
@@ -75,7 +75,7 @@ async def run_matlab_script(script_path):
         await core.stop()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="UniLab CLI: Run a MATLAB script via the Transpiler engine.")
+    parser = argparse.ArgumentParser(description="UniLab CLI: Run a UniLab script via the Transpiler engine.")
     parser.add_argument("script", help="Path to the .m script to execute")
     
     if len(sys.argv) < 2:
@@ -85,6 +85,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     try:
-        asyncio.run(run_matlab_script(args.script))
+        asyncio.run(run_UniLab_script(args.script))
     except KeyboardInterrupt:
         print("\nExecution interrupted by user.")
