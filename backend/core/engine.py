@@ -5,12 +5,13 @@ import io
 import time
 import numpy as np
 from contextlib import redirect_stdout, redirect_stderr
-from backend.core.core import transpile
+from backend.core.core import MatlabTranspiler
 import backend.core.runtime as runtime
 
 class TranspilerEngine:
     def __init__(self, workspace_path):
         self.workspace_path = workspace_path
+        self.transpiler = MatlabTranspiler()
         self.globals = {
             'np': np,
             '__builtins__': __builtins__,
@@ -23,7 +24,9 @@ class TranspilerEngine:
     async def run_code(self, code, timeout=30):
         start_ts = time.time()
         try:
-            python_code = transpile(code)
+            python_code = self.transpiler.transpile(code)
+            # Use sys.__stdout__ to bypass any redirects
+            print(f"DEBUG Transpiled Python:\n{python_code}\n", file=sys.__stdout__)
             
             # Prepare execution environment
             out = io.StringIO()

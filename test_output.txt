@@ -1,0 +1,21 @@
+2026-05-14 00:24:48,988 [INFO] UniLabCore initialized with workspace root: test_workspaces
+2026-05-14 00:24:48,989 [DEBUG] Starting UniLabCore background tasks
+2026-05-14 00:24:48,990 [INFO] Created session 46a1d56b-85c0-49a6-a0f2-61722429e997 (user=test_user, engine=transpiler, docker=False)
+2026-05-14 00:24:49,146 [INFO] Initialized transpiler engine for session 46a1d56b-85c0-49a6-a0f2-61722429e997
+2026-05-14 00:24:49,147 [DEBUG] Running via transpiler engine for session 46a1d56b-85c0-49a6-a0f2-61722429e997
+2026-05-14 00:24:49,356 [DEBUG] Running via transpiler engine for session 46a1d56b-85c0-49a6-a0f2-61722429e997
+2026-05-14 00:24:49,554 [DEBUG] Running via transpiler engine for session 46a1d56b-85c0-49a6-a0f2-61722429e997
+2026-05-14 00:24:49,776 [INFO] Stopped session 46a1d56b-85c0-49a6-a0f2-61722429e997
+2026-05-14 00:24:49,776 [INFO] UniLabCore stopped
+Initializing UniLabCore...
+Creating session with 'transpiler' engine...
+
+Testing Switch/Case:
+ - result: None
+
+Testing Try/Catch:
+ - error_msg: None
+
+Testing Global variables:
+ - val_from_global: None
+
