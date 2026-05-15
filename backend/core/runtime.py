@@ -51,6 +51,93 @@ def unilab_pow(a, b):
     # Matrix power is more complex, but we'll simplify
     return np.power(a, b)
 
+def unilab_or(a, b):
+    if np.isscalar(a) and np.isscalar(b):
+        return a or b
+    return np.logical_or(a, b)
+
+def unilab_and(a, b):
+    if np.isscalar(a) and np.isscalar(b):
+        return a and b
+    return np.logical_and(a, b)
+
+def unilab_call(obj, *args):
+    if callable(obj):
+        return obj(*args)
+    
+    if not hasattr(obj, '__getitem__'):
+        return obj
+    
+    if len(args) == 0:
+        return obj
+        
+    if len(args) == 1:
+        idx = args[0]
+        # If obj is a vector (1, N) or (N, 1), and we have 1D index
+        if isinstance(obj, np.ndarray) and (obj.shape[0] == 1 or obj.shape[1] == 1):
+            # Flatten for indexing
+            flat_obj = obj.flatten()
+            if isinstance(idx, (int, np.integer, float, np.floating)):
+                return flat_obj[int(idx)-1]
+            if isinstance(idx, (np.ndarray, list, slice)):
+                # Adjust 1-based indexing for arrays of integers/floats
+                if isinstance(idx, np.ndarray) and not np.issubdtype(idx.dtype, np.bool_):
+                    return flat_obj[idx.flatten().astype(int) - 1]
+                if isinstance(idx, list) and len(idx) > 0 and isinstance(idx[0], (int, float)):
+                    return flat_obj[np.array(idx).astype(int) - 1]
+                return flat_obj[idx]
+        
+        # Standard indexing
+        if isinstance(idx, (int, np.integer, float, np.floating)):
+            return obj[int(idx)-1]
+        return obj[idx]
+
+    # Multi-dimensional indexing
+    processed = []
+    for i in args:
+        if isinstance(i, (int, np.integer, float, np.floating)):
+            processed.append(int(i) - 1)
+        else:
+            processed.append(i)
+    return obj[tuple(processed)]
+
+def unilab_get(obj, attr):
+    if isinstance(obj, dict):
+        return obj.get(attr)
+    return getattr(obj, attr)
+
+def unilab_set(obj, val, *args):
+    if len(args) == 1:
+        idx = args[0]
+        if isinstance(obj, np.ndarray) and (obj.shape[0] == 1 or obj.shape[1] == 1):
+            # Handle vector indexing
+            flat_idx = idx
+            if isinstance(idx, (int, np.integer, float, np.floating)):
+                flat_idx = int(idx) - 1
+            elif isinstance(idx, np.ndarray) and not np.issubdtype(idx.dtype, np.bool_):
+                flat_idx = idx.flatten().astype(int) - 1
+            
+            # We need to be careful about shape when setting
+            if obj.shape[0] == 1: # Row vector
+                obj[0, flat_idx] = val
+            else: # Column vector
+                obj[flat_idx, 0] = val
+            return obj
+
+        if isinstance(idx, (int, np.integer, float, np.floating)):
+            obj[int(idx)-1] = val
+        else:
+            obj[idx] = val
+    elif len(args) > 1:
+        processed = []
+        for i in args:
+            if isinstance(i, (int, np.integer, float, np.floating)):
+                processed.append(int(i) - 1)
+            else:
+                processed.append(i)
+        obj[tuple(processed)] = val
+    return obj
+
 # Matrix Analysis
 def length(x):
     if hasattr(x, '__len__'):
@@ -71,11 +158,27 @@ def sum(x, axis=None):
 def mean(x, axis=None):
     return np.mean(x, axis=axis)
 
-def max(x, axis=None):
-    return np.max(x, axis=axis)
+def std(x, axis=None):
+    return np.std(x, axis=axis)
 
-def min(x, axis=None):
-    return np.min(x, axis=axis)
+def var(x, axis=None):
+    return np.var(x, axis=axis)
+
+def median(x, axis=None):
+    return np.median(x, axis=axis)
+
+def quantile(x, q, axis=None):
+    return np.quantile(x, q, axis=axis)
+
+def max(*args, axis=None):
+    if len(args) == 1:
+        return np.max(args[0], axis=axis)
+    return np.maximum(*args)
+
+def min(*args, axis=None):
+    if len(args) == 1:
+        return np.min(args[0], axis=axis)
+    return np.minimum(*args)
 
 # Linear Algebra
 def inv(x):
@@ -86,6 +189,11 @@ def det(x):
 
 def eig(x):
     return np.linalg.eig(x)
+
+def num2str(x):
+    if isinstance(x, (np.ndarray, list)):
+        return str(x)
+    return str(x)
 
 # Array Creation
 def linspace(start, stop, n=100):
@@ -168,16 +276,47 @@ def sqrt(x): return np.sqrt(x)
 def pi(): return np.pi
 
 def eye(n, m=None):
-    return np.eye(n, m)
+    if isinstance(n, (list, tuple, np.ndarray)):
+        n = n[0]
+    return np.eye(int(n), int(m) if m is not None else None)
 
-def zeros(n, m=1):
-    return np.zeros((n, m))
+def zeros(n, m=None):
+    if m is None:
+        if isinstance(n, (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in n)
+            return np.zeros(shape)
+        return np.zeros((int(n), 1))
+    return np.zeros((int(n), int(m)))
 
-def ones(n, m=1):
-    return np.ones((n, m))
+def ones(n, m=None):
+    if m is None:
+        if isinstance(n, (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in n)
+            return np.ones(shape)
+        return np.ones((int(n), 1))
+    return np.ones((int(n), int(m)))
 
-def rand(n, m=1):
-    return np.random.rand(n, m)
+def rand(n, m=None):
+    if m is None:
+        if isinstance(n, (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in n)
+            return np.random.rand(*shape)
+        return np.random.rand(int(n), 1)
+    return np.random.rand(int(n), int(m))
 
-def randn(n, m=1):
-    return np.random.randn(n, m)
+def randn(n, m=None):
+    if m is None:
+        if isinstance(n, (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in n)
+            return np.random.randn(*shape)
+        return np.random.randn(int(n), 1)
+    return np.random.randn(int(n), int(m))
+
+def randi(high, n=1, m=None):
+    high = int(np.asarray(high).item())
+    if m is None:
+        if isinstance(n, (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in n)
+            return np.random.randint(1, high + 1, size=shape)
+        return np.random.randint(1, high + 1, size=(int(n), 1))
+    return np.random.randint(1, high + 1, size=(int(n), int(m)))

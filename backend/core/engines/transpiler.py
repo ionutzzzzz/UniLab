@@ -4,6 +4,8 @@ import os
 import io
 import time
 import pickle
+import importlib.util
+import pathlib
 import numpy as np
 from typing import Any, Dict, Optional
 from contextlib import redirect_stdout, redirect_stderr
@@ -16,17 +18,68 @@ class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
         self.transpiler = MatlabTranspiler()
+        self.search_paths = [self.workspace_path]
         self.globals = {
             'np': np,
             '__builtins__': __builtins__,
+            'addpath': self._add_path,
         }
         # Inject runtime functions
         for name in dir(runtime):
             if not name.startswith('_'):
                 self.globals[name] = getattr(runtime, name)
         
+        # Load custom packages from backend/packages
+        self._load_custom_packages()
+        
+        # Load standard libraries from backend/libraries
+        self._load_standard_libraries()
+        
         # Load persistent workspace if it exists
         self._load_workspace()
+
+    def _load_standard_libraries(self):
+        current_dir = pathlib.Path(__file__).parent
+        libs_dir = (current_dir / ".." / ".." / "libraries").resolve()
+        
+        if not libs_dir.exists():
+            return
+
+        for item in libs_dir.iterdir():
+            if item.is_dir():
+                if item not in self.search_paths:
+                    self.search_paths.append(item)
+                    # print(f"Added standard library path: {item.name}")
+
+    def _add_path(self, path: str):
+        p = pathlib.Path(path)
+        if not p.is_absolute():
+            p = (self.workspace_path / p).resolve()
+        
+        if p.exists() and p not in self.search_paths:
+            self.search_paths.append(p)
+            # print(f"Added path: {p}")
+
+    def _load_custom_packages(self):
+        # Determine the backend/packages path
+        # Assuming this file is at backend/core/engines/transpiler.py
+        current_dir = pathlib.Path(__file__).parent
+        packages_dir = (current_dir / ".." / ".." / "packages").resolve()
+        
+        if not packages_dir.exists():
+            return
+
+        for item in packages_dir.iterdir():
+            if item.is_dir() and (item / "__init__.py").exists():
+                package_name = item.name
+                try:
+                    spec = importlib.util.spec_from_file_location(package_name, item / "__init__.py")
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    self.globals[package_name] = module
+                    # print(f"Loaded package: {package_name}")
+                except Exception as e:
+                    print(f"Failed to load package {package_name}: {e}")
 
     async def start(self):
         # Already initialized in __init__, but could add more here if needed
@@ -35,10 +88,59 @@ class TranspilerEngine(BaseEngine):
     async def stop(self):
         self._save_workspace()
 
+    async def _resolve_dependencies(self, called_funcs: set):
+        # Prevent infinite recursion if functions call each other
+        resolved_in_this_pass = set()
+        
+        to_resolve = list(called_funcs)
+        while to_resolve:
+            func_name = to_resolve.pop(0)
+            
+            # Skip if already in globals or already resolved
+            if func_name in self.globals or func_name in resolved_in_this_pass:
+                continue
+                
+            # Search in paths
+            for path in self.search_paths:
+                m_file = path / f"{func_name}.m"
+                if m_file.exists():
+                    try:
+                        code = m_file.read_text(encoding="utf-8")
+                        python_code, sub_calls, sub_paths = self.transpiler.transpile(code)
+                        
+                        # Add sub-paths if any
+                        for sp in sub_paths:
+                            self._add_path(sp)
+                        
+                        # Execute to define the function in globals
+                        exec(python_code, self.globals)
+                        resolved_in_this_pass.add(func_name)
+                        
+                        # Add new dependencies to check
+                        for sc in sub_calls:
+                            if sc not in self.globals and sc not in resolved_in_this_pass:
+                                to_resolve.append(sc)
+                        
+                        break # Found and loaded
+                    except Exception as e:
+                        print(f"Error loading dependent function {func_name}: {e}")
+
     async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
         start_ts = time.time()
         try:
-            python_code = self.transpiler.transpile(code)
+            python_code, called_funcs, added_paths = self.transpiler.transpile(code)
+            
+            # Temporary add paths for resolution (from addpath calls in the code)
+            original_paths = self.search_paths.copy()
+            for ap in added_paths:
+                self._add_path(ap)
+            
+            # Resolve missing functions from paths
+            await self._resolve_dependencies(called_funcs)
+            
+            # Restore search paths (they will be permanently added during execution of addpath in python_code)
+            # but we keep them for now to ensure dependent functions can be found.
+            # Actually, it's better to keep them if they were successfully added.
             
             # Prepare execution environment
             out = io.StringIO()

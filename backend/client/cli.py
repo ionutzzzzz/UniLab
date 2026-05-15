@@ -274,8 +274,6 @@ class UniLabCLIApp(tk.Tk):
             lines.append(f" - {k} : {dtype} shape={shape} preview={preview}")
         self._write_terminal("\n".join(lines))
 
-
-
     def _on_run_script_dialog(self):
         if not self.session_id:
             self._write_terminal("Create a session first.", "error")

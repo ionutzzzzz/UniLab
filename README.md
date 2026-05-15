@@ -73,7 +73,7 @@ Make sure you have the following installed on your local machine:
 
 1. **Clone the repository**
    ```bash
-   git clone [https://github.com/ionutzzzzz/Unilab](https://github.com/ionutzzzzz/Unilab)
+   git clone https://github.com/ionutzzzzz/Unilab
    cd unilab
    ```
 
@@ -89,10 +89,11 @@ Make sure you have the following installed on your local machine:
 
 4. **Open your browser and navigate to http://localhost:3000.**
 
-💻 Usage Examples
+## 💻 Usage Examples
+
 UniLab allows you to define systems using a simplified, Python-inspired syntax. Here is a quick example of defining a basic matrix operation and plotting it via the internal API:
 
-```
+```m
 % 1. Create Data
 x = 0:0.1:2*pi;    % Range from 0 to 2*pi with 0.1 increments
 y = sin(x);        % Calculate sine of x
@@ -110,11 +111,16 @@ grid on;           % Add grid lines
 ```
 
 **🗺️ Roadmap**
-[x] Core computation engine (C/C++ bindings)
 
-[x] Basic React/SCSS frontend integration
+[x] Core computation engine (Transplier)
 
-[x] Docker containerization
+[x] Testing and implementation
+
+[x] Create custom libraries
+
+[ ] Basic React/SCSS frontend integration
+
+[ ] Docker containerization
 
 [ ] Implement advanced neural network visualizers
 
@@ -125,6 +131,7 @@ grid on;           % Add grid lines
 [ ] Plugin marketplace for community-driven algorithms
 
 **🤝 Contributing**
+
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
 Fork the Project
@@ -138,6 +145,7 @@ Push to the Branch (git push origin feature/AmazingFeature)
 Open a Pull Request
 
 **📝License**
+
 Distributed under the MIT License. See LICENSE for more information.
 
 Note: UniLab is a personal project currently in active development. Features and APIs are subject to change.
