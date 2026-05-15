@@ -1,4 +1,4 @@
-from lark import Lark, Transformer, v_args
+from lark import Lark, Transformer, v_args, Tree
 import numpy as np
 
 # EBNF Grammar for a subset of MATLAB
@@ -18,12 +18,13 @@ MATLAB_GRAMMAR = r"""
               | expression SEMI? -> expr_stmt
 
     assignment: lhs EQ expression SEMI?
-    ?lhs: identifier -> single_lhs
-        | LBRACKET identifier (COMMA identifier)* RBRACKET -> multi_lhs
+    ?lhs: qualified_name LPAR call_args RPAR -> indexed_lhs
+        | qualified_name -> single_lhs
+        | LBRACKET qualified_name (COMMA qualified_name)* RBRACKET -> multi_lhs
 
-    clear_stmt: CLEAR (identifier | "all")* SEMI?
+    clear_stmt: CLEAR (qualified_name | "all")* SEMI?
 
-    command_call: identifier identifier+ SEMI?
+    command_call: qualified_name qualified_name+ SEMI?
 
     if_stmt: IF expression block elseif_clause* else_clause? END
     elseif_clause: ELSEIF expression block
@@ -38,13 +39,13 @@ MATLAB_GRAMMAR = r"""
     
     try_stmt: TRY block CATCH identifier? block END
     
-    global_stmt: GLOBAL identifier (COMMA? identifier)* SEMI?
+    global_stmt: GLOBAL simple_name (COMMA? simple_name)* SEMI?
 
-    function_def: FUNCTION function_ret? identifier LPAR arg_list? RPAR block END
+    function_def.10: "function" [function_ret] simple_name "(" [arg_list] ")" block "end"
     function_ret: ret_list EQ
-    ret_list: identifier -> single_ret
-            | LBRACKET identifier (COMMA identifier)* RBRACKET -> multi_ret
-    arg_list: identifier (COMMA identifier)*
+    ret_list: simple_name -> single_ret
+            | LBRACKET simple_name (COMMA simple_name)* RBRACKET -> multi_ret
+    arg_list: simple_name (COMMA simple_name)*
 
     block: statement*
 
@@ -90,32 +91,36 @@ MATLAB_GRAMMAR = r"""
     ?atom: NUMBER                    -> number
          | STRING                    -> string
          | function_call
-         | identifier                -> var
+         | qualified_name            -> var
          | LPAR expression RPAR      -> atom_group
          | matrix
 
     matrix: LBRACKET row (SEMI row)* RBRACKET
     row: expression (COMMA? expression)*
 
-    function_call.2: identifier LPAR call_args? RPAR
-    call_args: expression (COMMA expression)*
+    function_call.2: qualified_name LPAR call_args? RPAR
+    ?call_arg: expression
+             | COLON -> colon_expr
+    call_args: call_arg (COMMA call_arg)*
 
+    qualified_name: CNAME (DOT CNAME)*
+    simple_name: CNAME
     identifier: CNAME
 
-    FUNCTION: "function"
-    END: "end"
-    IF: "if"
-    ELSEIF: "elseif"
-    ELSE: "else"
-    FOR: "for"
-    WHILE: "while"
-    SWITCH: "switch"
-    CASE: "case"
-    OTHERWISE: "otherwise"
-    TRY: "try"
-    CATCH: "catch"
-    GLOBAL: "global"
-    CLEAR: "clear"
+    FUNCTION.2: "function"
+    END.2: "end"
+    IF.2: "if"
+    ELSEIF.2: "elseif"
+    ELSE.2: "else"
+    FOR.2: "for"
+    WHILE.2: "while"
+    SWITCH.2: "switch"
+    CASE.2: "case"
+    OTHERWISE.2: "otherwise"
+    TRY.2: "try"
+    CATCH.2: "catch"
+    GLOBAL.2: "global"
+    CLEAR.2: "clear"
 
     EQ: "="
     PLUS: "+"
@@ -134,8 +139,9 @@ MATLAB_GRAMMAR = r"""
     COMMA: ","
     SEMI: ";"
     COLON: ":"
-    OR_OP: "||"
-    AND_OP: "&&"
+    DOT: "."
+    OR_OP: "||" | "|"
+    AND_OP: "&&" | "&"
     EQ_OP: "=="
     NE_OP: "~="
     LT_OP: "<"
@@ -148,7 +154,7 @@ MATLAB_GRAMMAR = r"""
     %import common.NUMBER
     %import common.WS
     %import common.ESCAPED_STRING
-    STRING: "'" ("''"|/[^']/)* "'"
+    STRING: "'" ("''"|/[^'\n\r]/)* "'"
     
     %ignore WS
     %ignore /%.*/
@@ -158,6 +164,8 @@ class MatlabToPython(Transformer):
     def __init__(self):
         self.variables = set()
         self.globals = set()
+        self.called_functions = set()
+        self.added_paths = set()
         self._switch_depth = 0
 
     def _indent(self, lines):
@@ -169,26 +177,71 @@ class MatlabToPython(Transformer):
     def string(self, s):
         content = str(s[0])[1:-1].replace("''", "'")
         return f"'{content}'"
-    def identifier(self, i): return str(i[0])
-
-    def var(self, items):
-        name = str(items[0])
-        if name == "pi": return "np.pi"
-        self.variables.add(name)
+    def colon_expr(self, items): return "slice(None)"
+    def _escape_name(self, name):
+        keywords = {
+            'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 
+            'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 
+            'except', 'finally', 'for', 'from', 'global', 'if', 'import', 
+            'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 
+            'return', 'try', 'while', 'with', 'yield'
+        }
+        if name in keywords:
+            return f"{name}_"
         return name
 
-    def single_lhs(self, items): return str(items[0])
+    def identifier(self, i):
+        return self._escape_name(str(i[0]))
+
+    def qualified_name(self, items):
+        if len(items) == 1:
+            return self._escape_name(str(items[0]))
+        
+        # Attribute access: a.b.c -> unilab_get(unilab_get(a, 'b'), 'c')
+        parts = [self._escape_name(str(i)) for i in items if str(i) != "."]
+        res = parts[0]
+        for p in parts[1:]:
+            res = f"unilab_get({res}, '{p}')"
+        return res
+
+    def simple_name(self, items):
+        return self._escape_name(str(items[0]))
+
+    def var(self, items):
+        name = items[0] # qualified_name or similar
+        # if it's already unilab_get(...) it might be complex
+        # but for tracking we just want the base
+        base_name = str(name).split('(')[-1].split(',')[0].strip("'")
+        self.variables.add(base_name)
+        self.called_functions.add(base_name)
+        return name
+
+    def single_lhs(self, items): return items[0]
     def multi_lhs(self, items):
         return [str(i) for i in items if str(i) not in ["[", "]", ","]]
+
+    def indexed_lhs(self, items):
+        # items might contain ( and )
+        target = items[0]
+        args = []
+        for i in items[1:]:
+            if str(i) not in ["(", ")"]:
+                args = i
+                break
+        
+        arg_str = ", ".join(args) if isinstance(args, list) else str(args)
+        return {"type": "indexed_lhs", "target": target, "args": arg_str}
 
     def assignment(self, items):
         lhs = items[0]
         expr = items[2]
+        if isinstance(lhs, dict) and lhs.get("type") == "indexed_lhs":
+            return f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
         if isinstance(lhs, list):
-            for n in lhs: self.variables.add(n)
-            return f"({', '.join(lhs)}) = {expr}"
+            for n in lhs: self.variables.add(str(n))
+            return f"({', '.join([str(n) for n in lhs])}) = {expr}"
         else:
-            self.variables.add(lhs)
+            self.variables.add(str(lhs))
             return f"{lhs} = {expr}"
 
     def clear_stmt(self, items):
@@ -199,7 +252,8 @@ class MatlabToPython(Transformer):
         return f"unilab_clear_variables(globals(), [{', '.join(vars_to_clear)}])"
 
     def command_call(self, items):
-        name = items[0]
+        name = str(items[0])
+        self.called_functions.add(name)
         args = [f"'{a}'" for a in items[1:]]
         return f"{name}({', '.join(args)})"
 
@@ -216,8 +270,8 @@ class MatlabToPython(Transformer):
     def transpose(self, items): return f"{items[0]}.T"
     def neg(self, items): return f"-{items[1]}"
     def not_op(self, items): return f"(not {items[1]})"
-    def or_op(self, items): return f"({items[0]} or {items[2]})"
-    def and_op(self, items): return f"({items[0]} and {items[2]})"
+    def or_op(self, items): return f"unilab_or({items[0]}, {items[2]})"
+    def and_op(self, items): return f"unilab_and({items[0]}, {items[2]})"
     def eq(self, items): return f"({items[0]} == {items[2]})"
     def ne(self, items): return f"({items[0]} != {items[2]})"
     def lt(self, items): return f"({items[0]} < {items[2]})"
@@ -243,11 +297,21 @@ class MatlabToPython(Transformer):
     def range3(self, items): return f"np.arange({items[0]}, {items[4]} + {items[2]}, {items[2]})"
 
     def function_call(self, items):
-        name = items[0]
+        name = str(items[0])
+        self.called_functions.add(name)
+        
+        # Track addpath calls for pre-resolution
+        if name == "addpath" and len(items) > 2:
+            args = items[2]
+            if isinstance(args, list):
+                for a in args:
+                    if str(a).startswith("'") and str(a).endswith("'"):
+                        self.added_paths.add(str(a)[1:-1])
+
         args = items[2] if len(items) > 3 else None
         if name == "pi" and not args: return "np.pi"
         arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
-        return f"{name}({arg_str})"
+        return f"unilab_call({name}, {arg_str})"
 
     def call_args(self, items):
         return [str(i) for i in items if str(i) != ","]
@@ -364,22 +428,13 @@ class MatlabToPython(Transformer):
         return [str(i) for i in items if str(i) != ","]
 
     def function_def(self, items):
-        # items: [FUNCTION, function_ret?, identifier, LPAR, arg_list?, RPAR, block, END]
-        try:
-            lpar_idx = items.index("(")
-            rpar_idx = items.index(")")
-            name = items[lpar_idx - 1]
-            rets = items[1] if lpar_idx == 3 else None
-            
-            args = None
-            if rpar_idx > lpar_idx + 1:
-                args = items[lpar_idx + 1]
-            
-            block = items[rpar_idx + 1]
-        except (ValueError, IndexError):
-            name = "unknown"
-            args = None
-            block = []
+        # items: [function_ret?, simple_name, arg_list?, block]
+        # print(f"DEBUG items: {[str(i) for i in items]}")
+        
+        rets = items[0]
+        name = items[1]
+        args = items[2]
+        block = items[3]
 
         arg_str = ""
         if args:
@@ -387,8 +442,6 @@ class MatlabToPython(Transformer):
             else: arg_str = str(args)
 
         lines = [f"def {name}({arg_str}):"]
-        for g in self.globals:
-            lines.append(f"    global {g}")
         lines.extend(self._indent(block))
         if rets:
             if isinstance(rets, list): lines.append(f"    return ({', '.join(rets)})")
@@ -403,9 +456,11 @@ class MatlabTranspiler:
     def transpile(self, matlab_code):
         self.transformer.variables = set()
         self.transformer.globals = set()
+        self.transformer.called_functions = set()
+        self.transformer.added_paths = set()
         tree = self.parser.parse(matlab_code)
         result = self.transformer.transform(tree)
-        return str(result)
+        return str(result), self.transformer.called_functions, self.transformer.added_paths
 
 def transpile(matlab_code):
     transpiler = MatlabTranspiler()
