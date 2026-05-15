@@ -23,6 +23,7 @@ class TranspilerEngine(BaseEngine):
             'np': np,
             '__builtins__': __builtins__,
             'addpath': self._add_path,
+            'ans': None,
         }
         # Inject runtime functions
         for name in dir(runtime):
@@ -126,6 +127,23 @@ class TranspilerEngine(BaseEngine):
                         print(f"Error loading dependent function {func_name}: {e}")
 
     async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+        # Handle 'help topic' style calls specifically
+        stripped_code = code.strip()
+        if stripped_code.startswith('help'):
+            parts = stripped_code.split()
+            # Handle help() or help topic
+            topic = None
+            if len(parts) > 1:
+                topic = parts[1].rstrip(';')
+            elif '(' in stripped_code and ')' in stripped_code:
+                # Handle help('topic') or help("topic")
+                import re
+                match = re.search(r"help\(['\"]?(\w+)['\"]?\)", stripped_code)
+                if match:
+                    topic = match.group(1)
+            
+            return await self._get_help(topic)
+
         start_ts = time.time()
         try:
             python_code, called_funcs, added_paths = self.transpiler.transpile(code)
@@ -191,6 +209,38 @@ class TranspilerEngine(BaseEngine):
                 variables_snapshot={},
                 plots=[]
             )
+
+    async def _get_help(self, topic: Optional[str]) -> ExecutionResult:
+        start_ts = time.time()
+        if not topic:
+            help_text = "UniLab Help System\nType 'help <topic>' to learn more about a command or function.\nExamples: help plot, help linspace, help z_score"
+            return ExecutionResult(True, help_text, "", 0, time.time() - start_ts, self._get_variables(), [])
+
+        # 1. Search in runtime (Python functions)
+        import backend.core.runtime as rt
+        if hasattr(rt, topic):
+            func = getattr(rt, topic)
+            doc = getattr(func, '__doc__', None) or "No documentation available."
+            help_text = f"Help for built-in function '{topic}':\n\n{doc}"
+            return ExecutionResult(True, help_text, "", 0, time.time() - start_ts, self._get_variables(), [])
+
+        # 2. Search in workspace/search paths for .m files
+        for path in self.search_paths:
+            m_file = path / f"{topic}.m"
+            if m_file.exists():
+                lines = m_file.read_text(encoding="utf-8").splitlines()
+                help_lines = []
+                for line in lines:
+                    line_strip = line.strip()
+                    if line_strip.startswith('function') or line_strip.startswith('%'):
+                        help_lines.append(line)
+                    elif line_strip and not line_strip.startswith('%'):
+                        # Stop at first non-comment non-function line
+                        break
+                help_text = f"Help for function '{topic}' in {m_file}:\n\n" + "\n".join(help_lines)
+                return ExecutionResult(True, help_text, "", 0, time.time() - start_ts, self._get_variables(), [])
+
+        return ExecutionResult(False, "", f"Help topic '{topic}' not found.", 1, time.time() - start_ts, self._get_variables(), [])
 
     async def fetch_variables(self) -> Dict[str, Any]:
         return self._get_variables()

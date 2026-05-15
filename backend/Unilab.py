@@ -4,7 +4,6 @@ import pathlib
 import sys
 import os
 
-# Add the current directory to sys.path to ensure 'backend' is importable
 sys.path.insert(0, os.getcwd())
 
 from core.main import UniLabCore, BackendConfig
@@ -15,7 +14,6 @@ async def run_matlab_script(script_path):
         print(f"Error: Script '{script_path}' not found.")
         return
 
-    # Setup UniLab Core with a temporary workspace
     workspace_root = pathlib.Path("./test_runs")
     workspace_root.mkdir(exist_ok=True)
     
@@ -28,18 +26,14 @@ async def run_matlab_script(script_path):
     await core.start()
 
     try:
-        # Create a session using the custom transpiler engine
         session = await core.create_session(username="tester", engine="transpiler")
         
-        # Read the script content
         code = path.read_text(encoding="utf-8")
         
         print(f"\n{'='*20} Executing: {path.name} {'='*20}")
         
-        # Execute the code
         result = await core.run_code(session.session_id, code)
         
-        # Output results
         print(f"\nStatus: {'SUCCESS' if result.success else 'FAILED'}")
         print(f"Duration: {result.duration_s:.4f}s")
         
@@ -60,7 +54,6 @@ async def run_matlab_script(script_path):
         if result.plots:
             print("\n[Plots Generated]")
             for p in result.plots:
-                # Make path relative to current dir for easier reading
                 try:
                     rel_p = pathlib.Path(p).relative_to(os.getcwd())
                 except ValueError:

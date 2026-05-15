@@ -15,9 +15,10 @@ MATLAB_GRAMMAR = r"""
               | assignment
               | clear_stmt
               | command_call
-              | expression SEMI? -> expr_stmt
+              | expression SEMI -> expr_stmt
+              | expression -> expr_stmt_no_semi
 
-    assignment: lhs EQ expression SEMI?
+    assignment: lhs EQ expression SEMI? -> assignment_stmt
     ?lhs: qualified_name LPAR call_args RPAR -> indexed_lhs
         | qualified_name -> single_lhs
         | LBRACKET qualified_name (COMMA qualified_name)* RBRACKET -> multi_lhs
@@ -258,6 +259,40 @@ class MatlabToPython(Transformer):
         return f"{name}({', '.join(args)})"
 
     def expr_stmt(self, items): return items[0]
+    
+    def expr_stmt_no_semi(self, items):
+        expr = items[0]
+        # Wrap expression in unilab_print_and_save_ans
+        return f"global ans; ans = unilab_print_and_save_ans('{expr}', {expr})"
+
+    def assignment_stmt(self, items):
+        # items: [lhs, EQ, expression, SEMI?]
+        lhs = items[0]
+        expr = items[2]
+        
+        has_semi = False
+        if len(items) > 3:
+            has_semi = True
+        
+        if isinstance(lhs, dict) and lhs.get("type") == "indexed_lhs":
+            stmt = f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
+        elif isinstance(lhs, list):
+            for n in lhs: self.variables.add(str(n))
+            stmt = f"({', '.join([str(n) for n in lhs])}) = {expr}"
+        else:
+            self.variables.add(str(lhs))
+            stmt = f"{lhs} = {expr}"
+            
+        if not has_semi:
+            if isinstance(lhs, list):
+                # For multi-lhs, we might want to print each? 
+                # MATLAB prints the first one usually or a summary.
+                # Let's just print the whole tuple for now.
+                lhs_str = f"[{', '.join([str(n) for n in lhs])}]"
+                return f"{stmt}; unilab_print_var('{lhs_str}', ({', '.join([str(n) for n in lhs])}))"
+            else:
+                return f"{stmt}; unilab_print_var('{lhs}', {lhs})"
+        return stmt
 
     def add(self, items): return f"({items[0]} + {items[2]})"
     def sub(self, items): return f"({items[0]} - {items[2]})"
@@ -326,7 +361,15 @@ class MatlabToPython(Transformer):
         return flattened
 
     def start(self, items):
-        return "\n".join(self.block(items))
+        def flatten(items):
+            res = []
+            for i in items:
+                if isinstance(i, list):
+                    res.extend(flatten(i))
+                elif i is not None:
+                    res.append(str(i))
+            return res
+        return "\n".join(flatten(items))
 
     def if_stmt(self, items):
         # items: [IF, expression, block, elseif_clause*, else_clause?, END]

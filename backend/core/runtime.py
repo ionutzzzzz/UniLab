@@ -7,6 +7,27 @@ from scipy.fft import fft, ifft
 def disp(x):
     print(x)
 
+def clc():
+    # This is a stub, the actual implementation will be handled by the console/UI
+    # by clearing the terminal screen.
+    pass
+
+def help(topic=None):
+    # This is a stub. The engine or console will intercept this 
+    # and provide documentation for the given topic.
+    pass
+
+def unilab_print_var(name, val):
+    print(f"{name} =")
+    print(f"   {val}\n")
+
+def unilab_print_and_save_ans(name, val):
+    # Only print if it's not a function call that might already print or if it returns something
+    if val is not None:
+        print(f"ans =")
+        print(f"   {val}\n")
+    return val
+
 def figure():
     return plt.figure()
 
@@ -137,6 +158,12 @@ def unilab_set(obj, val, *args):
                 processed.append(i)
         obj[tuple(processed)] = val
     return obj
+
+def whos():
+    # This is a stub, the actual implementation will be handled by the engine
+    # but we need it here to avoid 'name not defined' error during transpilation
+    # if it's called as a function.
+    pass
 
 # Matrix Analysis
 def length(x):
