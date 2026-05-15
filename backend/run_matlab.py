@@ -7,7 +7,7 @@ import os
 # Add the current directory to sys.path to ensure 'backend' is importable
 sys.path.insert(0, os.getcwd())
 
-from backend.core.main import UniLabCore, BackendConfig
+from core.main import UniLabCore, BackendConfig
 
 async def run_matlab_script(script_path):
     path = pathlib.Path(script_path)

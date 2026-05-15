@@ -3,6 +3,7 @@ import sys
 import os
 import io
 import time
+import pickle
 import numpy as np
 from contextlib import redirect_stdout, redirect_stderr
 from backend.core.core import MatlabTranspiler
@@ -20,6 +21,9 @@ class TranspilerEngine:
         for name in dir(runtime):
             if not name.startswith('_'):
                 self.globals[name] = getattr(runtime, name)
+        
+        # Load persistent workspace if it exists
+        self._load_workspace()
 
     async def run_code(self, code, timeout=30):
         start_ts = time.time()
@@ -41,6 +45,9 @@ class TranspilerEngine:
                 # We use a custom globals dict to persist state between runs in the same session
                 with redirect_stdout(out), redirect_stderr(err):
                     exec(python_code, self.globals)
+                
+                # Save workspace after successful execution
+                self._save_workspace()
             except Exception as e:
                 success = False
                 err.write(str(e))
@@ -83,3 +90,28 @@ class TranspilerEngine:
                 'preview': preview
             }
         return vars_snap
+
+    def _save_workspace(self):
+        save_path = self.workspace_path / ".unilab_workspace.pkl"
+        vars_to_save = {}
+        for k, v in self.globals.items():
+            if k.startswith('_') or k in dir(runtime) or k == 'np' or k == '__builtins__':
+                continue
+            try:
+                pickle.dumps(v)
+                vars_to_save[k] = v
+            except:
+                continue
+        
+        with open(save_path, 'wb') as f:
+            pickle.dump(vars_to_save, f)
+
+    def _load_workspace(self):
+        save_path = self.workspace_path / ".unilab_workspace.pkl"
+        if save_path.exists():
+            try:
+                with open(save_path, 'rb') as f:
+                    vars_loaded = pickle.load(f)
+                    self.globals.update(vars_loaded)
+            except:
+                pass

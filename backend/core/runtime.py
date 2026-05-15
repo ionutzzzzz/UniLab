@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import scipy.signal as signal
+from scipy.fft import fft, ifft
 
 def disp(x):
     print(x)
@@ -98,11 +100,63 @@ def round(x): return np.round(x)
 def floor(x): return np.floor(x)
 def ceil(x): return np.ceil(x)
 
+# Signal Processing
+def fft_plot(x, fs):
+    n = len(x)
+    yf = fft(x)
+    xf = np.linspace(0.0, fs/2, n//2)
+    plt.plot(xf, 2.0/n * np.abs(yf[0:n//2]))
+    plt.grid()
+
+def spectrogram(x, fs):
+    f, t, Sxx = signal.spectrogram(x, fs)
+    plt.pcolormesh(t, f, 10 * np.log10(Sxx))
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [sec]')
+
+# Control Systems (Stubs)
+def tf(num, den):
+    return signal.TransferFunction(num, den)
+
+def step(sys):
+    t, y = signal.step(sys)
+    plt.plot(t, y)
+    plt.title("Step Response")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+
+def impulse(sys):
+    t, y = signal.impulse(sys)
+    plt.plot(t, y)
+    plt.title("Impulse Response")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+
 # Plot export helper
 def save_plot(filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     plt.savefig(filename)
     print(f"::SAVED::{filename}")
+
+# Workspace Management
+def unilab_clear_workspace(g):
+    # Identify keys to keep (injected at start)
+    # This is a bit tricky, but we can assume anything starting with unilab_ or standard imports
+    keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__'}
+    # Also keep all functions defined in this file
+    import backend.core.runtime as rt
+    for name in dir(rt):
+        if not name.startswith('_'):
+            keys_to_keep.add(name)
+    
+    to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
+    for k in to_remove:
+        del g[k]
+
+def unilab_clear_variables(g, var_names):
+    for name in var_names:
+        if name in g:
+            del g[name]
 
 # Built-in math functions
 def sin(x): return np.sin(x)

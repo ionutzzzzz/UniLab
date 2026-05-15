@@ -1,12 +1,12 @@
 # 🧪 UniLab
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)[cite: 1]
-![C/C++](https://img.shields.io/badge/C%2FC%2B%2B-00599C?style=for-the-badge&logo=c&logoColor=white)[cite: 1]
-![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)[cite: 1]
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)[cite: 1]
-![SCSS](https://img.shields.io/badge/SCSS-CC6699?style=for-the-badge&logo=sass&logoColor=white)[cite: 1]
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![C/C++](https://img.shields.io/badge/C%2FC%2B%2B-00599C?style=for-the-badge&logo=c&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![SCSS](https://img.shields.io/badge/SCSS-CC6699?style=for-the-badge&logo=sass&logoColor=white)
 
-> An accessible, modern environment for the simulation, modeling, and analysis of mathematical systems.[cite: 1]
+> An accessible, modern environment for the simulation, modeling, and analysis of mathematical systems.
 
 ---
 
@@ -24,9 +24,9 @@
 
 ## 📖 About The Project
 
-**UniLab** is a personal project designed for students and researchers.[cite: 1] It focuses on the simulation, modeling, and analysis of mathematical systems, with deep applications in artificial intelligence, engineering, and data processing.[cite: 1] 
+**UniLab** is a personal project designed for students and researchers. It focuses on the simulation, modeling, and analysis of mathematical systems, with deep applications in artificial intelligence, engineering, and data processing. 
 
-Historically, advanced mathematical modeling has been locked behind expensive, heavy, and visually outdated legacy software. The platform was built to provide an accessible and modern alternative to industry-standard tools such as MATLAB and Wolfram Alpha.[cite: 1] By integrating computational methods, dynamic visualization, and algorithmic experimentation into a single unified environment, UniLab streamlines complex technical workflows.[cite: 1]
+Historically, advanced mathematical modeling has been locked behind expensive, heavy, and visually outdated legacy software. The platform was built to provide an accessible and modern alternative to industry-standard tools such as MATLAB and Wolfram Alpha. By integrating computational methods, dynamic visualization, and algorithmic experimentation into a single unified environment, UniLab streamlines complex technical workflows.
 
 Whether you are plotting multi-variable calculus equations, training a localized machine learning model, or analyzing signal processing data, UniLab provides the necessary horsepower in a lightweight, browser-accessible interface.
 
@@ -34,10 +34,10 @@ Whether you are plotting multi-variable calculus equations, training a localized
 
 ## ✨ Key Features
 
-* **Mathematical Simulation & Modeling**: Advanced environments tailored for analyzing complex, non-linear mathematical systems.[cite: 1]
-* **AI & Engineering Applications**: Engineered to handle heavy data processing and artificial intelligence workflows out of the box.[cite: 1]
-* **Unified Workspace**: Seamlessly combines raw computation, visualization, and algorithmic testing in one dashboard.[cite: 1]
-* **Modern & Accessible**: A sleek, user-friendly counterpart to traditional legacy software, prioritizing user experience without sacrificing power.[cite: 1]
+* **Mathematical Simulation & Modeling**: Advanced environments tailored for analyzing complex, non-linear mathematical systems.
+* **AI & Engineering Applications**: Engineered to handle heavy data processing and artificial intelligence workflows out of the box.
+* **Unified Workspace**: Seamlessly combines raw computation, visualization, and algorithmic testing in one dashboard.
+* **Modern & Accessible**: A sleek, user-friendly counterpart to traditional legacy software, prioritizing user experience without sacrificing power.
 * **Containerized Execution**: Safely execute complex scripts in isolated environments to prevent system-level interference.
 * **Real-time Collaboration** *(Beta)*: Share workspaces and algorithmic models with peers dynamically.
 
@@ -45,18 +45,18 @@ Whether you are plotting multi-variable calculus equations, training a localized
 
 ## 🛠️ Technology Stack
 
-UniLab leverages a robust, high-performance technology stack to ensure both computational speed and a responsive user interface:[cite: 1]
+UniLab leverages a robust, high-performance technology stack to ensure both computational speed and a responsive user interface:
 
 ### **Computation & Core Engine**
-* **Python**: The backbone for data science libraries, machine learning matrices, and high-level logic.[cite: 1]
-* **C / C++**: Utilized for low-level performance bottlenecks, ensuring that heavy mathematical simulations run at native speeds.[cite: 1]
+* **Python**: The backbone for data science libraries, machine learning matrices, and high-level logic.
+* **C / C++**: Utilized for low-level performance bottlenecks, ensuring that heavy mathematical simulations run at native speeds.
 
 ### **Frontend Architecture**
-* **React**: Powers the dynamic, single-page application (SPA) interface, allowing for real-time visual updates.[cite: 1]
-* **SCSS**: Provides modular, maintainable, and sleek styling for the modern web interface.[cite: 1]
+* **React**: Powers the dynamic, single-page application (SPA) interface, allowing for real-time visual updates.
+* **SCSS**: Provides modular, maintainable, and sleek styling for the modern web interface.
 
 ### **Deployment & Infrastructure**
-* **Docker**: Ensures seamless containerization, meaning the project runs consistently across development, staging, and production environments regardless of the host OS.[cite: 1]
+* **Docker**: Ensures seamless containerization, meaning the project runs consistently across development, staging, and production environments regardless of the host OS.
 
 ---
 
