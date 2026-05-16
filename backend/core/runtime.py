@@ -139,6 +139,16 @@ def size(x, dim=None):
     if dim is not None: return s[dim-1] if dim <= len(s) else 1
     return s
 
+def numel(x):
+    if isinstance(x, np.ndarray): return x.size
+    if hasattr(x, '__len__'): return len(x)
+    return 1
+
+def reshape(x, *args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.reshape(x, args[0])
+    return np.reshape(x, args)
+
 def sum(x, axis=None): return np.sum(x, axis=axis)
 def mean(x, axis=None): return np.mean(x, axis=axis)
 def min(*args, axis=None):
@@ -192,6 +202,34 @@ def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
 def var(x, axis=None): return np.var(x, axis=axis)
 def std(x, axis=None): return np.std(x, axis=axis)
 
+def rand(*args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.rand(*args[0])
+    return np.random.rand(*args)
+
+def randn(*args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.randn(*args[0])
+    return np.random.randn(*args)
+
+def diag(v, k=0): return np.diag(v, k)
+
+def num2str(x, precision=None):
+    if precision is not None:
+        return f"{x:.{precision}f}"
+    return str(x)
+
+def mat2str(x):
+    if isinstance(x, np.ndarray):
+        return str(x).replace('\n', ';')
+    return str(x)
+
+def sprintf(fmt, *args):
+    # MATLAB uses % for formatting, similar to Python's old style
+    # but we need to handle the case where fmt contains MATLAB-style formatters
+    try:
+        return fmt % args
+    except:
+        return fmt # Fallback
+
 def _unilab_refresh_graph():
     try:
         import json
@@ -221,19 +259,24 @@ def _unilab_refresh_graph():
         with open("graph_meta.json", "w") as f:
             json.dump(meta, f)
 
-        # High-impact styling optimized for ASCII character conversion
+        # High-impact styling with a Pastel Aesthetic
         plt.rcParams.update({
-            'axes.linewidth': 2.0, 
-            'lines.linewidth': 3.5,
-            'font.size': 22,
+            'axes.prop_cycle': plt.cycler(color=['#A8D8EA', '#AA96DA', '#FCBAD3', '#FFFFD2', '#FF8080', '#BAE1FF']),
+            'axes.linewidth': 1.5, 
+            'axes.edgecolor': '#555555',
+            'grid.color': '#DDDDDD',
+            'grid.linestyle': '--',
+            'grid.linewidth': 0.8,
+            'lines.linewidth': 4.0,
+            'font.size': 20,
             'font.weight': 'bold',
             'figure.facecolor': 'white',
-            'axes.facecolor': 'white',
+            'axes.facecolor': '#FAFAFA',
             'axes.labelweight': 'bold',
             'axes.titleweight': 'bold',
-            'xtick.labelsize': 18,
-            'ytick.labelsize': 18,
-            'legend.fontsize': 18,
+            'xtick.labelsize': 16,
+            'ytick.labelsize': 16,
+            'legend.fontsize': 16,
             'figure.dpi': 120
         })
         fig = plt.gcf()
@@ -330,6 +373,25 @@ def ylabel(l): plt.ylabel(l, fontweight='bold', fontsize=18); _unilab_refresh_gr
 def grid(state='on'):
     plt.grid(state == 'on' or state == True or state == 1, linewidth=1.5); _unilab_refresh_graph()
 
+def scatter_plot(x, y, t=None):
+    plt.clf()
+    plt.scatter(x, y, s=100, alpha=0.6)
+    if t: plt.title(t, fontweight='bold', fontsize=22)
+    _unilab_refresh_graph()
+
+def hist_plot(data, bins=10, t=None):
+    plt.clf()
+    plt.hist(data, bins=bins, alpha=0.7, edgecolor='white')
+    if t: plt.title(t, fontweight='bold', fontsize=22)
+    _unilab_refresh_graph()
+
+def plot_matrix(M, t=None):
+    plt.clf()
+    plt.imshow(M, cmap='viridis', interpolation='nearest')
+    plt.colorbar()
+    if t: plt.title(t, fontweight='bold', fontsize=22)
+    _unilab_refresh_graph()
+
 def render_image_terminal(img_path, width=None):
     import os
     import json
@@ -355,35 +417,30 @@ def render_image_terminal(img_path, width=None):
                     meta = json.load(f)
             except: pass
 
-        # Open and convert to grayscale
-        im = Image.open(img_path).convert('L')
+        # Open and convert to RGB to preserve colors
+        im = Image.open(img_path).convert('RGB')
         
         # Crop to the actual data area
-        box_im = ImageOps.invert(im).point(lambda p: 255 if p > 50 else 0)
+        grayscale = ImageOps.grayscale(im)
+        box_im = ImageOps.invert(grayscale).point(lambda p: 255 if p > 50 else 0)
         bbox = box_im.getbbox()
         if bbox:
             im = im.crop(bbox)
 
         # Pre-process
-        im = ImageOps.autocontrast(im)
-        im = ImageEnhance.Contrast(im).enhance(2.5)
+        im = ImageEnhance.Contrast(im).enhance(1.5)
         
         # Determine terminal size
         try: term_cols = os.get_terminal_size().columns
         except: term_cols = 80
             
-        target_w = min(width or 80, term_cols - 16) # More space for vertical ylabel
+        target_w = min(width or 80, term_cols - 16)
         target_h = int(target_w * (im.height / im.width) * 0.55)
         if target_h < 15: target_h = 15
         if target_h > 40: target_h = 40
         
         # Resize
         img = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        
-        # Invert and boost
-        img = ImageOps.invert(img)
-        img = ImageEnhance.Contrast(img).enhance(5.0)
-        img = ImageOps.autocontrast(img, cutoff=2)
         pixels = img.load()
         
         # ASCII density ramp
@@ -394,13 +451,21 @@ def render_image_terminal(img_path, width=None):
         for y in range(target_h):
             row = ""
             for x in range(target_w):
-                p = pixels[x, y]
-                idx = int(p * (ramp_len - 1) / 255)
-                row += ramp[idx]
+                r, g, b = pixels[x, y]
+                # Calculate luminance for character selection
+                luma = 0.299*r + 0.587*g + 0.114*b
+                idx = int((255 - luma) * (ramp_len - 1) / 255)
+                char = ramp[idx]
+                
+                # Apply TrueColor to the character if it's not basically white
+                if luma < 240:
+                    row += f"\x1b[38;2;{r};{g};{b}m{char}\x1b[0m"
+                else:
+                    row += " "
             grid_data.append(row)
 
         # Reconstruct with Overlay
-        res = ["\n\x1b[1;36m[ ASCII Plot ]\x1b[0m"]
+        res = ["\n\x1b[1;36m[ Pastel Colored Plot ]\x1b[0m"]
         
         title_str = meta.get("title", "")
         if title_str:

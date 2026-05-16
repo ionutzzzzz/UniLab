@@ -1,0 +1,6 @@
+print("Testing Terminal TrueColor Pastel Palette:")
+print("\x1b[38;2;191;148;228mPASTEL PURPLE (Keywords)\x1b[0m")
+print("\x1b[38;2;137;207;240mPASTEL CYAN (Functions)\x1b[0m")
+print("\x1b[38;2;253;253;150mPASTEL YELLOW (Strings)\x1b[0m")
+print("\x1b[38;2;169;169;169mPASTEL GRAY (Comments)\x1b[0m")
+print("\nIf you see soft, pastel colors above, TrueColor is working correctly.")
