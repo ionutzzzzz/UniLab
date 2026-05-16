@@ -30,9 +30,12 @@ class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):
         result = await self.core.run_code(session.session_id, code)
         self.assertTrue(result.success, result.stderr)
         
-        slope = float(result.variables_snapshot["slope"]["preview"])
-        intercept = float(result.variables_snapshot["intercept"]["preview"])
-        r2 = float(result.variables_snapshot["r2"]["preview"])
+        def to_float(s):
+            return float(s.replace('[', '').replace(']', '').strip())
+
+        slope = to_float(result.variables_snapshot["slope"]["preview"])
+        intercept = to_float(result.variables_snapshot["intercept"]["preview"])
+        r2 = to_float(result.variables_snapshot["r2"]["preview"])
         
         # Expected: y = 0.6x + 2.2, r2 = 0.6
         self.assertAlmostEqual(slope, 0.6, places=2)
@@ -72,8 +75,11 @@ class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):
         result = await self.core.run_code(session.session_id, code)
         self.assertTrue(result.success, result.stderr)
         
+        def to_float(s):
+            return float(s.replace('[', '').replace(']', '').strip())
+
         # Skewness of symmetric data should be 0
-        sk = float(result.variables_snapshot["sk"]["preview"])
+        sk = to_float(result.variables_snapshot["sk"]["preview"])
         self.assertAlmostEqual(sk, 0, places=2)
 
 if __name__ == "__main__":

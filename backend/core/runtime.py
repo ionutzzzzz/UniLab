@@ -6,6 +6,7 @@ import time
 import pathlib
 import scipy.signal as signal
 from scipy.fft import fft, ifft
+from backend.ml.visualizers.nn_vis import plot_neural_network
 
 def disp(x):
     print(x)
@@ -13,13 +14,27 @@ def disp(x):
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+def _should_suppress_output(val):
+    if val is None: return True
+    try:
+        # Check if it's a matplotlib object or a list/tuple of them
+        module = getattr(type(val), '__module__', '')
+        if module.startswith('matplotlib.'): return True
+        if isinstance(val, (list, tuple)) and len(val) > 0:
+            module0 = getattr(type(val[0]), '__module__', '')
+            if module0.startswith('matplotlib.'): return True
+    except:
+        pass
+    return False
+
 def unilab_print_var(name, val):
-    print(f"{name} =\n   {val}\n")
+    if not _should_suppress_output(val):
+        print(f"{name} =\n   {val}\n")
 
 def unilab_print_and_save_ans(expr, val):
     global ans
     ans = val
-    if val is not None:
+    if val is not None and not _should_suppress_output(val):
         print(f"ans =\n   {val}\n")
     return val
 
@@ -39,14 +54,17 @@ def unilab_call(obj, *args):
     return obj[tuple(processed)]
 
 def unilab_mul(a, b):
+    if np.isscalar(a) and np.isscalar(b): return a * b
     try: return np.dot(a, b)
     except: return a * b
 
 def unilab_div(a, b):
+    if np.isscalar(a) and np.isscalar(b): return a / b
     try: return np.linalg.solve(np.atleast_2d(b).T, np.atleast_2d(a).T).T
     except: return a / b
 
 def unilab_pow(a, b):
+    if np.isscalar(a) and np.isscalar(b): return a ** b
     try: return np.linalg.matrix_power(a, b)
     except: return a ** b
 
@@ -161,6 +179,18 @@ def exp(x): return np.exp(x)
 def log(x): return np.log(x)
 def sqrt(x): return np.sqrt(x)
 def pi(): return np.pi
+
+def eye(n, m=None): return np.eye(int(n), int(m) if m is not None else int(n))
+def zeros(*args): 
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.zeros(args[0])
+    return np.zeros(args)
+def ones(*args): 
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.ones(args[0])
+    return np.ones(args)
+def median(x, axis=None): return np.median(x, axis=axis)
+def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
+def var(x, axis=None): return np.var(x, axis=axis)
+def std(x, axis=None): return np.std(x, axis=axis)
 
 def _unilab_refresh_graph():
     try:

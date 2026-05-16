@@ -33,12 +33,12 @@ except ImportError as e:
         print("Please ensure all requirements are installed: pip install -r backend/requirements.txt")
         sys.exit(1)
 
-async def run_console(engine_name: str = "transpiler"):
+async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
     workspace_root = pathlib.Path("./console_workspaces")
     workspace_root.mkdir(exist_ok=True)
     
     history_file = workspace_root / ".unilab_history"
-    if readline:
+    if not command and readline:
         try:
             if history_file.exists():
                 readline.read_history_file(str(history_file))
@@ -57,22 +57,33 @@ async def run_console(engine_name: str = "transpiler"):
     try:
         session = await core.create_session(username="console_user", engine=engine_name)
         
-        print("\n" + "="*60)
-        print(f" UniLab Interactive Console")
-        print(" Type 'exit' or 'quit' to close.")
-        print("="*60 + "\n")
+        is_tty = sys.stdin.isatty() and not command
+        if is_tty:
+            print("\n" + "="*60)
+            print(f" UniLab Interactive Console")
+            print(" Type 'exit' or 'quit' to close.")
+            print("="*60 + "\n")
         
         while True:
             try:
-                line = input(">> ")
+                if command:
+                    line = command
+                else:
+                    if is_tty:
+                        line = input(">> ")
+                    else:
+                        line = sys.stdin.readline()
+                        if not line:
+                            break
                 
                 if line.strip().lower() in ('exit', 'quit', 'exit;', 'quit;'):
                     break
                 
                 if not line.strip():
+                    if command: break
                     continue
 
-                if line.strip().endswith('...') or line.strip() in ('if', 'for', 'while', 'function', 'switch', 'try'):
+                if is_tty and (line.strip().endswith('...') or line.strip() in ('if', 'for', 'while', 'function', 'switch', 'try')):
                     buffer = [line.rstrip('.').rstrip()]
                     while True:
                         sub_line = input("   ")
@@ -85,15 +96,18 @@ async def run_console(engine_name: str = "transpiler"):
 
                 if line.strip().lower() in ('clc', 'clc;'):
                     os.system('cls' if os.name == 'nt' else 'clear')
+                    if command: break
                     continue
 
                 if line.strip().startswith('!'):
                     os.system(line.strip()[1:])
+                    if command: break
                     continue
 
                 parts = line.strip().split()
                 cmd = parts[0].lower()
-                if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv'):
+                # Added 'cd' to the list and fixed the nested if
+                if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'cd', 'git', 'python', 'pip', 'npm', 'cat'):
                     if cmd == 'cd':
                         try:
                             if len(parts) > 1:
@@ -102,9 +116,10 @@ async def run_console(engine_name: str = "transpiler"):
                                 print(os.getcwd())
                         except Exception as e:
                             print(f"Error: {e}")
-                        continue
+                    else:
+                        os.system(line.strip())
                     
-                    os.system(line.strip())
+                    if command: break
                     continue
 
                 is_whos = line.strip().lower() == 'whos' or line.strip().lower() == 'whos;'
@@ -130,30 +145,39 @@ async def run_console(engine_name: str = "transpiler"):
                 if result.plots:
                     for p in result.plots:
                         print(f"Plot generated: {p}")
+                
+                if command:
+                    break
 
             except EOFError:
                 break
             except KeyboardInterrupt:
+                if command: break
                 print("\nUse 'exit' to quit.")
             except Exception as e:
                 print(f"Error executing command: {e}")
+                if command: break
 
     finally:
-        if readline:
+        if is_tty and readline:
             try:
                 readline.write_history_file(str(history_file))
             except Exception as e:
                 print(f"Warning: Could not save history file: {e}")
         await core.stop()
-        print("\nConsole closed.")
+        if is_tty:
+            print("\nConsole closed.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="UniLab Interactive Console")
     parser.add_argument("--engine", choices=["transpiler", "octave"], default="transpiler", 
                         help="Execution engine to use (default: transpiler)")
+    parser.add_argument("command", nargs=argparse.REMAINDER, help="Terminal command to execute (optional)")
     args = parser.parse_args()
     
+    cmd_str = " ".join(args.command) if args.command else None
+    
     try:
-        asyncio.run(run_console(args.engine))
+        asyncio.run(run_console(args.engine, cmd_str))
     except KeyboardInterrupt:
         pass

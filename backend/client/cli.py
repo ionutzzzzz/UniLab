@@ -112,6 +112,9 @@ class UniLabCLIApp(tk.Tk):
         btn_run_script = tk.Button(top, text="Run Script...", command=self._on_run_script_dialog, bg="#007acc", fg="#ffffff")
         btn_run_script.pack(side=tk.LEFT, padx=6)
 
+        btn_export_data = tk.Button(top, text="Export Data...", command=self._on_export_data_dialog, bg="#6a9955", fg="#ffffff")
+        btn_export_data.pack(side=tk.LEFT, padx=4)
+
         btn_export_plot = tk.Button(top, text="Export Plot...", command=self._on_export_plot_dialog, bg="#0e639c", fg="#ffffff")
         btn_export_plot.pack(side=tk.LEFT, padx=4)
 
@@ -162,7 +165,7 @@ class UniLabCLIApp(tk.Tk):
         if not username:
             return
         fut = self.runner.run(self.core.create_session(username=username, engine="octave", use_docker=False))
-        fut.add_done_callback(lambda f: self._on_session_created(f))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_session_created(f)))
 
     def _on_session_created(self, fut):
         try:
@@ -179,7 +182,7 @@ class UniLabCLIApp(tk.Tk):
             self._write_terminal("No active session to stop.", "error")
             return
         fut = self.runner.run(self.core.stop_session(self.session_id))
-        fut.add_done_callback(lambda f: self._on_session_stopped(f))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_session_stopped(f)))
 
     def _on_session_stopped(self, fut):
         try:
@@ -201,7 +204,7 @@ class UniLabCLIApp(tk.Tk):
         self._write_terminal(f"> {cmd}")
         # run code in core.run_code
         fut = self.runner.run(self.core.run_code(self.session_id, cmd, timeout=30.0))
-        fut.add_done_callback(lambda f: self._on_run_complete(f))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_run_complete(f)))
 
         # clear entry
         self.cmd_entry.delete(0, tk.END)
@@ -223,7 +226,7 @@ class UniLabCLIApp(tk.Tk):
             self._write_terminal("No active session. Create a session first.", "error")
             return
         fut = self.runner.run(self.core.list_files(self.session_id))
-        fut.add_done_callback(lambda f: self._on_list_files_done(f))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_list_files_done(f)))
 
     def _on_list_files_done(self, fut):
         try:
@@ -233,7 +236,7 @@ class UniLabCLIApp(tk.Tk):
             return
         lines = ["Files:"]
         for e in files:
-            lines.append(f" - {e['path']} {'(dir)' if e['is_dir'] else f'{e['size']} bytes'}")
+            lines.append(f" - {e['name']} {'(dir)' if e['is_dir'] else f'{e['size']} bytes'}")
         self._write_terminal("\n".join(lines))
 
     def _on_list_vars(self):
@@ -294,6 +297,27 @@ class UniLabCLIApp(tk.Tk):
         self._write_terminal(f"Copied script to workspace: {dst}")
         return await self.core.run_script_file(self.session_id, dst, timeout=60.0)
 
+    def _on_export_data_dialog(self):
+        if not self.session_id:
+            self._write_terminal("Create a session first.", "error")
+            return
+        
+        # Simple choice between JSON and CSV
+        fmt = simpledialog.askstring("Export Data", "Enter format (json or csv):", initialvalue="json")
+        if not fmt or fmt.lower() not in ["json", "csv"]:
+            if fmt: self._write_terminal("Invalid format. Use 'json' or 'csv'.", "error")
+            return
+            
+        fut = self.runner.run(self.core.export_workspace(self.session_id, format=fmt.lower()))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_export_data_done(f)))
+
+    def _on_export_data_done(self, fut):
+        try:
+            path = fut.result()
+            self._write_terminal(f"Data exported successfully to: {path}", "success")
+        except Exception as e:
+            self._write_terminal(f"Data export failed: {e}", "error")
+
     def _on_export_plot_dialog(self):
         if not self.session_id:
             self._write_terminal("Create a session first.", "error")
@@ -306,7 +330,7 @@ class UniLabCLIApp(tk.Tk):
         plot_cmds = dialog.result
         # schedule export
         fut = self.runner.run(self.core.export_plot(self.session_id, plot_cmds, fmt="png", timeout=60.0))
-        fut.add_done_callback(lambda f: self._on_export_plot_done(f))
+        fut.add_done_callback(lambda f: self.after(0, lambda: self._on_export_plot_done(f)))
 
     def _on_export_plot_done(self, fut):
         try:

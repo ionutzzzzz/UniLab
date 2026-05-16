@@ -40,3 +40,13 @@ async def list_files(session_id: str, path: Optional[str] = None, core: UniLabCo
         return await core.list_files(session_id, path)
     except KeyError:
         raise HTTPException(status_code=404, detail="Session not found")
+
+@router.post("/sessions/{session_id}/export")
+async def export_workspace(session_id: str, format: str = "json", filename: Optional[str] = None, core: UniLabCore = Depends(get_core)):
+    try:
+        path = await core.export_workspace(session_id, format, filename)
+        return {"path": path}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

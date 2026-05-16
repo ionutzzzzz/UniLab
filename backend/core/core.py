@@ -98,6 +98,7 @@ UniLab_GRAMMAR = r"""
 
     ?atom: NUMBER                    -> number
          | STRING                    -> string
+         | anonymous_func
          | function_call
          | cell_indexing
          | qualified_name            -> var
@@ -116,6 +117,8 @@ UniLab_GRAMMAR = r"""
     ?call_arg: expression
              | COLON -> colon_expr
     call_args: call_arg (COMMA call_arg)*
+
+    anonymous_func: "@" LPAR [arg_list] RPAR expression
 
     FUNCTION.2: "function"
     END.2: "end"
@@ -415,6 +418,15 @@ class UniLabToPython(Transformer):
         args = items[2] if len(items) > 3 else None
         arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
         return f"unilab_call({name}, {arg_str})"
+
+    def anonymous_func(self, items):
+        args = []
+        expr = items[-1]
+        for i in items[:-1]:
+            if isinstance(i, list):
+                args = i
+        arg_str = ", ".join(args)
+        return f"(lambda {arg_str}: {expr})"
 
     def function_call(self, items):
         name = str(items[0])

@@ -116,3 +116,23 @@ class UniLabCore:
         p = s.workspace_path / path
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
+
+    async def export_workspace(self, session_id: str, format: str = "json", filename: Optional[str] = None) -> str:
+        engine = self.engines.get(session_id)
+        if not engine: raise KeyError(f"No engine for session {session_id}")
+        
+        # Fetch current variables
+        vars_snapshot = await engine.fetch_variables()
+        # For simplicity, we just export the previews/values
+        data_to_export = {k: v['preview'] for k, v in vars_snapshot.items()}
+        
+        filename = filename or f"workspace_export_{int(time.time())}.{format}"
+        output_path = self.sessions[session_id].workspace_path / filename
+        
+        from backend.exporters import CSVExporter, JSONExporter
+        if format.lower() == "csv":
+            exporter = CSVExporter()
+        else:
+            exporter = JSONExporter()
+            
+        return await exporter.export(data_to_export, str(output_path))

@@ -52,4 +52,12 @@ def image_to_braille_color(img_path, width=80):
         
     print("\n".join(braille_chars))
 
-image_to_braille_color('dummy2.png', width=50)
+if __name__ == "__main__":
+    # Create a dummy image if it doesn't exist
+    from PIL import Image, ImageDraw
+    img = Image.new('RGB', (100, 100), color='white')
+    d = ImageDraw.Draw(img)
+    d.text((10,10), "Test", fill=(255,0,0))
+    img.save('dummy2.png')
+    
+    image_to_braille_color('dummy2.png', width=50)
