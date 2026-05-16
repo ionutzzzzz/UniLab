@@ -94,20 +94,29 @@ def unilab_call(obj, *args):
         
     if len(args) == 1:
         idx = args[0]
-        # If obj is a vector (1, N) or (N, 1), and we have 1D index
-        if isinstance(obj, np.ndarray) and (obj.shape[0] == 1 or obj.shape[1] == 1):
-            # Flatten for indexing
-            flat_obj = obj.flatten()
-            if isinstance(idx, (int, np.integer, float, np.floating)):
-                return flat_obj[int(idx)-1]
-            if isinstance(idx, (np.ndarray, list, slice)):
-                # Adjust 1-based indexing for arrays of integers/floats
-                if isinstance(idx, np.ndarray) and not np.issubdtype(idx.dtype, np.bool_):
-                    return flat_obj[idx.flatten().astype(int) - 1]
-                if isinstance(idx, list) and len(idx) > 0 and isinstance(idx[0], (int, float)):
-                    return flat_obj[np.array(idx).astype(int) - 1]
-                return flat_obj[idx]
+        # If obj is a vector (1, N) or (N, 1) or (N,), and we have 1D index
+        if isinstance(obj, np.ndarray):
+            if obj.ndim == 1:
+                if isinstance(idx, (int, np.integer, float, np.floating)):
+                    return obj[int(idx)-1]
+                # ... handle other types
+            elif obj.ndim == 2 and (obj.shape[0] == 1 or obj.shape[1] == 1):
+                # Flatten for indexing
+                flat_obj = obj.flatten()
+                if isinstance(idx, (int, np.integer, float, np.floating)):
+                    return flat_obj[int(idx)-1]
+                if isinstance(idx, (np.ndarray, list, slice)):
+                    # Adjust 1-based indexing for arrays of integers/floats
+                    if isinstance(idx, np.ndarray) and not np.issubdtype(idx.dtype, np.bool_):
+                        return flat_obj[idx.flatten().astype(int) - 1]
+                    if isinstance(idx, list) and len(idx) > 0 and isinstance(idx[0], (int, float)):
+                        return flat_obj[np.array(idx).astype(int) - 1]
+                    return flat_obj[idx]
         
+        if isinstance(obj, list):
+            if isinstance(idx, (int, np.integer, float, np.floating)):
+                return obj[int(idx)-1]
+
         # Standard indexing
         if isinstance(idx, (int, np.integer, float, np.floating)):
             return obj[int(idx)-1]
@@ -130,25 +139,31 @@ def unilab_get(obj, attr):
 def unilab_set(obj, val, *args):
     if len(args) == 1:
         idx = args[0]
-        if isinstance(obj, np.ndarray) and (obj.shape[0] == 1 or obj.shape[1] == 1):
-            # Handle vector indexing
-            flat_idx = idx
-            if isinstance(idx, (int, np.integer, float, np.floating)):
-                flat_idx = int(idx) - 1
-            elif isinstance(idx, np.ndarray) and not np.issubdtype(idx.dtype, np.bool_):
-                flat_idx = idx.flatten().astype(int) - 1
-            
-            # We need to be careful about shape when setting
-            if obj.shape[0] == 1: # Row vector
-                obj[0, flat_idx] = val
-            else: # Column vector
-                obj[flat_idx, 0] = val
-            return obj
-
+        # Adjust 1-based index
         if isinstance(idx, (int, np.integer, float, np.floating)):
-            obj[int(idx)-1] = val
+            idx_adj = int(idx) - 1
+        elif isinstance(idx, (np.ndarray, list)):
+            idx_adj = np.asarray(idx).astype(int) - 1
         else:
-            obj[idx] = val
+            idx_adj = idx
+
+        if isinstance(obj, np.ndarray):
+            if obj.ndim == 1:
+                obj[idx_adj] = val
+            elif obj.ndim == 2:
+                if obj.shape[0] == 1: # Row vector
+                    obj[0, idx_adj] = val
+                elif obj.shape[1] == 1: # Column vector
+                    obj[idx_adj, 0] = val
+                else:
+                    # Linear indexing in 2D array
+                    obj.flat[idx_adj] = val
+            else:
+                obj.flat[idx_adj] = val
+            return obj
+        
+        # Fallback for lists
+        obj[idx_adj] = val
     elif len(args) > 1:
         processed = []
         for i in args:
@@ -158,6 +173,58 @@ def unilab_set(obj, val, *args):
                 processed.append(i)
         obj[tuple(processed)] = val
     return obj
+
+def unilab_matrix_concat(*rows):
+    if not rows:
+        return np.array([])
+    
+    # Check if we are concatenating strings
+    first_row = rows[0]
+    if isinstance(first_row, (str, bytes)) or (isinstance(first_row, list) and len(first_row) > 0 and isinstance(first_row[0], (str, bytes))):
+        # String concatenation
+        res = ""
+        for r in rows:
+            if isinstance(r, list):
+                for item in r:
+                    res += str(item)
+            else:
+                res += str(r)
+        return res
+
+    # Standard matrix concatenation
+    try:
+        # Convert list of lists to numpy array
+        processed_rows = []
+        for r in rows:
+            if isinstance(r, (list, np.ndarray)):
+                processed_rows.append(np.asarray(r))
+            else:
+                processed_rows.append(np.asarray([r]))
+        
+        if len(processed_rows) == 1:
+            row = processed_rows[0]
+            return row
+        
+        return np.vstack(processed_rows)
+    except:
+        return np.array(rows)
+
+def unilab_nargin_sum(gen):
+    import builtins
+    return builtins.sum(gen)
+
+def unilab_cell_concat(*args):
+    res = []
+    for a in args:
+        if isinstance(a, list):
+            res.extend(a)
+        else:
+            res.append(a)
+    return res
+
+def nargin():
+    # Placeholder: ideally should return actual count
+    return 3
 
 def whos():
     # This is a stub, the actual implementation will be handled by the engine
@@ -222,7 +289,16 @@ def length(x):
 
 def size(x, dim=None):
     s = np.shape(x)
+    if len(s) == 0:
+        if isinstance(x, (str, bytes)):
+            s = (1, len(x))
+        else:
+            s = (1, 1)
+    elif len(s) == 1:
+        s = (1, s[0])
+    
     if dim is not None:
+        if dim > len(s): return 1
         return s[dim-1]
     return s
 
@@ -413,6 +489,60 @@ def save_plot(filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     plt.savefig(filename)
     print(f"::SAVED::{filename}")
+
+def terminal_plot(y, x=None, height=20, width=60):
+    """Generate an ASCII plot in the terminal."""
+    if x is None:
+        x = np.arange(1, len(y) + 1)
+    
+    y = np.asarray(y)
+    x = np.asarray(x)
+    
+    # Filter out NaNs/Infs
+    mask = np.isfinite(y) & np.isfinite(x)
+    y = y[mask]
+    x = x[mask]
+    
+    if len(y) == 0:
+        print("No data to plot.")
+        return
+
+    y_min, y_max = np.min(y), np.max(y)
+    x_min, x_max = np.min(x), np.max(x)
+    
+    # Prevent division by zero
+    if y_min == y_max: y_max += 1
+    if x_min == x_max: x_max += 1
+
+    # Initialize canvas
+    canvas = [[' ' for _ in range(width)] for _ in range(height)]
+    
+    # Map points to grid
+    for i in range(len(y)):
+        col = int((x[i] - x_min) / (x_max - x_min) * (width - 1))
+        row = height - 1 - int((y[i] - y_min) / (y_max - y_min) * (height - 1))
+        canvas[row][col] = '*'
+
+    # Draw plot
+    print("-" * (width + 10))
+    for r in range(height):
+        # Y-axis labels
+        if r == 0:
+            label = f"{y_max:8.2f} |"
+        elif r == height // 2:
+            label = f"{(y_min+y_max)/2:8.2f} |"
+        elif r == height - 1:
+            label = f"{y_min:8.2f} |"
+        else:
+            label = " " * 8 + "|"
+        
+        print(f"{label}{''.join(canvas[r])}")
+    
+    print(" " * 9 + "-" * width)
+    # X-axis labels
+    x_labels = f"{x_min:<10.2f}{' '*(width-20)}{x_max:>10.2f}"
+    print(" " * 9 + x_labels)
+    print("-" * (width + 10))
 
 # Workspace Management
 def unilab_clear_workspace(g):

@@ -1,10 +1,12 @@
 # 🧪 UniLab
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-<!-- ![C/C++](https://img.shields.io/badge/C%2FC%2B%2B-00599C?style=for-the-badge&logo=c&logoColor=white) -->
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![SCSS](https://img.shields.io/badge/SCSS-CC6699?style=for-the-badge&logo=sass&logoColor=white)
+
+
+<!-- ![C/C++](https://img.shields.io/badge/C%2FC%2B%2B-00599C?style=for-the-badge&logo=c&logoColor=white) -->
 
 > An accessible, modern environment for the simulation, modeling, and analysis of mathematical systems.
 
@@ -110,7 +112,7 @@ grid on;           % Add grid lines
 
 ```
 
-**🗺️ Roadmap**
+## 🗺️ Roadmap
 
 [x] Core computation engine (Transplier)
 
@@ -130,7 +132,7 @@ grid on;           % Add grid lines
 
 [ ] Plugin marketplace for community-driven algorithms
 
-**🤝 Contributing**
+## 🤝 Contributing
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
@@ -148,4 +150,4 @@ Open a Pull Request
 
 Distributed under the MIT License. See LICENSE for more information.
 
-Note: UniLab is a personal project currently in active development. Features and APIs are subject to change.
+> Note: UniLab is a personal project currently in active development. Features and APIs are subject to change.

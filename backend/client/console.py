@@ -20,8 +20,6 @@ if 'backend' not in os.listdir('.') and 'backend' in os.listdir('..'):
 try:
     from backend.core.main import UniLabCore, BackendConfig
 except ImportError as e:
-    # If it failed to find 'backend', it might be a path issue.
-    # Otherwise, it might be a missing dependency (like sympy).
     if "No module named 'backend'" in str(e):
         try:
             from core.main import UniLabCore, BackendConfig

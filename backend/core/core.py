@@ -15,24 +15,25 @@ UniLab_GRAMMAR = r"""
               | assignment
               | clear_stmt
               | command_call
-              | expression SEMI -> expr_stmt
-              | expression -> expr_stmt_no_semi
+              | expression (SEMI | COMMA)? -> expr_stmt
+              | SEMI -> null_stmt
 
-    assignment: lhs EQ expression SEMI? -> assignment_stmt
+    assignment: lhs EQ expression (SEMI | COMMA)? -> assignment_stmt
     ?lhs: qualified_name LPAR call_args RPAR -> indexed_lhs
+        | qualified_name LBRACE call_args RBRACE -> cell_indexed_lhs
         | qualified_name -> single_lhs
         | LBRACKET qualified_name (COMMA qualified_name)* RBRACKET -> multi_lhs
 
-    clear_stmt: CLEAR (qualified_name | "all")* SEMI?
+    clear_stmt: CLEAR (qualified_name | "all")* (SEMI | COMMA)?
 
-    command_call: qualified_name qualified_name+ SEMI?
+    command_call: qualified_name (qualified_name | STRING | NUMBER)+ (SEMI | COMMA)?
 
-    if_stmt: IF expression block elseif_clause* else_clause? END
-    elseif_clause: ELSEIF expression block
+    if_stmt: IF expression (SEMI | COMMA)? block elseif_clause* else_clause? END
+    elseif_clause: ELSEIF expression (SEMI | COMMA)? block
     else_clause: ELSE block
     
-    for_stmt: FOR identifier EQ expression block END
-    while_stmt: WHILE expression block END
+    for_stmt: FOR identifier EQ expression (SEMI | COMMA)? block END
+    while_stmt: WHILE expression (SEMI | COMMA)? block END
     
     switch_stmt: SWITCH expression case_clause* otherwise_clause? END
     case_clause: CASE expression block
@@ -45,7 +46,7 @@ UniLab_GRAMMAR = r"""
     function_def.10: "function" [function_ret] simple_name "(" [arg_list] ")" block "end"
     function_ret: ret_list EQ
     ret_list: simple_name -> single_ret
-            | LBRACKET simple_name (COMMA simple_name)* RBRACKET -> multi_ret
+            | LBRACKET (simple_name (COMMA simple_name)*)? RBRACKET -> multi_ret
     arg_list: simple_name (COMMA simple_name)*
 
     block: statement*
@@ -92,21 +93,29 @@ UniLab_GRAMMAR = r"""
     ?atom: NUMBER                    -> number
          | STRING                    -> string
          | function_call
+         | cell_indexing
          | qualified_name            -> var
          | LPAR expression RPAR      -> atom_group
          | matrix
+         | cell_array
 
     matrix: LBRACKET row (SEMI row)* RBRACKET
     row: expression (COMMA? expression)*
+    
+    cell_array: LBRACE row (SEMI row)* RBRACE
+
+    cell_indexing.2: qualified_name LBRACE call_args? RBRACE
 
     function_call.2: qualified_name LPAR call_args? RPAR
     ?call_arg: expression
              | COLON -> colon_expr
     call_args: call_arg (COMMA call_arg)*
 
-    qualified_name: CNAME (DOT CNAME)*
-    simple_name: CNAME
-    identifier: CNAME
+    qualified_name: IDENTIFIER (DOT IDENTIFIER)*
+    simple_name: IDENTIFIER
+    identifier: IDENTIFIER
+
+    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear)[a-zA-Z_][a-zA-Z0-9_]*/
 
     FUNCTION.2: "function"
     END.2: "end"
@@ -137,6 +146,8 @@ UniLab_GRAMMAR = r"""
     RPAR: ")"
     LBRACKET: "["
     RBRACKET: "]"
+    LBRACE: "{"
+    RBRACE: "}"
     COMMA: ","
     SEMI: ";"
     COLON: ":"
@@ -212,7 +223,14 @@ class UniLabToPython(Transformer):
         name = items[0] # qualified_name or similar
         # if it's already unilab_get(...) it might be complex
         # but for tracking we just want the base
-        base_name = str(name).split('(')[-1].split(',')[0].strip("'")
+        name_str = str(name)
+        if name_str == "nargin":
+            return "nargin"
+            
+        if '(' in name_str:
+            base_name = name_str.split('(')[-1].split(',')[0].strip("'")
+        else:
+            base_name = name_str
         self.variables.add(base_name)
         self.called_functions.add(base_name)
         return name
@@ -233,17 +251,15 @@ class UniLabToPython(Transformer):
         arg_str = ", ".join(args) if isinstance(args, list) else str(args)
         return {"type": "indexed_lhs", "target": target, "args": arg_str}
 
-    def assignment(self, items):
-        lhs = items[0]
-        expr = items[2]
-        if isinstance(lhs, dict) and lhs.get("type") == "indexed_lhs":
-            return f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
-        if isinstance(lhs, list):
-            for n in lhs: self.variables.add(str(n))
-            return f"({', '.join([str(n) for n in lhs])}) = {expr}"
-        else:
-            self.variables.add(str(lhs))
-            return f"{lhs} = {expr}"
+    def cell_indexed_lhs(self, items):
+        target = items[0]
+        args = []
+        for i in items[1:]:
+            if str(i) not in ["{", "}"]:
+                args = i
+                break
+        arg_str = ", ".join(args) if isinstance(args, list) else str(args)
+        return {"type": "cell_indexed_lhs", "target": target, "args": arg_str}
 
     def clear_stmt(self, items):
         names = [str(i) for i in items if str(i) not in [";", "clear"]]
@@ -255,43 +271,51 @@ class UniLabToPython(Transformer):
     def command_call(self, items):
         name = str(items[0])
         self.called_functions.add(name)
-        args = [f"'{a}'" for a in items[1:]]
+        # items[1:] might contain separators
+        args = [f"'{a}'" for a in items[1:] if str(a) not in [";", ","]]
         return f"{name}({', '.join(args)})"
 
-    def expr_stmt(self, items): return items[0]
-    
-    def expr_stmt_no_semi(self, items):
+    def null_stmt(self, items): return ""
+
+    def expr_stmt(self, items):
         expr = items[0]
-        # Wrap expression in unilab_print_and_save_ans
-        return f"global ans; ans = unilab_print_and_save_ans('{expr}', {expr})"
+        has_sep = False
+        if len(items) > 1:
+            if str(items[1]) == ";":
+                return expr
+        # No semi or comma -> print
+        # Escape single quotes in expr string
+        expr_esc = str(expr).replace("'", "\\'")
+        return f"ans = unilab_print_and_save_ans('{expr_esc}', {expr})"
 
     def assignment_stmt(self, items):
-        # items: [lhs, EQ, expression, SEMI?]
+        # items: [lhs, EQ, expression, separator?]
         lhs = items[0]
         expr = items[2]
         
         has_semi = False
         if len(items) > 3:
-            has_semi = True
+            if str(items[3]) == ";":
+                has_semi = True
         
-        if isinstance(lhs, dict) and lhs.get("type") == "indexed_lhs":
+        if isinstance(lhs, dict) and (lhs.get("type") == "indexed_lhs" or lhs.get("type") == "cell_indexed_lhs"):
             stmt = f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
+            print_target = lhs['target']
         elif isinstance(lhs, list):
             for n in lhs: self.variables.add(str(n))
             stmt = f"({', '.join([str(n) for n in lhs])}) = {expr}"
+            print_target = f"[{', '.join([str(n) for n in lhs])}]"
         else:
             self.variables.add(str(lhs))
             stmt = f"{lhs} = {expr}"
+            print_target = str(lhs)
             
         if not has_semi:
+            print_target_esc = print_target.replace("'", "\\'")
             if isinstance(lhs, list):
-                # For multi-lhs, we might want to print each? 
-                # UniLab prints the first one usually or a summary.
-                # Let's just print the whole tuple for now.
-                lhs_str = f"[{', '.join([str(n) for n in lhs])}]"
-                return f"{stmt}; unilab_print_var('{lhs_str}', ({', '.join([str(n) for n in lhs])}))"
+                return f"{stmt}; unilab_print_var('{print_target_esc}', ({', '.join([str(n) for n in lhs])}))"
             else:
-                return f"{stmt}; unilab_print_var('{lhs}', {lhs})"
+                return f"{stmt}; unilab_print_var('{print_target_esc}', {print_target})"
         return stmt
 
     def add(self, items): return f"({items[0]} + {items[2]})"
@@ -323,13 +347,28 @@ class UniLabToPython(Transformer):
         for r in actual_rows:
             if isinstance(r, list):
                 row_strs.append(f"[{', '.join(r)}]")
-        return f"np.array([{', '.join(row_strs)}])"
+        return f"unilab_matrix_concat({', '.join(row_strs)})"
+
+    def cell_array(self, items):
+        actual_rows = [r for r in items if str(r) not in ["{", "}", ";"]]
+        row_strs = []
+        for r in actual_rows:
+            if isinstance(r, list):
+                row_strs.extend(r)
+        return f"unilab_cell_concat({', '.join(row_strs)})"
 
     def row(self, items):
         return [str(i) for i in items if str(i) != ","]
 
     def range2(self, items): return f"np.arange({items[0]}, {items[2]} + 1)"
     def range3(self, items): return f"np.arange({items[0]}, {items[4]} + {items[2]}, {items[2]})"
+
+    def cell_indexing(self, items):
+        name = str(items[0])
+        self.called_functions.add(name)
+        args = items[2] if len(items) > 3 else None
+        arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
+        return f"unilab_call({name}, {arg_str})"
 
     def function_call(self, items):
         name = str(items[0])
@@ -372,32 +411,55 @@ class UniLabToPython(Transformer):
         return "\n".join(flatten(items))
 
     def if_stmt(self, items):
-        # items: [IF, expression, block, elseif_clause*, else_clause?, END]
+        # items: [IF, expression, separator?, block, elseif_clause*, else_clause?, END]
         cond = items[1]
-        block = items[2]
+        
+        idx = 2
+        if str(items[idx]) in [";", ","]:
+            idx += 1
+        
+        block = items[idx]
+        idx += 1
+        
         lines = [f"if {cond}:"]
         lines.extend(self._indent(block))
-        for i in range(3, len(items) - 1):
+        for i in range(idx, len(items) - 1):
             clause = items[i]
             if isinstance(clause, list):
                 lines.extend(clause)
         return lines
 
     def elseif_clause(self, items):
-        # items: [ELSEIF, expression, block]
-        return [f"elif {items[1]}:"] + self._indent(items[2])
+        # items: [ELSEIF, expression, separator?, block]
+        cond = items[1]
+        idx = 2
+        if str(items[idx]) in [";", ","]:
+            idx += 1
+        block = items[idx]
+        return [f"elif {cond}:"] + self._indent(block)
 
     def else_clause(self, items):
         # items: [ELSE, block]
         return ["else:"] + self._indent(items[1])
 
     def for_stmt(self, items):
-        # items: [FOR, identifier, EQ, expression, block, END]
-        return [f"for {items[1]} in {items[3]}:"] + self._indent(items[4])
+        # items: [FOR, identifier, EQ, expression, separator?, block, END]
+        var = items[1]
+        expr = items[3]
+        idx = 4
+        if str(items[idx]) in [";", ","]:
+            idx += 1
+        block = items[idx]
+        return [f"for {var} in {expr}:"] + self._indent(block)
 
     def while_stmt(self, items):
-        # items: [WHILE, expression, block, END]
-        return [f"while {items[1]}:"] + self._indent(items[2])
+        # items: [WHILE, expression, separator?, block, END]
+        cond = items[1]
+        idx = 2
+        if str(items[idx]) in [";", ","]:
+            idx += 1
+        block = items[idx]
+        return [f"while {cond}:"] + self._indent(block)
 
     def switch_stmt(self, items):
         # items: [SWITCH, expression, case_clause*, otherwise_clause?, END]
@@ -485,6 +547,15 @@ class UniLabToPython(Transformer):
             else: arg_str = str(args)
 
         lines = [f"def {name}({arg_str}):"]
+        lines.append("    global ans")
+        
+        # Add nargin calculation
+        if args:
+            arg_names = [str(a) for a in (args if isinstance(args, list) else [args])]
+            lines.append(f"    nargin = unilab_nargin_sum(1 for x in [{', '.join(arg_names)}] if x is not None)")
+        else:
+            lines.append("    nargin = 0")
+            
         lines.extend(self._indent(block))
         if rets:
             if isinstance(rets, list): lines.append(f"    return ({', '.join(rets)})")
@@ -496,14 +567,15 @@ class UniLabTranspiler:
         self.parser = Lark(UniLab_GRAMMAR, parser='earley')
         self.transformer = UniLabToPython()
 
-    def transpile(self, UniLab_code):
+    def transpile(self, matlab_code):
         self.transformer.variables = set()
         self.transformer.globals = set()
         self.transformer.called_functions = set()
         self.transformer.added_paths = set()
-        tree = self.parser.parse(UniLab_code)
+        tree = self.parser.parse(matlab_code)
         result = self.transformer.transform(tree)
         return str(result), self.transformer.called_functions, self.transformer.added_paths
+
 
 def transpile(UniLab_code):
     transpiler = UniLabTranspiler()
