@@ -32,7 +32,7 @@ UniLab_GRAMMAR = r"""
 
     clear_stmt: CLEAR (qualified_name | "all")*
 
-    command_call: qualified_name (qualified_name | STRING | NUMBER)+
+    command_call.10: qualified_name (qualified_name | STRING | NUMBER)+
 
     if_stmt: IF expression block elseif_clause* else_clause? END
     elseif_clause: ELSEIF expression block

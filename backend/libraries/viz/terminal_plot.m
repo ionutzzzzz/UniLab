@@ -18,8 +18,8 @@ function terminal_plot(y, x, h, w, type)
         grid on;
         
         % Save and notify engine
-        print('graph.png', '-dpng');
-        disp('::GRAPHICAL_PLOT::graph.png');
+        print('graph.jpg', '-djpg');
+        disp('::GRAPHICAL_PLOT::graph.jpg');
     catch err
         disp(['Error in terminal_plot: ', err.message]);
     end

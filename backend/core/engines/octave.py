@@ -102,6 +102,7 @@ class OctaveEngine(BaseEngine):
                         plots.append(p)
                         if idx == render_target_idx:
                             full_path = self.workspace_path / p
+                            # Ensure we are rendering the correct file type
                             render_out = render_image_terminal(str(full_path))
                             stdout_lines[idx] = render_out if render_out else ""
                         else:
