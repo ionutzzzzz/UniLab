@@ -184,15 +184,36 @@ class TranspilerEngine(BaseEngine):
             
             duration = time.time() - start_ts
             stdout = out.getvalue()
+            stdout_lines = stdout.splitlines()
+            
+            # Find all plot markers
+            plot_indices = [i for i, line in enumerate(stdout_lines) if "::GRAPHICAL_PLOT::" in line]
+            
             plots = []
-            for line in stdout.splitlines():
-                if "::SAVED::" in line:
-                    p = line.split("::SAVED::", 1)[1].strip()
+            if plot_indices:
+                # Keep track of which line we'll put the render on (the last one)
+                render_target_idx = plot_indices[-1]
+                for idx in plot_indices:
+                    line = stdout_lines[idx]
+                    p = line.split("::GRAPHICAL_PLOT::", 1)[1].strip()
                     plots.append(p)
+                    
+                    if idx == render_target_idx:
+                        # Render the final version of the plot
+                        full_path = self.workspace_path / p
+                        render_func = self.globals.get('render_image_terminal')
+                        if render_func:
+                            render_out = render_func(str(full_path))
+                            stdout_lines[idx] = render_out if render_out else ""
+                        else:
+                            stdout_lines[idx] = ""
+                    else:
+                        # Hide intermediate plot markers
+                        stdout_lines[idx] = ""
 
             return ExecutionResult(
                 success=success,
-                stdout=stdout,
+                stdout="\n".join(l for l in stdout_lines if l or l == ""),
                 stderr=err.getvalue(),
                 return_code=0 if success else 1,
                 duration_s=duration,

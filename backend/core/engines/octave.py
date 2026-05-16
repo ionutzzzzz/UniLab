@@ -83,17 +83,36 @@ class OctaveEngine(BaseEngine):
 
             out_text = "\n".join(collected_lines)
             plots = []
-            for line in collected_lines:
-                if "::SAVED::" in line:
-                    p = line.split("::SAVED::", 1)[1].strip()
-                    plots.append(p)
+            stdout_lines = collected_lines
+            
+            # Find all plot markers
+            plot_indices = [i for i, line in enumerate(stdout_lines) if "::GRAPHICAL_PLOT::" in line]
+            
+            from ..runtime import render_image_terminal
+            
+            if plot_indices:
+                render_target_idx = plot_indices[-1]
+                for idx in plot_indices:
+                    line = stdout_lines[idx]
+                    if "::SAVED::" in line:
+                        p = line.split("::SAVED::", 1)[1].strip()
+                        plots.append(p)
+                    elif "::GRAPHICAL_PLOT::" in line:
+                        p = line.split("::GRAPHICAL_PLOT::", 1)[1].strip()
+                        plots.append(p)
+                        if idx == render_target_idx:
+                            full_path = self.workspace_path / p
+                            render_out = render_image_terminal(str(full_path))
+                            stdout_lines[idx] = render_out if render_out else ""
+                        else:
+                            stdout_lines[idx] = ""
             
             rc = 0 if not any(l.startswith("::ERR::") for l in collected_lines) else 1
             vars_snapshot = await self.fetch_variables()
             
             return ExecutionResult(
                 success=(rc == 0),
-                stdout=out_text,
+                stdout="\n".join(l for l in stdout_lines if "::GRAPHICAL_PLOT::" not in l or l != ""),
                 stderr="",
                 return_code=rc,
                 duration_s=time.time() - start_ts,
