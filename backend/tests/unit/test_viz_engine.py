@@ -73,5 +73,40 @@ class TestTranspilerImprovements(unittest.TestCase):
         res_wrapped = unilab_matrix_concat(["Hello", " ", "World"])
         self.assertEqual(res_wrapped, "Hello World")
 
+class TestMatrixImprovements(unittest.TestCase):
+    def test_row_vector(self):
+        from backend.core.runtime import unilab_matrix_concat
+        # [1 2 3] -> unilab_matrix_concat([1, 2, 3])
+        res = unilab_matrix_concat([1, 2, 3])
+        self.assertEqual(res.shape, (1, 3))
+        np.testing.assert_array_equal(res, [[1, 2, 3]])
+
+    def test_column_vector(self):
+        from backend.core.runtime import unilab_matrix_concat
+        # [1; 2; 3] -> unilab_matrix_concat([1], [2], [3])
+        res = unilab_matrix_concat([1], [2], [3])
+        self.assertEqual(res.shape, (3, 1))
+        np.testing.assert_array_equal(res, [[1], [2], [3]])
+
+    def test_matrix_2d(self):
+        from backend.core.runtime import unilab_matrix_concat
+        # [1 2; 3 4] -> unilab_matrix_concat([1, 2], [3, 4])
+        res = unilab_matrix_concat([1, 2], [3, 4])
+        self.assertEqual(res.shape, (2, 2))
+        np.testing.assert_array_equal(res, [[1, 2], [3, 4]])
+
+class TestRobustPlotting(unittest.TestCase):
+    def test_plot_nn_robustness(self):
+        from backend.ml.visualizers.nn_vis import plot_neural_network
+        import matplotlib.pyplot as plt
+        # Test with 2D array input (previously caused error)
+        layers = np.array([[4, 8, 8, 2]])
+        try:
+            fig = plot_neural_network(layers)
+            self.assertIsInstance(fig, plt.Figure)
+            plt.close(fig)
+        except Exception as e:
+            self.fail(f"plot_neural_network failed with 2D array input: {e}")
+
 if __name__ == "__main__":
     unittest.main()

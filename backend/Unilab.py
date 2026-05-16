@@ -39,7 +39,7 @@ def highlight_syntax(code: str) -> str:
 # Vocabulary for Tab Autocomplete
 KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
 BUILTINS = [
-    'disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 
+    'disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 
     'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 
     'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 
     'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 

@@ -95,28 +95,34 @@ def unilab_set(obj, val, *args):
 def unilab_matrix_concat(*rows):
     if not rows: return np.array([])
     
-    # If a single list or array is passed, use its elements
-    if len(rows) == 1 and isinstance(rows[0], (list, np.ndarray)) and not isinstance(rows[0], str):
-        rows = rows[0]
+    # If it's a single string, return it (MATLAB char array)
+    if len(rows) == 1 and isinstance(rows[0], str):
+        return rows[0]
+
+    # If a single list or array is passed, it represents a single row
+    if len(rows) == 1 and isinstance(rows[0], (list, np.ndarray)):
+        # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
+        if all(isinstance(r, (str, np.str_)) for r in rows[0]):
+            return "".join(str(r) for r in rows[0])
+        return np.atleast_2d(rows[0])
         
     try:
-        # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
-        if all(isinstance(r, (str, np.str_)) for r in rows):
-            return "".join(str(r) for r in rows)
-        
+        # Check for MATLAB-style string concatenation ['abc'; 'def'] -> not supported as join
+        # but we handle multi-argument call as multiple rows
         processed_rows = []
         for r in rows:
-            if isinstance(r, (list, np.ndarray)): processed_rows.append(np.asarray(r))
-            elif isinstance(r, str): processed_rows.append(np.asarray(list(r)))
-            else: processed_rows.append(np.asarray([r]))
-            
-        if len(processed_rows) == 1: 
-            if isinstance(rows[0], str): return rows[0]
-            return processed_rows[0]
+            if isinstance(r, (list, np.ndarray)):
+                processed_rows.append(np.atleast_2d(r))
+            elif isinstance(r, str):
+                processed_rows.append(np.atleast_2d(list(r)))
+            else:
+                processed_rows.append(np.atleast_2d([r]))
             
         return np.vstack(processed_rows)
     except:
-        if all(isinstance(r, (str, np.str_)) for r in rows): return "".join(str(r) for r in rows)
+        # Fallback
+        if all(isinstance(r, (str, np.str_)) for r in rows):
+            return "".join(str(r) for r in rows)
         return np.array(rows)
 
 def unilab_nargin_sum(gen):
@@ -129,6 +135,17 @@ def unilab_cell_concat(*args):
         if isinstance(a, list): res.extend(a)
         else: res.append(a)
     return res
+
+def cell(*args):
+    if len(args) == 0: return np.empty((0, 0), dtype=object)
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)):
+            shape = tuple(int(i) for i in args[0])
+        else:
+            shape = (int(args[0]), int(args[0]))
+    else:
+        shape = tuple(int(i) for i in args)
+    return np.full(shape, None, dtype=object)
 
 def factorial(n):
     from math import factorial as f
@@ -232,7 +249,11 @@ def randn(*args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.randn(*args[0])
     return np.random.randn(*args)
 
-def diag(v, k=0): return np.diag(v, k)
+def diag(v, k=0):
+    if isinstance(v, np.ndarray) and v.ndim == 2:
+        if v.shape[0] == 1 or v.shape[1] == 1:
+            return np.diag(v.flatten(), k)
+    return np.diag(v, k)
 
 def num2str(x, precision=None):
     if precision is not None:

@@ -156,6 +156,11 @@ class TranspilerEngine(BaseEngine):
             # Resolve missing functions from paths
             await self._resolve_dependencies(called_funcs)
             
+            # Re-verify critical runtime functions are in globals
+            for name in dir(runtime):
+                if not name.startswith('_'):
+                    self.globals[name] = getattr(runtime, name)
+            
             # Restore search paths (they will be permanently added during execution of addpath in python_code)
             # but we keep them for now to ensure dependent functions can be found.
             # Actually, it's better to keep them if they were successfully added.

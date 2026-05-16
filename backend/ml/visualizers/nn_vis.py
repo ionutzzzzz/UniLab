@@ -6,9 +6,10 @@ def plot_neural_network(layers, title="Neural Network Architecture"):
     Plots a simple neural network architecture.
     layers: list of integers representing the number of neurons in each layer.
     """
+    layer_sizes = np.asarray(layers).flatten().astype(int)
+    
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    layer_sizes = layers
     n_layers = len(layer_sizes)
     v_spacing = 1.0 / max(layer_sizes)
     h_spacing = 1.0 / (n_layers - 1)
