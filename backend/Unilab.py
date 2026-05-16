@@ -36,6 +36,33 @@ def highlight_syntax(code: str) -> str:
 
     return code + comment
 
+# Vocabulary for Tab Autocomplete
+KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
+BUILTINS = [
+    'disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 
+    'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 
+    'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 
+    'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 
+    'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
+    'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 
+    'randn', 'rand', 'diag', 'plot_nn'
+]
+workspace_vars = []
+
+def unilab_completer(text, state):
+    line = readline.get_line_buffer() if readline else ""
+    
+    # If the user is typing a 'run' command or shell command, suggest files
+    if line.strip().startswith('run ') or line.strip().startswith('!'):
+        import glob
+        options = [f for f in glob.glob(text + '*') if not f.startswith('__')]
+    else:
+        options = [w for w in KEYWORDS + BUILTINS + workspace_vars if w.startswith(text)]
+    
+    if state < len(options):
+        return options[state]
+    return None
+
 # Setup paths to ensure we can import core modules
 current_dir = pathlib.Path(__file__).resolve().parent
 project_root = current_dir.parent if (current_dir / "core").exists() else current_dir
@@ -106,6 +133,7 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         await core.stop()
 
 async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
+    global workspace_vars
     workspace_root = pathlib.Path("./console_workspaces")
     workspace_root.mkdir(exist_ok=True)
     
@@ -115,8 +143,13 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
             if history_file.exists():
                 readline.read_history_file(str(history_file))
             readline.set_history_length(1000)
+            readline.set_completer(unilab_completer)
+            if 'libedit' in readline.__doc__:
+                readline.parse_and_bind("bind ^I rl_complete")
+            else:
+                readline.parse_and_bind("tab: complete")
         except Exception as e:
-            print(f"Warning: Could not load history file: {e}")
+            print(f"Warning: Could not load history file or set completer: {e}")
 
     cfg = BackendConfig(
         workspace_root=workspace_root,
@@ -132,7 +165,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
         is_tty = sys.stdin.isatty() and not command
         if is_tty:
             print("\n" + "="*60)
-            print(f" 🧪 UniLab Interactive Console (TrueColor Enabled)")
+            print(f" 🧪 UniLab Interactive Console")
             print(" Type 'exit' or 'quit' to close.")
             print(" Type 'list_libraries();' to explore toolboxes.")
             print("="*60 + "\n")
@@ -200,6 +233,40 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                     if command: break
                     continue
 
+                if line.strip().lower().startswith('run '):
+                    parts = line.strip().rstrip(';').split(None, 1)
+                    if len(parts) > 1:
+                        script_name = parts[1].strip()
+                        if not script_name.endswith('.m'):
+                            script_name += '.m'
+                        
+                        script_path = pathlib.Path(script_name)
+                        if not script_path.exists():
+                            # Try looking in the current workspace or common library paths
+                            script_path = project_root / script_name
+                            
+                        if script_path.exists():
+                            try:
+                                script_code = script_path.read_text(encoding="utf-8")
+                                print(f"\x1b[90mRunning script: {script_path.name}\x1b[0m")
+                                result = await core.run_code(session.session_id, script_code)
+                                
+                                # Update variable cache
+                                if result.variables_snapshot:
+                                    workspace_vars = list(result.variables_snapshot.keys())
+                                    
+                                if result.stdout:
+                                    print(result.stdout.rstrip())
+                                if result.stderr:
+                                    print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
+                            except Exception as e:
+                                print(f"Error running script: {e}")
+                        else:
+                            print(f"Error: Script '{script_name}' not found.")
+                    
+                    if command: break
+                    continue
+
                 if line.strip().startswith('!'):
                     os.system(line.strip()[1:])
                     if command: break
@@ -225,6 +292,10 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
 
                 is_whos = line.strip().lower() in ('whos', 'whos;')
                 result = await core.run_code(session.session_id, line)
+                
+                # Update variable cache for autocomplete
+                if result.variables_snapshot:
+                    workspace_vars = list(result.variables_snapshot.keys())
                 
                 if result.stdout:
                     print(result.stdout.rstrip())
@@ -270,12 +341,8 @@ if __name__ == "__main__":
 
     run_parser = subparsers.add_parser("run", help="Run a UniLab (.m) script")
     run_parser.add_argument("script", help="Path to the script file")
-    run_parser.add_argument("--engine", choices=["transpiler", "octave"], default="transpiler", 
-                           help="Execution engine (default: transpiler)")
 
     console_parser = subparsers.add_parser("console", help="Launch interactive console")
-    console_parser.add_argument("--engine", choices=["transpiler", "octave"], default="transpiler", 
-                               help="Execution engine (default: transpiler)")
     console_parser.add_argument("cmd_args", nargs=argparse.REMAINDER, help="Terminal command to execute (optional)")
 
     if len(sys.argv) == 1:
@@ -285,10 +352,10 @@ if __name__ == "__main__":
 
     try:
         if args.command == "run":
-            asyncio.run(run_UniLab_script(args.script, args.engine))
+            asyncio.run(run_UniLab_script(args.script, "transpiler"))
         elif args.command == "console":
             cmd_str = " ".join(args.cmd_args) if args.cmd_args else None
-            asyncio.run(run_console(args.engine, cmd_str))
+            asyncio.run(run_console("transpiler", cmd_str))
         else:
             parser.print_help()
     except KeyboardInterrupt:

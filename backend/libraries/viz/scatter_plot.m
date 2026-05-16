@@ -4,5 +4,5 @@ function [] = scatter_plot(x, y, label)
         label = 'Data';
     end
     disp(['Scatter Plot: ', label]);
-    terminal_plot(y, x);
+    terminal_plot(y, x, 20, 60, 'scatter');
 end

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/compute", tags=["compute"])
 
 class CreateSessionRequest(BaseModel):
     username: Optional[str] = None
-    engine: str = "octave"
+    engine: str = "transpiler"
 
 class RunCodeRequest(BaseModel):
     session_id: str

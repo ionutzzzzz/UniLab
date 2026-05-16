@@ -6,25 +6,20 @@ from typing import Any, Dict, List, Optional, Tuple, Callable
 from enum import Enum
 
 class EngineType(str, Enum):
-    OCTAVE = "octave"
-    UniLab = "UniLab"
-    OCTAVE_WASM = "octave-wasm"
-    COMPILED = "compiled"
     TRANSPILER = "transpiler"
 
 @dataclass
 class BackendConfig:
-    workspace_root: pathlib.Path = pathlib.Path("./workspaces")
+    workspace_root: pathlib.Path = pathlib.Path("./unilab_workspaces")
     use_docker: bool = False
-    docker_image: str = "octave:latest"
+    docker_image: str = "unilab:latest"
     port: int = 8000
     plot_export_dirname: str = "plots"
     tmp_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir())
     max_sessions: int = 16
-    default_username: str = "user"
+    default_username: str = "default_user"
     metrics_enabled: bool = True
     auth_check: Optional[Callable[[str, Optional[str]], bool]] = None
-    octave_cmd: Optional[str] = None
 
 @dataclass
 class SessionInfo:

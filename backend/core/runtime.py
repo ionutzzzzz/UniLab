@@ -94,14 +94,30 @@ def unilab_set(obj, val, *args):
 
 def unilab_matrix_concat(*rows):
     if not rows: return np.array([])
+    
+    # If a single list or array is passed, use its elements
+    if len(rows) == 1 and isinstance(rows[0], (list, np.ndarray)) and not isinstance(rows[0], str):
+        rows = rows[0]
+        
     try:
+        # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
+        if all(isinstance(r, (str, np.str_)) for r in rows):
+            return "".join(str(r) for r in rows)
+        
         processed_rows = []
         for r in rows:
             if isinstance(r, (list, np.ndarray)): processed_rows.append(np.asarray(r))
+            elif isinstance(r, str): processed_rows.append(np.asarray(list(r)))
             else: processed_rows.append(np.asarray([r]))
-        if len(processed_rows) == 1: return processed_rows[0]
+            
+        if len(processed_rows) == 1: 
+            if isinstance(rows[0], str): return rows[0]
+            return processed_rows[0]
+            
         return np.vstack(processed_rows)
-    except: return np.array(rows)
+    except:
+        if all(isinstance(r, (str, np.str_)) for r in rows): return "".join(str(r) for r in rows)
+        return np.array(rows)
 
 def unilab_nargin_sum(gen):
     import builtins
@@ -122,6 +138,12 @@ def factorial(n):
 def mod(x, y): return np.mod(x, y)
 
 import sympy
+def isempty(x):
+    if x is None: return True
+    if isinstance(x, np.ndarray): return x.size == 0
+    if hasattr(x, '__len__'): return len(x) == 0
+    return False
+
 def syms(*names):
     if len(names) == 1 and isinstance(names[0], str) and ' ' in names[0]: names = names[0].split()
     return sympy.symbols(names)
@@ -319,7 +341,150 @@ def plot(*args, **kwargs):
     _unilab_refresh_graph()
     return res
 
-def terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
+def unilab_ascii_plot(y, x=None, height=20, width=60, plot_type='line'):
+    try:
+        if x is None or (isinstance(x, (list, np.ndarray)) and len(x) == 0):
+            if isinstance(y, (list, np.ndarray)):
+                x = np.arange(len(y))
+            else:
+                x = np.arange(1)
+                y = [y]
+        
+        y = np.asarray(y).flatten()
+        x = np.asarray(x).flatten()
+        
+        if y.size == 0: return ""
+        
+        # Filter out NaNs/Infs
+        mask = np.isfinite(x) & np.isfinite(y)
+        x = x[mask]
+        y = y[mask]
+        
+        if y.size == 0: return ""
+
+        xmin, xmax = np.min(x), np.max(x)
+        ymin, ymax = np.min(y), np.max(y)
+        
+        if xmax == xmin: xmax += 1
+        if ymax == ymin: ymax += 1
+        
+        height = int(height) if height and height > 0 else 20
+        width = int(width) if width and width > 0 else 60
+        
+        canvas = [[' ' for _ in range(width)] for _ in range(height)]
+        
+        def set_pixel(cx, cy, char):
+            if 0 <= cx < width and 0 <= cy < height:
+                canvas[cy][cx] = char
+
+        for i in range(len(x)):
+            px = int((x[i] - xmin) / (xmax - xmin) * (width - 1))
+            py = int((y[i] - ymin) / (ymax - ymin) * (height - 1))
+            py = height - 1 - py
+            
+            if plot_type == 'line' and i > 0:
+                prev_px = int((x[i-1] - xmin) / (xmax - xmin) * (width - 1))
+                prev_py = height - 1 - int((y[i-1] - ymin) / (ymax - ymin) * (height - 1))
+                
+                dx = abs(px - prev_px)
+                dy = abs(py - prev_py)
+                sx = 1 if prev_px < px else -1
+                sy = 1 if prev_py < py else -1
+                err = dx - dy
+                
+                cx, cy = prev_px, prev_py
+                while True:
+                    set_pixel(cx, cy, '*')
+                    if cx == px and cy == py: break
+                    e2 = 2 * err
+                    if e2 > -dy:
+                        err -= dy
+                        cx += sx
+                    if e2 < dx:
+                        err += dx
+                        cy += sy
+            elif plot_type == 'scatter':
+                set_pixel(px, py, 'o')
+            elif plot_type == 'bar':
+                bar_top = py
+                bar_bottom = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
+                bar_bottom = max(0, min(height - 1, bar_bottom))
+                
+                start = min(bar_top, bar_bottom)
+                end = max(bar_top, bar_bottom)
+                for sy in range(start, end + 1):
+                    set_pixel(px, sy, '#')
+            elif plot_type == 'stem':
+                set_pixel(px, py, 'o')
+                zero_y = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
+                zero_y = max(0, min(height - 1, zero_y))
+                step = 1 if py < zero_y else -1
+                for sy in range(py + step, zero_y + step, step):
+                    set_pixel(px, sy, '|')
+            elif plot_type == 'stairs' and i > 0:
+                prev_px = int((x[i-1] - xmin) / (xmax - xmin) * (width - 1))
+                prev_py = height - 1 - int((y[i-1] - ymin) / (ymax - ymin) * (height - 1))
+                
+                # Draw horizontal then vertical
+                for cx in range(min(prev_px, px), max(prev_px, px) + 1):
+                    set_pixel(cx, prev_py, '*')
+                for cy in range(min(prev_py, py), max(prev_py, py) + 1):
+                    set_pixel(px, cy, '*')
+            elif plot_type == 'area':
+                set_pixel(px, py, '*')
+                zero_y = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
+                zero_y = max(0, min(height - 1, zero_y))
+                for sy in range(min(py, zero_y), max(py, zero_y) + 1):
+                    set_pixel(px, sy, '.')
+            else:
+                set_pixel(px, py, '*')
+
+        res = []
+        res.append(f" {ymax:8.2f} |" + "".join(canvas[0]) + "|")
+        for i in range(1, height - 1):
+            res.append(f"          |" + "".join(canvas[i]) + "|")
+        res.append(f" {ymin:8.2f} |" + "".join(canvas[height-1]) + "|")
+        res.append("           +" + "-" * width + "+")
+        
+        xmin_str = f"{xmin:.2f}"
+        xmax_str = f"{xmax:.2f}"
+        middle_space = " " * (width - len(xmin_str) - len(xmax_str))
+        res.append("            " + xmin_str + middle_space + xmax_str)
+        
+        return "\n".join(res)
+    except Exception as e:
+        return f"Error generating ASCII plot: {e}"
+
+def unilab_ascii_heatmap(M, height=15, width=40):
+    try:
+        M = np.asarray(M)
+        if M.size == 0: return ""
+        
+        m_min, m_max = np.min(M), np.max(M)
+        if m_max == m_min: m_max += 1
+        
+        # Simple manual resize (nearest neighbor)
+        orig_h, orig_w = M.shape
+        res_h, res_w = int(height), int(width)
+        
+        ramp = " .:-=+*#%@"
+        res = ["+" + "-" * res_w + "+"]
+        for r in range(res_h):
+            row = "|"
+            orig_r = int(r * orig_h / res_h)
+            for c in range(res_w):
+                orig_c = int(c * orig_w / res_w)
+                val = M[orig_r, orig_c]
+                idx = int((val - m_min) / (m_max - m_min) * (len(ramp) - 1))
+                row += ramp[max(0, min(len(ramp)-1, idx))]
+            row += "|"
+            res.append(row)
+        res.append("+" + "-" * res_w + "+")
+        return "\n".join(res)
+    except Exception as e:
+        return f"Error generating ASCII heatmap: {e}"
+
+def _terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
     """HD Terminal Plotting with High-Contrast Styling."""
     grid_state = kwargs.pop('grid', True)
     
@@ -353,7 +518,7 @@ def terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
     _unilab_refresh_graph()
     plt.close()
 
-def terminal_heatmap(M):
+def _terminal_heatmap(M):
     """HD Heatmap optimized for terminal grids."""
     plt.figure(figsize=(10, 6))
     plt.imshow(M, cmap='magma', interpolation='nearest')
@@ -373,19 +538,19 @@ def ylabel(l): plt.ylabel(l, fontweight='bold', fontsize=18); _unilab_refresh_gr
 def grid(state='on'):
     plt.grid(state == 'on' or state == True or state == 1, linewidth=1.5); _unilab_refresh_graph()
 
-def scatter_plot(x, y, t=None):
+def _scatter_plot(x, y, t=None):
     plt.clf()
     plt.scatter(x, y, s=100, alpha=0.6)
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
 
-def hist_plot(data, bins=10, t=None):
+def _hist_plot(data, bins=10, t=None):
     plt.clf()
     plt.hist(data, bins=bins, alpha=0.7, edgecolor='white')
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
 
-def plot_matrix(M, t=None):
+def _plot_matrix(M, t=None):
     plt.clf()
     plt.imshow(M, cmap='viridis', interpolation='nearest')
     plt.colorbar()

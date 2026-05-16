@@ -72,8 +72,7 @@ class UniLabCLIApp(tk.Tk):
         self.runner = AsyncRunner()
         cfg = BackendConfig(
             workspace_root=pathlib.Path("./client_workspaces"),
-            use_docker=False,
-            octave_cmd=r"C:\Program Files\GNU Octave\Octave-10.2.0\octave-launch.exe"
+            use_docker=False
         )
         self.core = UniLabCore(cfg)
         # start core
@@ -140,7 +139,7 @@ class UniLabCLIApp(tk.Tk):
     # UI helpers
     # ---------------------------
     def _print_banner(self):
-        self._write_terminal("UniLab CLI Client\nType Octave/UniLab commands and press Run. Create a session first.\n\n", "banner")
+        self._write_terminal("UniLab CLI Client\nType UniLab commands and press Run. Create a session first.\n\n", "banner")
 
     def _write_terminal(self, text: str, tag: str = None):
         self.terminal.configure(state=tk.NORMAL)
@@ -164,7 +163,7 @@ class UniLabCLIApp(tk.Tk):
         username = simpledialog.askstring("Create session", "Enter username:", parent=self, initialvalue="alice")
         if not username:
             return
-        fut = self.runner.run(self.core.create_session(username=username, engine="octave", use_docker=False))
+        fut = self.runner.run(self.core.create_session(username=username, engine="transpiler", use_docker=False))
         fut.add_done_callback(lambda f: self.after(0, lambda: self._on_session_created(f)))
 
     def _on_session_created(self, fut):
@@ -281,7 +280,7 @@ class UniLabCLIApp(tk.Tk):
         if not self.session_id:
             self._write_terminal("Create a session first.", "error")
             return
-        path = filedialog.askopenfilename(title="Choose .m script to run", filetypes=[("UniLab/Octave files", "*.m"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(title="Choose .m script to run", filetypes=[("UniLab files", "*.m"), ("All files", "*.*")])
         if not path:
             return
         # copy script into workspace and run
@@ -323,7 +322,7 @@ class UniLabCLIApp(tk.Tk):
             self._write_terminal("Create a session first.", "error")
             return
         # Ask user for plot commands (multi-line)
-        dialog = PlotCommandDialog(self, title="Export Plot (Octave commands)")
+        dialog = PlotCommandDialog(self, title="Export Plot (UniLab commands)")
         self.wait_window(dialog)
         if dialog.result is None:
             return
@@ -366,7 +365,7 @@ class PlotCommandDialog(tk.Toplevel):
         self.title(title)
         self.geometry("600x300")
         self.configure(bg="#1e1e1e")
-        tk.Label(self, text="Enter Octave plotting commands (example: x=0:0.1:2*pi; y=sin(x); plot(x,y);)", bg="#1e1e1e", fg="#d4d4d4").pack(padx=8, pady=8)
+        tk.Label(self, text="Enter UniLab plotting commands (example: x=0:0.1:2*pi; y=sin(x); plot(x,y);)", bg="#1e1e1e", fg="#d4d4d4").pack(padx=8, pady=8)
         self.text = tk.Text(self, height=10, width=80, bg="#252526", fg="#d4d4d4", font=("Consolas", 11))
         self.text.pack(padx=8, pady=(0,8))
         btn_frame = tk.Frame(self, bg="#1e1e1e")

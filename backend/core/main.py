@@ -12,7 +12,6 @@ import shutil
 from typing import Any, Dict, List, Optional, Union, Callable
 
 from .models import BackendConfig, SessionInfo, ExecutionResult, EngineType
-from .engines.octave import OctaveEngine
 from .engines.transpiler import TranspilerEngine
 from .engines.base import BaseEngine
 
@@ -58,7 +57,7 @@ class UniLabCore:
             except asyncio.CancelledError: break
             except Exception: logger.exception("Event pump error")
 
-    async def create_session(self, username: Optional[str] = None, engine: str = "octave", shared_workspace: Optional[pathlib.Path] = None) -> SessionInfo:
+    async def create_session(self, username: Optional[str] = None, engine: str = "transpiler", shared_workspace: Optional[pathlib.Path] = None) -> SessionInfo:
         username = username or self.config.default_username
         session_id = str(uuid.uuid4())
         workspace = shared_workspace or (self.config.workspace_root / f"{username}_{session_id}").resolve()
@@ -76,10 +75,7 @@ class UniLabCore:
         self._locks[session_id] = asyncio.Lock()
         
         # Factory for engines
-        if engine == "transpiler":
-            self.engines[session_id] = TranspilerEngine(s)
-        else:
-            self.engines[session_id] = OctaveEngine(s, self.config)
+        self.engines[session_id] = TranspilerEngine(s)
         
         await self.engines[session_id].start()
         self._metrics["sessions_created"] += 1

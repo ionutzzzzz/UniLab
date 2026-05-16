@@ -61,7 +61,7 @@ class TestUniLabTranspiler(unittest.TestCase):
         end
         """
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("def my_square(x):", result)
+        self.assertIn("def my_square(x=None):", result)
         self.assertIn("return (y)", result)
 
     def test_complex_expression(self):

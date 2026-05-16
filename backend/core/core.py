@@ -106,10 +106,10 @@ UniLab_GRAMMAR = r"""
          | matrix
          | cell_array
 
-    matrix: LBRACKET row (SEMI row)* RBRACKET
+    matrix: LBRACKET [row (SEMI row)*] RBRACKET
     row: expression (COMMA? expression)*
     
-    cell_array: LBRACE row (SEMI row)* RBRACE
+    cell_array: LBRACE [row (SEMI row)*] RBRACE
 
     cell_indexing.2: qualified_name LBRACE call_args? RBRACE
 
@@ -560,8 +560,9 @@ class UniLabToPython(Transformer):
 
         arg_str = ""
         if args:
-            if isinstance(args, list): arg_str = ", ".join(args)
-            else: arg_str = str(args)
+            arg_names = [str(a) for a in (args if isinstance(args, list) else [args])]
+            arg_names = [a for a in arg_names if a not in [",", ";"]]
+            arg_str = ", ".join([f"{a}=None" for a in arg_names])
 
         lines = [f"def {name}({arg_str}):"]
         lines.append("    global ans")
