@@ -8,8 +8,17 @@ import scipy.signal as signal
 from scipy.fft import fft, ifft
 from backend.ml.visualizers.nn_vis import plot_neural_network
 
+def _format_value(val):
+    if hasattr(val, '__module__') and 'sympy' in val.__module__:
+        import sympy
+        try:
+            return sympy.pretty(val, use_unicode=True)
+        except:
+            return str(val)
+    return str(val)
+
 def disp(x):
-    print(x)
+    print(_format_value(x))
 
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -29,13 +38,21 @@ def _should_suppress_output(val):
 
 def unilab_print_var(name, val):
     if not _should_suppress_output(val):
-        print(f"{name} =\n   {val}\n")
+        formatted = _format_value(val)
+        if '\n' in formatted:
+            print(f"{name} =\n\n{formatted}\n")
+        else:
+            print(f"{name} =\n   {formatted}\n")
 
 def unilab_print_and_save_ans(expr, val):
     global ans
     ans = val
     if val is not None and not _should_suppress_output(val):
-        print(f"ans =\n   {val}\n")
+        formatted = _format_value(val)
+        if '\n' in formatted:
+            print(f"ans =\n\n{formatted}\n")
+        else:
+            print(f"ans =\n   {formatted}\n")
     return val
 
 def unilab_call(obj, *args):
@@ -162,8 +179,68 @@ def isempty(x):
     return False
 
 def syms(*names):
-    if len(names) == 1 and isinstance(names[0], str) and ' ' in names[0]: names = names[0].split()
-    return sympy.symbols(names)
+    if len(names) == 1 and isinstance(names[0], str) and ' ' in names[0]:
+        names = names[0].split()
+    
+    import sympy
+    import inspect
+    frame = inspect.currentframe().f_back
+    
+    # Filter out empty names
+    names = [n for n in names if str(n).strip()]
+    
+    if not names:
+        return None
+        
+    symbols = sympy.symbols(names)
+    
+    if len(names) == 1:
+        # symbols will be a single symbol if names was a string, 
+        # but if names was a list it might be a tuple.
+        res = symbols[0] if isinstance(symbols, (list, tuple)) else symbols
+        frame.f_globals[str(names[0])] = res
+        return res
+    else:
+        for name, sym in zip(names, symbols):
+            frame.f_globals[str(name)] = sym
+        return symbols
+
+def simplify(expr):
+    return sympy.simplify(expr)
+
+def expand(expr):
+    return sympy.expand(expr)
+
+def factor(expr):
+    return sympy.factor(expr)
+
+def diff(x, *args, **kwargs):
+    if hasattr(x, 'diff') or isinstance(x, sympy.Basic):
+        return sympy.diff(x, *args, **kwargs)
+    return np.diff(x, *args, **kwargs)
+
+def unilab_laplace(f, t=None, s=None):
+    import sympy
+    if t is None:
+        # Try to find 't' in the expression
+        free_symbols = getattr(f, 'free_symbols', set())
+        t = sympy.Symbol('t') if not free_symbols else sorted(free_symbols, key=lambda x: x.name)[0]
+    if s is None:
+        s = sympy.Symbol('s')
+    
+    res = sympy.laplace_transform(f, t, s, noconds=True)
+    return res
+
+def unilab_ilaplace(F, s=None, t=None):
+    import sympy
+    if s is None:
+        free_symbols = getattr(F, 'free_symbols', set())
+        s = sympy.Symbol('s') if not free_symbols else sorted(free_symbols, key=lambda x: x.name)[0]
+    if t is None:
+        t = sympy.Symbol('t')
+    
+    res = sympy.inverse_laplace_transform(F, s, t)
+    return res
 
 def length(x):
     if hasattr(x, '__len__'):
@@ -215,18 +292,66 @@ def linspace(start, stop, n=100): return np.linspace(start, stop, int(n))
 def logspace(start, stop, n=50): return np.logspace(start, stop, int(n))
 def meshgrid(x, y=None): return np.meshgrid(x, y if y is not None else x)
 def randperm(n): return np.random.permutation(int(n)) + 1
-def abs(x): return np.abs(x)
+def _is_symbolic(x):
+    return hasattr(x, '__module__') and 'sympy' in x.__module__
+
+def abs(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.Abs(x)
+    return np.abs(x)
+
 def round(x): return np.round(x)
-def floor(x): return np.floor(x)
-def ceil(x): return np.ceil(x)
+def floor(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.floor(x)
+    return np.floor(x)
+
+def ceil(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.ceil(x)
+    return np.ceil(x)
+
 def fix(x): return np.trunc(x)
 def rem(x, y): return np.remainder(x, y)
-def sin(x): return np.sin(x)
-def cos(x): return np.cos(x)
-def tan(x): return np.tan(x)
-def exp(x): return np.exp(x)
-def log(x): return np.log(x)
-def sqrt(x): return np.sqrt(x)
+
+def sin(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.sin(x)
+    return np.sin(x)
+
+def cos(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.cos(x)
+    return np.cos(x)
+
+def tan(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.tan(x)
+    return np.tan(x)
+
+def exp(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.exp(x)
+    return np.exp(x)
+
+def log(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.log(x)
+    return np.log(x)
+
+def sqrt(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.sqrt(x)
+    return np.sqrt(x)
 def pi(): return np.pi
 
 def eye(n, m=None): return np.eye(int(n), int(m) if m is not None else int(n))
