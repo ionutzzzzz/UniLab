@@ -5,8 +5,54 @@ import io
 import time
 import pathlib
 import scipy.signal as signal
-from scipy.fft import fft, ifft
-from backend.ml.visualizers.nn_vis import plot_neural_network
+from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
+
+def unilab_fft(x): return scipy_fft(x)
+def unilab_ifft(x): return scipy_ifft(x)
+def unilab_fftshift(x): return scipy_fftshift(x)
+def unilab_ifftshift(x): return scipy_ifftshift(x)
+
+def unilab_filter(b, a, x): return signal.lfilter(b, a, x)
+def unilab_filtfilt(b, a, x): return signal.filtfilt(b, a, x)
+def unilab_butter(*args, **kwargs): return signal.butter(*args, **kwargs)
+def unilab_cheby1(*args, **kwargs): return signal.cheby1(*args, **kwargs)
+def unilab_cheby2(*args, **kwargs): return signal.cheby2(*args, **kwargs)
+def unilab_ellip(*args, **kwargs): return signal.ellip(*args, **kwargs)
+
+def unilab_tf(num, den): return signal.TransferFunction(num, den)
+def unilab_ss(A, B, C, D): return signal.StateSpace(A, B, C, D)
+def unilab_zpk(z, p, k): return signal.ZerosPolesGain(z, p, k)
+
+def unilab_step(sys, T=None): 
+    t, y = signal.step(sys, T=T)
+    return t, y
+
+def unilab_impulse(sys, T=None): 
+    t, y = signal.impulse(sys, T=T)
+    return t, y
+
+def unilab_lsim(sys, U, T): 
+    t, y, x = signal.lsim(sys, U, T)
+    return t, y
+
+def unilab_bode(sys, w=None): 
+    w, mag, phase = signal.bode(sys, w=w)
+    return w, mag, phase
+
+def unilab_freqfreqz(b, a, worN=None):
+    w, h = signal.freqz(b, a, worN=worN)
+    return w, h
+
+def unilab_conv(a, v, mode='full'):
+    return signal.convolve(a, v, mode=mode)
+
+def unilab_xcorr(a, v=None, mode='full'):
+    if v is None: v = a
+    return signal.correlate(a, v, mode=mode)
+
+def unilab_pwelch(x, fs=1.0):
+    f, Pxx = signal.welch(x, fs=fs)
+    return f, Pxx
 
 def _format_value(val):
     if hasattr(val, '__module__') and 'sympy' in val.__module__:
@@ -19,6 +65,7 @@ def _format_value(val):
 
 def disp(x):
     print(_format_value(x))
+
 
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -360,9 +407,7 @@ def diff(x, *args, **kwargs):
 def int(expr, *args):
     import sympy
     if not isinstance(expr, sympy.Basic):
-        # Fallback for numerical integration if it's an array?
-        # MATLAB's 'int' is usually symbolic. Numerical is 'integral' or 'trapz'.
-        # For now, let's focus on symbolic.
+        # Fallback for numerical integration if it's an array
         pass
         
     if len(args) == 0:
@@ -373,6 +418,14 @@ def int(expr, *args):
     
     # args could be (var) or (var, a, b)
     return sympy.integrate(expr, args)
+
+def limit(expr, var, value, direction='both'):
+    import sympy
+    return sympy.limit(expr, var, value, direction)
+
+def taylor(expr, var, point=0, order=6):
+    import sympy
+    return sympy.series(expr, var, point, order)
 
 def unilab_laplace(f, t=None, s=None):
     import sympy
