@@ -2,6 +2,8 @@ function [y_pred] = knn_predict(X_train, y_train, X_test, K)
     % KNN_PREDICT K-Nearest Neighbors classification
     % [y_pred] = knn_predict(X_train, y_train, X_test, K)
     
+    if nargin < 4, K = 3; end
+    
     m_test = size(X_test, 1);
     m_train = size(X_train, 1);
     y_pred = zeros(m_test, 1);

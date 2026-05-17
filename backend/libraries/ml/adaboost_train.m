@@ -2,6 +2,8 @@ function [boost_model] = adaboost_train(X, y, n_iters)
     % ADABOOST_TRAIN Train an AdaBoost classifier with decision stumps
     % y must be {-1, 1}
     
+    if nargin < 3, n_iters = 50; end
+    
     [m, n] = size(X);
     weights = ones(m, 1) / m;
     boost_model = cell(n_iters, 1);

@@ -440,11 +440,16 @@ class UniLabToPython(Transformer):
         return [str(i) for i in items if str(i) != ","]
 
     def cell_indexing(self, items):
-        name = str(items[0])
-        self.called_functions.add(name)
+        target = items[0]
+        if isinstance(target, dict) and target.get("type") == "qualified_name":
+            target = target["full"]
+        else:
+            target = str(target)
+            
+        self.called_functions.add(target)
         args = items[2] if len(items) > 3 else None
         arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
-        return f"unilab_call({name}, {arg_str})"
+        return f"unilab_call({target}, {arg_str})"
 
     def anonymous_func(self, items):
         args = []
@@ -456,7 +461,12 @@ class UniLabToPython(Transformer):
         return f"(lambda {arg_str}: {expr})"
 
     def function_call(self, items):
-        name = str(items[0])
+        name = items[0]
+        if isinstance(name, dict) and name.get("type") == "qualified_name":
+            name = name["full"]
+        else:
+            name = str(name)
+            
         self.called_functions.add(name)
         if name == "addpath" and len(items) > 2:
             args = items[2]

@@ -2,6 +2,9 @@ function [w, b] = svm_train(X, y, lambda, epochs)
     % SVM_TRAIN Linear SVM using Pegasos algorithm
     % y must be encoded as {-1, 1}
     
+    if nargin < 4, epochs = 1000; end
+    if nargin < 3, lambda = 0.01; end
+    
     [m, n] = size(X);
     w = zeros(1, n);
     b = 0;

@@ -1,6 +1,9 @@
 function [idx, core_pts] = dbscan(X, eps, min_pts)
     % DBSCAN Density-Based Spatial Clustering of Applications with Noise
     
+    if nargin < 2, eps = 0.5; end
+    if nargin < 3, min_pts = 5; end
+    
     m = size(X, 1);
     idx = zeros(m, 1);
     core_pts = zeros(m, 1);

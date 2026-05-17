@@ -407,6 +407,18 @@ def unilab_call(obj, *args):
             processed.append(i)
             
     res = obj[tuple(processed)]
+    
+    # If the result is an array but we indexed with multiple values, 
+    # try to keep it 2D if the original was 2D and we sliced.
+    if isinstance(res, np.ndarray) and isinstance(obj, np.ndarray) and obj.ndim >= 2:
+        if res.ndim == 1:
+            # If we took a column, make it Mx1. If we took a row, make it 1xN.
+            # Heuristic: if first arg was a slice and second was int, it's a column.
+            if isinstance(args[0], (slice, str)) and isinstance(args[1], (int, np.integer, float, np.floating)):
+                res = res.reshape(-1, 1)
+            elif isinstance(args[0], (int, np.integer, float, np.floating)) and isinstance(args[1], (slice, str)):
+                res = res.reshape(1, -1)
+                
     if isinstance(res, np.ndarray) and res.size == 1:
         return res.item()
     return res
@@ -527,37 +539,53 @@ def unilab_set(obj, val, *args):
 
 def unilab_matrix_concat(*rows):
     if not rows: return np.array([])
-    
+
     # If it's a single string, return it (MATLAB char array)
     if len(rows) == 1 and isinstance(rows[0], str):
         return rows[0]
 
-    # If a single list or array is passed, it represents a single row
+    # If a single list or array is passed, it represents a single row (or horizontal concat)
     if len(rows) == 1 and isinstance(rows[0], (list, np.ndarray)):
+        items = rows[0]
         # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
-        if all(isinstance(r, (str, np.str_)) for r in rows[0]):
-            return "".join(str(r) for r in rows[0])
-        return np.atleast_2d(rows[0])
-        
+        if all(isinstance(r, (str, np.str_)) for r in items):
+            return "".join(str(r) for r in items)
+
+        # If any item is an array, we must horizontally stack them
+        if any(isinstance(r, np.ndarray) for r in items):
+            try:
+                processed = [np.atleast_2d(r) for r in items]
+                # If they are rows, hstack them. If they have same rows, hstack.
+                # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
+                return np.hstack(processed)
+            except:
+                # Fallback to standard array creation
+                return np.array(items, dtype=object)
+
+        return np.atleast_2d(items)
+
     try:
-        # Check for MATLAB-style string concatenation ['abc'; 'def'] -> not supported as join
-        # but we handle multi-argument call as multiple rows
+        # Multi-row concatenation [A; B]
         processed_rows = []
         for r in rows:
             if isinstance(r, (list, np.ndarray)):
-                processed_rows.append(np.atleast_2d(r))
+                if isinstance(r, list) and any(isinstance(item, np.ndarray) for item in r):
+                    # Handle mixed row [X, 1, 2]
+                    p_row = np.hstack([np.atleast_2d(item) for item in r])
+                    processed_rows.append(p_row)
+                else:
+                    processed_rows.append(np.atleast_2d(r))
             elif isinstance(r, str):
                 processed_rows.append(np.atleast_2d(list(r)))
             else:
                 processed_rows.append(np.atleast_2d([r]))
-            
+
         return np.vstack(processed_rows)
     except:
         # Fallback
         if all(isinstance(r, (str, np.str_)) for r in rows):
             return "".join(str(r) for r in rows)
-        return np.array(rows)
-
+        return np.array(rows, dtype=object)
 def unilab_nargin_sum(gen):
     import builtins
     return builtins.sum(gen)
@@ -794,41 +822,46 @@ def rem(x, y): return np.remainder(x, y)
 def sign(x): return np.sign(x)
 
 def sin(x):
+    """Sine of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.sin(x)
     return np.sin(x)
 
 def cos(x):
+    """Cosine of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.cos(x)
     return np.cos(x)
 
 def tan(x):
+    """Tangent of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.tan(x)
     return np.tan(x)
 
 def exp(x):
+    """Exponential."""
     if _is_symbolic(x):
         import sympy
         return sympy.exp(x)
     return np.exp(x)
 
 def log(x):
+    """Natural logarithm."""
     if _is_symbolic(x):
         import sympy
         return sympy.log(x)
     return np.log(x)
 
 def sqrt(x):
+    """Square root."""
     if _is_symbolic(x):
         import sympy
         return sympy.sqrt(x)
     return np.sqrt(x)
-def pi(): return np.pi
 
 def eye(n, m=None): return np.eye(int(n), int(m) if m is not None else int(n))
 def zeros(*args): 
@@ -848,7 +881,17 @@ def rand(*args):
 
 def randn(*args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.randn(*args[0])
-    return np.random.randn(*args)
+    return np.random.randn(*args) if args else np.random.randn()
+
+def randi(imax, *args):
+    """Random integers from 1 to imax."""
+    if not args:
+        return np.random.randint(1, int(imax) + 1)
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        size = tuple(int(i) for i in args[0])
+    else:
+        size = tuple(int(i) for i in args)
+    return np.random.randint(1, int(imax) + 1, size=size)
 
 def diag(v, k=0):
     if isinstance(v, np.ndarray) and v.ndim == 2:
@@ -889,10 +932,14 @@ def _unilab_refresh_graph():
             except: pass
 
         # Extract metadata for ASCII overlay
+        original_title = ax.get_title()
+        original_xlabel = ax.get_xlabel()
+        original_ylabel = ax.get_ylabel()
+        
         meta = {
-            "title": ax.get_title(),
-            "xlabel": ax.get_xlabel(),
-            "ylabel": ax.get_ylabel(),
+            "title": original_title,
+            "xlabel": original_xlabel,
+            "ylabel": original_ylabel,
             "xmin": float(ax.get_xlim()[0]),
             "xmax": float(ax.get_xlim()[1]),
             "ymin": float(ax.get_ylim()[0]),
@@ -926,7 +973,22 @@ def _unilab_refresh_graph():
         fig = plt.gcf()
         fig.set_size_inches(12, 8)
         plt.tight_layout()
+        
+        # Temporarily hide text to avoid pixelation in ASCII view
+        ax.set_title('')
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        legend = ax.get_legend()
+        if legend: legend.set_visible(False)
+        
         plt.savefig("graph.jpg", format='jpg', bbox_inches='tight')
+        
+        # Restore original state
+        ax.set_title(original_title)
+        ax.set_xlabel(original_xlabel)
+        ax.set_ylabel(original_ylabel)
+        if legend: legend.set_visible(True)
+
         print(f"::GRAPHICAL_PLOT::graph.jpg")
     except Exception as e: print(f"Error saving graph: {e}")
 
@@ -941,6 +1003,13 @@ def clf():
     _unilab_refresh_graph()
 
 def plot(*args, **kwargs):
+    """
+    Plot vectors or matrices.
+    Example:
+        x = 0:0.1:10;
+        y = sin(x);
+        plot(x, y);
+    """
     # Intercept 'grid' argument from args if it's a 'Name', Value pair
     args_list = list(args)
     grid_state = kwargs.pop('grid', None)
@@ -1178,6 +1247,16 @@ def _plot_matrix(M, t=None):
     plt.colorbar()
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
+
+def plot_nn(layers, title="Neural Network Architecture"):
+    """Plots a neural network architecture."""
+    from backend.ml.visualizers.nn_vis import plot_neural_network
+    res = plot_neural_network(layers, title=title)
+    return res
+
+def plot_neural_network(layers, title="Neural Network Architecture"):
+    """Alias for plot_nn."""
+    return plot_nn(layers, title=title)
 
 def render_image_terminal(img_path, width=None):
     import os

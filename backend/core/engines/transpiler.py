@@ -3,6 +3,7 @@ import sys
 import os
 import io
 import time
+import re
 import pickle
 import importlib.util
 import pathlib
@@ -55,6 +56,18 @@ class TranspilerEngine(BaseEngine):
             '__builtins__': __builtins__,
             'addpath': self._add_path,
             'ans': None,
+            'inf': np.inf,
+            'Inf': np.inf,
+            'nan': np.nan,
+            'NaN': np.nan,
+            'pi': np.pi,
+            'eps': np.finfo(float).eps,
+            'i': 1j,
+            'j': 1j,
+            'realmax': np.finfo(float).max,
+            'realmin': np.finfo(float).tiny,
+            'true': True,
+            'false': False,
         })
         
         # Inject runtime functions
@@ -123,7 +136,8 @@ class TranspilerEngine(BaseEngine):
 
     async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
         # Handle 'help topic' style calls specifically
-        stripped_code = code.strip()
+        stripped_code = code.strip().rstrip(';')
+        
         if stripped_code.startswith('help'):
             parts = stripped_code.split()
             # Handle help() or help topic
@@ -132,12 +146,33 @@ class TranspilerEngine(BaseEngine):
                 topic = parts[1].rstrip(';')
             elif '(' in stripped_code and ')' in stripped_code:
                 # Handle help('topic') or help("topic")
-                import re
                 match = re.search(r"help\(['\"]?(\w+)['\"]?\)", stripped_code)
                 if match:
                     topic = match.group(1)
             
             return await self._get_help(topic)
+
+        # Auto-help: if user types a single function name without () or args
+        if stripped_code and re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', stripped_code):
+            # 1. Check if it exists as a function in runtime or search paths
+            is_func = False
+            if hasattr(runtime, stripped_code) and not stripped_code.startswith('_'):
+                is_func = True
+            if not is_func:
+                for path in self.search_paths:
+                    if (path / f"{stripped_code}.m").exists():
+                        is_func = True
+                        break
+            
+            # 2. Check if it's ALREADY a variable in globals (and not just a function pointer)
+            is_var = False
+            if stripped_code in self.globals:
+                val = self.globals[stripped_code]
+                if not callable(val) or isinstance(val, np.ndarray):
+                    is_var = True
+            
+            if is_func and not is_var:
+                return await self._get_help(stripped_code)
 
         start_ts = time.time()
         try:
@@ -250,7 +285,7 @@ class TranspilerEngine(BaseEngine):
                     elif line_strip and not line_strip.startswith('%'):
                         # Stop at first non-comment non-function line
                         break
-                help_text = f"Help for function '{topic}' in {m_file}:\n\n" + "\n".join(help_lines)
+                help_text = f"\n".join(help_lines)
                 return ExecutionResult(True, help_text, "", 0, time.time() - start_ts, self._get_variables(), [])
 
         return ExecutionResult(False, "", f"Help topic '{topic}' not found.", 1, time.time() - start_ts, self._get_variables(), [])

@@ -4,6 +4,7 @@ import pathlib
 import sys
 import os
 import re
+import time
 from typing import Optional
 
 def highlight_syntax(code: str) -> str:
@@ -45,20 +46,62 @@ BUILTINS = [
     'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 
     'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
     'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 
-    'randn', 'rand', 'diag', 'plot_nn'
+    'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j',
+    'realmax', 'realmin'
 ]
 workspace_vars = []
+_m_file_cache = []
+_last_cache_update = 0
+
+def update_m_file_cache():
+    global _m_file_cache, _last_cache_update
+    now = time.time()
+    if now - _last_cache_update < 5: # Cache for 5 seconds
+        return
+    
+    m_files = set()
+    try:
+        # Scan current directory
+        for p in pathlib.Path('.').glob('*.m'):
+            m_files.add(p.stem)
+        
+        # Scan libraries
+        libs_dir = pathlib.Path(__file__).resolve().parent / "libraries"
+        if libs_dir.exists():
+            for p in libs_dir.rglob('*.m'):
+                m_files.add(p.stem)
+    except: pass
+    
+    _m_file_cache = list(m_files)
+    _last_cache_update = now
 
 def unilab_completer(text, state):
     line = readline.get_line_buffer() if readline else ""
+    stripped_line = line.lstrip()
     
-    # If the user is typing a 'run' command or shell command, suggest files
-    if line.strip().startswith('run ') or line.strip().startswith('!'):
+    # Context-aware triggers for path completion
+    path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ')
+    is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
+    
+    if is_path_context:
         import glob
-        options = [f for f in glob.glob(text + '*') if not f.startswith('__')]
+        # Handle path completion
+        search_text = text
+        if (stripped_line.startswith('run ') or stripped_line.startswith('!')) and not text:
+            # If nothing typed yet after 'run ', suggest all .m files
+            options = [f for f in glob.glob('*.m')]
+        else:
+            options = glob.glob(text + '*')
+            
+        # Add trailing slash to directories for easier navigation
+        options = [f + '/' if pathlib.Path(f).is_dir() else f for f in options]
     else:
-        options = [w for w in KEYWORDS + BUILTINS + workspace_vars if w.startswith(text)]
+        # Symbol completion
+        update_m_file_cache()
+        all_symbols = KEYWORDS + BUILTINS + workspace_vars + _m_file_cache
+        options = [w for w in all_symbols if w.startswith(text)]
     
+    options = sorted(list(set(options))) # Unique and sorted
     if state < len(options):
         return options[state]
     return None
@@ -90,7 +133,7 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         print(f"Error: Script '{script_path}' not found.")
         return
 
-    workspace_root = pathlib.Path("./test_runs")
+    workspace_root = pathlib.Path("./test_runs").resolve()
     workspace_root.mkdir(exist_ok=True)
     
     cfg = BackendConfig(
@@ -134,7 +177,7 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
 
 async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
     global workspace_vars
-    workspace_root = pathlib.Path("./console_workspaces")
+    workspace_root = pathlib.Path("./console_workspaces").resolve()
     workspace_root.mkdir(exist_ok=True)
     
     history_file = workspace_root / ".unilab_history"
@@ -144,6 +187,8 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                 readline.read_history_file(str(history_file))
             readline.set_history_length(1000)
             readline.set_completer(unilab_completer)
+            # Custom delimiters: exclude / and \ to allow full path completion
+            readline.set_completer_delims(' \t\n`~!@#$%^&*()-=+[]{}|;:\'",<>?')
             if 'libedit' in readline.__doc__:
                 readline.parse_and_bind("bind ^I rl_complete")
             else:
@@ -334,7 +379,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
             try:
                 readline.write_history_file(str(history_file))
             except Exception as e:
-                print(f"Warning: Could not load history file: {e}")
+                print(f"Warning: Could not save history file: {e}")
         await core.stop()
         if is_tty:
             print("\nConsole closed.")
