@@ -132,6 +132,7 @@ class DecisionTree:
         self.root = None
 
     def _impurity(self, y):
+        y = np.asarray(y).flatten()
         m = len(y)
         if m == 0: return 0
         if self.task == 'regression': return np.mean((y - np.mean(y))**2)
@@ -179,6 +180,7 @@ class DecisionTree:
         return parent_loss - child_loss
 
     def _calculate_leaf_value(self, y):
+        y = np.asarray(y).flatten()
         if len(y) == 0: return 0
         return Counter(y).most_common(1)[0][0] if self.task == 'classification' else np.mean(y)
 

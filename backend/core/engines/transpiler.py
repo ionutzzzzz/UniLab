@@ -22,6 +22,13 @@ class AutoloadDict(dict):
         self._loading = set()
 
     def __getitem__(self, key):
+        try:
+            hash(key)
+        except TypeError:
+            # If the key is not hashable (like a numpy array), it can't be a valid variable name lookup
+            # that we would want to auto-load. Just let the standard dict handle it (which will likely raise KeyError).
+            return super().__getitem__(key)
+
         if key not in self and key not in self._loading:
             self._loading.add(key)
             try:
