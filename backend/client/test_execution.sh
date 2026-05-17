@@ -88,7 +88,7 @@ test_output_capture() {
     print_section "Output Capture"
     
     local session_id=$(get_session)
-    local payload='{"code": "disp(\"Hello from UniLab\");"}'
+    local payload='{"code": "disp('"'Hello from UniLab'"');"}'
     local response=$(http_post "/api/v1/sessions/$session_id/execute" "$payload")
     
     local stdout=$(echo "$response" | jq -r '.stdout // ""')
@@ -196,3 +196,4 @@ if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
     test_code_transpilation
     test_loop_execution
 fi
+

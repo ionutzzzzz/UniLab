@@ -1,4 +1,6 @@
-syms t s x
+syms x
+syms t
+syms s
 
 expr = x^2 - 4;
 factor(expr)

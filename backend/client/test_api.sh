@@ -152,7 +152,7 @@ test_execute_code_with_output() {
     local session_id=$(cat "$TEST_RESULTS_DIR/session_id.txt" 2>/dev/null)
     [ -z "$session_id" ] && return 1
     
-    local payload='{"code": "disp(\"Hello World\");"}'
+    local payload='{"code": "disp('"'Hello World'"');"}'
     local response=$(http_post "/api/v1/sessions/$session_id/execute" "$payload")
     local stdout=$(echo "$response" | jq -r '.stdout // ""')
     

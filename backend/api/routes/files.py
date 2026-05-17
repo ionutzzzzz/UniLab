@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from backend.api.dependencies import get_core
 from backend.api.schemas import (
-    FileInfo, FileListResponse, FileContentResponse, RunScriptRequest
+    FileInfo, FileListResponse, FileContentResponse, RunScriptRequest, CreateFileRequest
 )
 from backend.core.main import UniLabCore
 
@@ -117,9 +117,7 @@ async def upload_file(
 @router.post("/{session_id}/files/create")
 async def create_file(
     session_id: str,
-    filename: str,
-    content: str,
-    overwrite: bool = False,
+    req: CreateFileRequest,
     core: UniLabCore = Depends(get_core)
 ):
     """Create a new file in workspace."""
@@ -128,20 +126,20 @@ async def create_file(
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        file_path = session.workspace_path / filename
+        file_path = session.workspace_path / req.filename
         
-        if file_path.exists() and not overwrite:
+        if file_path.exists() and not req.overwrite:
             raise HTTPException(
                 status_code=409,
                 detail="File already exists. Set overwrite=true to replace."
             )
         
-        await core.write_file(session_id, filename, content)
+        await core.write_file(session_id, req.filename, req.content)
         
         return {
             "status": "success",
-            "filename": filename,
-            "size": len(content.encode('utf-8')),
+            "filename": req.filename,
+            "size": len(req.content.encode('utf-8')),
             "path": str(file_path)
         }
     except HTTPException:

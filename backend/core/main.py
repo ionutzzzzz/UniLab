@@ -88,6 +88,12 @@ class UniLabCore:
         self.sessions.pop(session_id, None)
         self._locks.pop(session_id, None)
 
+    async def get_session(self, session_id: str) -> Optional[SessionInfo]:
+        return self.sessions.get(session_id)
+
+    async def list_sessions(self) -> List[SessionInfo]:
+        return list(self.sessions.values())
+
     async def run_code(self, session_id: str, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
         engine = self.engines.get(session_id)
         if not engine: raise KeyError(f"No engine for session {session_id}")

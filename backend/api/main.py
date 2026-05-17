@@ -1,3 +1,14 @@
+import os
+import sys
+import pathlib
+from contextlib import asynccontextmanager
+
+# Add the project root to sys.path to allow absolute imports of the backend package
+current_dir = pathlib.Path(__file__).resolve().parent
+project_root = (current_dir / ".." / "..").resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -6,13 +17,22 @@ from backend.api.routes import (
 )
 from backend.api.dependencies import start_core, stop_core
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    await start_core()
+    yield
+    # Shutdown logic
+    await stop_core()
+
 app = FastAPI(
     title="UniLab API",
     version="0.1.0",
     description="REST API for UniLab - MATLAB/Octave Alternative Scientific Computing Platform",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -33,14 +53,6 @@ app.include_router(export.router)
 app.include_router(metadata.router)
 app.include_router(system.router)
 app.include_router(compute.router)  # Keep legacy routes for backward compatibility
-
-@app.on_event("startup")
-async def startup_event():
-    await start_core()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await stop_core()
 
 @app.get("/")
 async def root():

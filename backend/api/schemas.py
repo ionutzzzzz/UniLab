@@ -131,6 +131,12 @@ class FileContentResponse(BaseModel):
     is_text: bool
 
 
+class CreateFileRequest(BaseModel):
+    """File creation metadata."""
+    filename: str
+    content: str
+    overwrite: bool = False
+
 class UploadFileRequest(BaseModel):
     """File upload metadata."""
     filename: str

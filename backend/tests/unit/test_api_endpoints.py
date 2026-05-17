@@ -3,6 +3,15 @@ Unit tests for UniLab API endpoints.
 Run with: pytest tests/unit/test_api_endpoints.py -v
 """
 
+import sys
+import pathlib
+
+# Add project root to sys.path
+current_dir = pathlib.Path(__file__).resolve().parent
+project_root = (current_dir / ".." / ".." / "..").resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import pytest
 import asyncio
 import json

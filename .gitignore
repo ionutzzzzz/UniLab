@@ -7,6 +7,7 @@ __pycache__
 test_runs
 test_workspace
 console_workspaces
+unilab_workspaces
 
 # Prerequisites
 *.d
@@ -158,6 +159,8 @@ tags
 pyvenv.cfg
 .venv
 pip-selfcheck.json
+*.pyc
+*.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
