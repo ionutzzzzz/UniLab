@@ -27,7 +27,8 @@ UniLab_GRAMMAR = r"""
 
     ?lhs: qualified_name LPAR call_args RPAR -> indexed_lhs
         | qualified_name LBRACE call_args RBRACE -> cell_indexed_lhs
-        | qualified_name -> single_lhs
+        | identifier -> single_lhs
+        | qualified_name -> qualified_lhs
         | LBRACKET qualified_name (COMMA qualified_name)* RBRACKET -> multi_lhs
 
     clear_stmt: CLEAR (qualified_name | "all")*
@@ -231,21 +232,27 @@ class UniLabToPython(Transformer):
         return self._escape_name(str(i[0]))
 
     def qualified_name(self, items):
-        if len(items) == 1:
-            return self._escape_name(str(items[0]))
-        
         parts = [self._escape_name(str(i)) for i in items if str(i) != "."]
+        if len(parts) == 1:
+            return parts[0]
+        
+        # Return a structure that can be used for both GET and SET
         res = parts[0]
         for p in parts[1:]:
             res = f"unilab_get({res}, '{p}')"
-        return res
+        
+        return {"type": "qualified_name", "full": res, "target": parts[:-1], "attr": parts[-1]}
 
     def simple_name(self, items):
         return self._escape_name(str(items[0]))
 
     def var(self, items):
-        name = items[0] 
-        name_str = str(name)
+        item = items[0]
+        if isinstance(item, dict) and item.get("type") == "qualified_name":
+            name_str = item["full"]
+        else:
+            name_str = str(item)
+            
         if name_str == "nargin":
             return "nargin"
             
@@ -255,14 +262,28 @@ class UniLabToPython(Transformer):
             base_name = name_str
         self.variables.add(base_name)
         self.called_functions.add(base_name)
-        return name
+        return name_str
 
     def single_lhs(self, items): return items[0]
+
+    def qualified_lhs(self, items):
+        item = items[0]
+        if isinstance(item, dict) and item.get("type") == "qualified_name":
+            # target is parts[:-1]. If target has multiple parts, we need to join them with unilab_get
+            target_parts = item["target"]
+            target_res = target_parts[0]
+            for p in target_parts[1:]:
+                target_res = f"unilab_get({target_res}, '{p}')"
+            return {"type": "attr_lhs", "target": target_res, "attr": f"'{item['attr']}'"}
+        return item
+
     def multi_lhs(self, items):
-        return [str(i) for i in items if str(i) not in ["[", "]", ","]]
+        return [str(i["full"] if isinstance(i, dict) else i) for i in items if str(i) not in ["[", "]", ","]]
 
     def indexed_lhs(self, items):
         target = items[0]
+        if isinstance(target, dict) and target.get("type") == "qualified_name":
+            target = target["full"]
         args = []
         for i in items[1:]:
             if str(i) not in ["(", ")"]:
@@ -273,6 +294,8 @@ class UniLabToPython(Transformer):
 
     def cell_indexed_lhs(self, items):
         target = items[0]
+        if isinstance(target, dict) and target.get("type") == "qualified_name":
+            target = target["full"]
         args = []
         for i in items[1:]:
             if str(i) not in ["{", "}"]:
@@ -314,6 +337,10 @@ class UniLabToPython(Transformer):
                 if isinstance(lhs, dict) and (lhs.get("type") == "indexed_lhs" or lhs.get("type") == "cell_indexed_lhs"):
                     stmt_str = f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
                     print_target = lhs['target']
+                elif isinstance(lhs, dict) and lhs.get("type") == "attr_lhs":
+                    stmt_str = f"unilab_set({lhs['target']}, {expr}, {lhs['attr']})"
+                    attr_name = lhs['attr'].strip("'")
+                    print_target = f"{lhs['target']}.{attr_name}"
                 elif isinstance(lhs, list):
                     for n in lhs: self.variables.add(str(n))
                     stmt_str = f"({', '.join([str(n) for n in lhs])}) = {expr}"
@@ -377,12 +404,12 @@ class UniLabToPython(Transformer):
     def not_op(self, items): return f"(not {items[1]})"
     def or_op(self, items): return f"unilab_or({items[0]}, {items[2]})"
     def and_and_op(self, items): return f"unilab_and({items[0]}, {items[2]})"
-    def eq(self, items): return f"({items[0]} == {items[2]})"
-    def ne(self, items): return f"({items[0]} != {items[2]})"
-    def lt(self, items): return f"({items[0]} < {items[2]})"
-    def gt(self, items): return f"({items[0]} > {items[2]})"
-    def le(self, items): return f"({items[0]} <= {items[2]})"
-    def ge(self, items): return f"({items[0]} >= {items[2]})"
+    def eq(self, items): return f"unilab_eq({items[0]}, {items[2]})"
+    def ne(self, items): return f"unilab_ne({items[0]}, {items[2]})"
+    def lt(self, items): return f"unilab_lt({items[0]}, {items[2]})"
+    def gt(self, items): return f"unilab_gt({items[0]}, {items[2]})"
+    def le(self, items): return f"unilab_le({items[0]}, {items[2]})"
+    def ge(self, items): return f"unilab_ge({items[0]}, {items[2]})"
 
     def atom_group(self, items):
         return items[1]
@@ -473,7 +500,7 @@ class UniLabToPython(Transformer):
         expr = items[3]
         block = items[4]
         self.variables.add(str(var))
-        return [f"for {var} in {expr}:"] + self._indent(block)
+        return [f"for {var} in unilab_iter({expr}):"] + self._indent(block)
 
     def while_stmt(self, items):
         # items: ['while', expr, block, 'end']

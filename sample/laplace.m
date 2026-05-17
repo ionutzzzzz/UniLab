@@ -1,4 +1,8 @@
-syms t s
+syms t s x
+
+expr = x^2 - 4;
+factor(expr)
+
 f = exp(-2*t);
 disp('Function f(t):');
 disp(f);

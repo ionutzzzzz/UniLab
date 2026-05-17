@@ -63,34 +63,117 @@ def unilab_call(obj, *args):
     if callable(obj):
         return obj(*args)
     if len(args) == 0: return obj
+    
+    # Handle array/list indexing
     if len(args) == 1:
         idx = args[0]
         if isinstance(obj, np.ndarray):
+            # Logical indexing
+            if isinstance(idx, np.ndarray) and idx.dtype == bool:
+                res = obj[idx.flatten() if obj.ndim == 1 else idx]
+                if res.size == 1: return res.item()
+                return res
+                
             flat = obj.flatten()
             if isinstance(idx, (int, np.integer, float, np.floating)): return flat[int(idx)-1]
-            if isinstance(idx, (list, np.ndarray, slice)): return flat[np.asarray(idx).astype(int) - 1] if not isinstance(idx, slice) else flat[idx]
+            if isinstance(idx, (list, np.ndarray, slice)): 
+                res = flat[np.asarray(idx).astype(int) - 1] if not isinstance(idx, slice) else flat[idx]
+                if isinstance(res, np.ndarray) and res.size == 1: return res.item()
+                return res
         if isinstance(obj, (list, tuple)):
             if isinstance(idx, (int, np.integer, float, np.floating)): return obj[int(idx)-1]
-    processed = [int(i)-1 if isinstance(i, (int, np.integer, float, np.floating)) else i for i in args]
-    return obj[tuple(processed)]
+            
+    processed = []
+    for i in args:
+        if isinstance(i, (int, np.integer, float, np.floating)):
+            processed.append(int(i)-1)
+        elif isinstance(i, np.ndarray) and i.dtype == bool:
+            processed.append(i.flatten() if i.ndim > 1 else i)
+        else:
+            processed.append(i)
+            
+    res = obj[tuple(processed)]
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
 
 def unilab_mul(a, b):
     if np.isscalar(a) and np.isscalar(b): return a * b
-    try: return np.dot(a, b)
-    except: return a * b
+    try:
+        res = np.dot(a, b)
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
+    except: 
+        res = a * b
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
 
 def unilab_div(a, b):
     if np.isscalar(a) and np.isscalar(b): return a / b
-    try: return np.linalg.solve(np.atleast_2d(b).T, np.atleast_2d(a).T).T
-    except: return a / b
+    try: 
+        res = np.linalg.solve(np.atleast_2d(b).T, np.atleast_2d(a).T).T
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
+    except: 
+        res = a / b
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
 
 def unilab_pow(a, b):
     if np.isscalar(a) and np.isscalar(b): return a ** b
-    try: return np.linalg.matrix_power(a, b)
-    except: return a ** b
+    try: 
+        res = np.linalg.matrix_power(a, b)
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
+    except: 
+        res = a ** b
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
 
 def unilab_and(a, b): return np.logical_and(a, b)
 def unilab_or(a, b): return np.logical_or(a, b)
+
+def unilab_eq(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return sympy.Eq(a, b)
+    return a == b
+
+def unilab_ne(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return sympy.Ne(a, b)
+    return a != b
+
+def unilab_lt(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return a < b # SymPy supports this for symbolic expr
+    return a < b
+
+def unilab_gt(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return a > b
+    return a > b
+
+def unilab_le(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return a <= b
+    return a <= b
+
+def unilab_ge(a, b):
+    if _is_symbolic(a) or _is_symbolic(b):
+        import sympy
+        return a >= b
+    return a >= b
 
 def unilab_get(obj, attr):
     if isinstance(obj, dict): return obj.get(attr)
@@ -99,13 +182,28 @@ def unilab_get(obj, attr):
 def unilab_set(obj, val, *args):
     if len(args) == 1:
         idx = args[0]
-        idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
+        # Flatten boolean masks for consistent indexing
+        if isinstance(idx, np.ndarray) and idx.dtype == bool:
+            idx_adj = idx.flatten()
+        else:
+            idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
+            
         if isinstance(obj, np.ndarray):
-            if obj.ndim == 1: obj[idx_adj] = val
+            if obj.ndim == 1: 
+                obj[idx_adj] = val
             elif obj.ndim == 2:
                 if obj.shape[0] == 1: obj[0, idx_adj] = val
-                elif obj.shape[1] == 1: obj[idx_adj, 0] = val
-                else: obj.flat[idx_adj] = val
+                elif obj.shape[1] == 1: 
+                    # If idx_adj is a flattened boolean mask, it must be used correctly
+                    if isinstance(idx_adj, np.ndarray) and idx_adj.dtype == bool:
+                        obj[idx_adj.reshape(obj.shape[0], obj.shape[1])] = val
+                    else:
+                        obj[idx_adj, 0] = val
+                else: 
+                    if isinstance(idx_adj, np.ndarray) and idx_adj.dtype == bool:
+                        obj[idx_adj.reshape(obj.shape)] = val
+                    else:
+                        obj.flat[idx_adj] = val
             return obj
         obj[idx_adj] = val
     elif len(args) > 1:
@@ -235,10 +333,46 @@ def expand(expr):
 def factor(expr):
     return sympy.factor(expr)
 
+def solve(eq, *args, **kwargs):
+    import sympy
+    return sympy.solve(eq, *args, **kwargs)
+
+def subs(expr, *args):
+    if not hasattr(expr, 'subs'):
+        return expr
+    
+    if len(args) == 2:
+        old, new = args
+        # Handle MATLAB style: subs(expr, [x, y], [1, 2])
+        if isinstance(old, (list, np.ndarray)) and isinstance(new, (list, np.ndarray)):
+            if len(old) == len(new):
+                # Convert to list of tuples for SymPy
+                subs_list = list(zip(old, new))
+                return expr.subs(subs_list)
+    
+    return expr.subs(*args)
+
 def diff(x, *args, **kwargs):
     if hasattr(x, 'diff') or isinstance(x, sympy.Basic):
         return sympy.diff(x, *args, **kwargs)
     return np.diff(x, *args, **kwargs)
+
+def int(expr, *args):
+    import sympy
+    if not isinstance(expr, sympy.Basic):
+        # Fallback for numerical integration if it's an array?
+        # MATLAB's 'int' is usually symbolic. Numerical is 'integral' or 'trapz'.
+        # For now, let's focus on symbolic.
+        pass
+        
+    if len(args) == 0:
+        # try to find variable
+        free_symbols = getattr(expr, 'free_symbols', set())
+        var = sympy.Symbol('x') if not free_symbols else sorted(free_symbols, key=lambda x: x.name)[0]
+        return sympy.integrate(expr, var)
+    
+    # args could be (var) or (var, a, b)
+    return sympy.integrate(expr, args)
 
 def unilab_laplace(f, t=None, s=None):
     import sympy
@@ -337,6 +471,7 @@ def ceil(x):
 
 def fix(x): return np.trunc(x)
 def rem(x, y): return np.remainder(x, y)
+def sign(x): return np.sign(x)
 
 def sin(x):
     if _is_symbolic(x):
@@ -868,3 +1003,24 @@ def unilab_clear_workspace(g):
         if not name.startswith('_'): keys_to_keep.add(name)
     to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
     for k in to_remove: del g[k]
+
+def unilab_iter(x):
+    """Iterates over a UniLab object (columns for 2D arrays)."""
+    if isinstance(x, np.ndarray):
+        if x.ndim <= 1:
+            return iter(x)
+        # Iterate over columns (MATLAB style)
+        return (x[:, i] if x.shape[0] > 1 else x[0, i] for i in range(x.shape[1]))
+    return iter(x)
+
+def struct(*args):
+    """Creates a UniLab structure (dictionary)."""
+    res = {}
+    if len(args) == 0:
+        return res
+    
+    # Handle struct('field1', val1, 'field2', val2, ...)
+    for i in range(0, len(args), 2):
+        if i+1 < len(args):
+            res[args[i]] = args[i+1]
+    return res

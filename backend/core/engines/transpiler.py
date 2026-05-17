@@ -14,17 +14,49 @@ from .. import runtime
 from .base import BaseEngine
 from ..models import ExecutionResult, SessionInfo
 
+class AutoloadDict(dict):
+    def __init__(self, engine, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.engine = engine
+        self._loading = set()
+
+    def __getitem__(self, key):
+        if key not in self and key not in self._loading:
+            self._loading.add(key)
+            try:
+                # Try to load the function from search paths
+                for path in self.engine.search_paths:
+                    m_file = path / f"{key}.m"
+                    if m_file.exists():
+                        try:
+                            code = m_file.read_text(encoding="utf-8")
+                            # We use a synchronous version of transpile here
+                            python_code, _, _ = self.engine.transpiler.transpile(code)
+                            # Execute in this dict
+                            exec(python_code, self)
+                            if key in self:
+                                return super().__getitem__(key)
+                        except Exception as e:
+                            print(f"Autoloader error for {key}: {e}")
+            finally:
+                self._loading.remove(key)
+        return super().__getitem__(key)
+
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
         self.transpiler = UniLabTranspiler()
         self.search_paths = [self.workspace_path]
-        self.globals = {
+        
+        # Use our new AutoloadDict
+        self.globals = AutoloadDict(self)
+        self.globals.update({
             'np': np,
             '__builtins__': __builtins__,
             'addpath': self._add_path,
             'ans': None,
-        }
+        })
+        
         # Inject runtime functions
         for name in dir(runtime):
             if not name.startswith('_'):
@@ -89,43 +121,6 @@ class TranspilerEngine(BaseEngine):
     async def stop(self):
         self._save_workspace()
 
-    async def _resolve_dependencies(self, called_funcs: set):
-        # Prevent infinite recursion if functions call each other
-        resolved_in_this_pass = set()
-        
-        to_resolve = list(called_funcs)
-        while to_resolve:
-            func_name = to_resolve.pop(0)
-            
-            # Skip if already in globals or already resolved
-            if func_name in self.globals or func_name in resolved_in_this_pass:
-                continue
-                
-            # Search in paths
-            for path in self.search_paths:
-                m_file = path / f"{func_name}.m"
-                if m_file.exists():
-                    try:
-                        code = m_file.read_text(encoding="utf-8")
-                        python_code, sub_calls, sub_paths = self.transpiler.transpile(code)
-                        
-                        # Add sub-paths if any
-                        for sp in sub_paths:
-                            self._add_path(sp)
-                        
-                        # Execute to define the function in globals
-                        exec(python_code, self.globals)
-                        resolved_in_this_pass.add(func_name)
-                        
-                        # Add new dependencies to check
-                        for sc in sub_calls:
-                            if sc not in self.globals and sc not in resolved_in_this_pass:
-                                to_resolve.append(sc)
-                        
-                        break # Found and loaded
-                    except Exception as e:
-                        print(f"Error loading dependent function {func_name}: {e}")
-
     async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
         # Handle 'help topic' style calls specifically
         stripped_code = code.strip()
@@ -149,21 +144,13 @@ class TranspilerEngine(BaseEngine):
             python_code, called_funcs, added_paths = self.transpiler.transpile(code)
             
             # Temporary add paths for resolution (from addpath calls in the code)
-            original_paths = self.search_paths.copy()
             for ap in added_paths:
                 self._add_path(ap)
-            
-            # Resolve missing functions from paths
-            await self._resolve_dependencies(called_funcs)
             
             # Re-verify critical runtime functions are in globals
             for name in dir(runtime):
                 if not name.startswith('_'):
                     self.globals[name] = getattr(runtime, name)
-            
-            # Restore search paths (they will be permanently added during execution of addpath in python_code)
-            # but we keep them for now to ensure dependent functions can be found.
-            # Actually, it's better to keep them if they were successfully added.
             
             # Prepare execution environment
             out = io.StringIO()
