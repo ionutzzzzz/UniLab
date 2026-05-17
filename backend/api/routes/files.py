@@ -1,0 +1,254 @@
+"""File operations endpoints."""
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from typing import Optional, List
+import aiofiles
+import os
+from pathlib import Path
+from backend.api.dependencies import get_core
+from backend.api.schemas import (
+    FileInfo, FileListResponse, FileContentResponse, RunScriptRequest
+)
+from backend.core.main import UniLabCore
+
+router = APIRouter(prefix="/api/v1/sessions", tags=["files"])
+
+
+@router.get("/{session_id}/files", response_model=FileListResponse)
+async def list_workspace_files(
+    session_id: str,
+    path: Optional[str] = None,
+    recursive: bool = False,
+    core: UniLabCore = Depends(get_core)
+):
+    """List files in workspace."""
+    try:
+        files_info = await core.list_files(session_id, path or "")
+        
+        file_list = []
+        if files_info and isinstance(files_info, list):
+            for f in files_info:
+                if isinstance(f, dict):
+                    file_list.append(FileInfo(
+                        name=f.get('name', 'unknown'),
+                        path=f.get('path', ''),
+                        size=f.get('size', 0),
+                        is_directory=f.get('is_directory', False)
+                    ))
+        
+        return FileListResponse(
+            files=file_list,
+            total=len(file_list),
+            path=path or ""
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{session_id}/files/{file_path:path}", response_model=FileContentResponse)
+async def get_file_content(
+    session_id: str,
+    file_path: str,
+    core: UniLabCore = Depends(get_core)
+):
+    """Get content of a file."""
+    try:
+        content = await core.read_file(session_id, file_path)
+        
+        file_size = len(content.encode('utf-8')) if isinstance(content, str) else len(content)
+        
+        return FileContentResponse(
+            name=Path(file_path).name,
+            path=file_path,
+            content=content if isinstance(content, str) else str(content),
+            size=file_size,
+            is_text=True
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/files/upload")
+async def upload_file(
+    session_id: str,
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+    core: UniLabCore = Depends(get_core)
+):
+    """Upload a file to workspace."""
+    try:
+        # Get session workspace
+        session = await core.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        workspace_path = session.workspace_path
+        file_path = workspace_path / file.filename
+        
+        # Check if file exists
+        if file_path.exists() and not overwrite:
+            raise HTTPException(
+                status_code=409,
+                detail="File already exists. Set overwrite=true to replace."
+            )
+        
+        # Write file
+        content = await file.read()
+        await core.write_file(session_id, file.filename, content.decode('utf-8'))
+        
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "size": len(content),
+            "path": str(file_path)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/files/create")
+async def create_file(
+    session_id: str,
+    filename: str,
+    content: str,
+    overwrite: bool = False,
+    core: UniLabCore = Depends(get_core)
+):
+    """Create a new file in workspace."""
+    try:
+        session = await core.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        file_path = session.workspace_path / filename
+        
+        if file_path.exists() and not overwrite:
+            raise HTTPException(
+                status_code=409,
+                detail="File already exists. Set overwrite=true to replace."
+            )
+        
+        await core.write_file(session_id, filename, content)
+        
+        return {
+            "status": "success",
+            "filename": filename,
+            "size": len(content.encode('utf-8')),
+            "path": str(file_path)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/files/delete")
+async def delete_file(
+    session_id: str,
+    filepath: str,
+    core: UniLabCore = Depends(get_core)
+):
+    """Delete a file from workspace."""
+    try:
+        session = await core.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        file_path = session.workspace_path / filepath
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        file_path.unlink()
+        
+        return {
+            "status": "success",
+            "filename": filepath,
+            "deleted": True
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/scripts/run")
+async def run_script(
+    session_id: str,
+    req: RunScriptRequest,
+    core: UniLabCore = Depends(get_core)
+):
+    """Run a .m script file."""
+    try:
+        # Read the script file
+        script_content = await core.read_file(session_id, req.filename)
+        
+        # Add parameters to workspace if provided
+        if req.parameters:
+            param_code = "\n".join([
+                f"{k} = {repr(v)};" for k, v in req.parameters.items()
+            ])
+            script_content = param_code + "\n" + script_content
+        
+        # Execute the script
+        result = await core.run_code(session_id, script_content, timeout=req.timeout)
+        
+        variables_snapshot = {}
+        if result.variables_snapshot:
+            for name, info in result.variables_snapshot.items():
+                variables_snapshot[name] = {
+                    "name": name,
+                    "dtype": info.get('dtype', 'unknown'),
+                    "shape": info.get('shape'),
+                    "preview": str(info.get('preview', ''))[:200]
+                }
+        
+        return {
+            "status": "success",
+            "script": req.filename,
+            "success": result.success,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "duration_s": result.duration_s,
+            "variables": variables_snapshot
+        }
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Script file not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{session_id}/files/{file_path:path}/download")
+async def download_file(
+    session_id: str,
+    file_path: str,
+    core: UniLabCore = Depends(get_core)
+):
+    """Download a file from workspace."""
+    from fastapi.responses import FileResponse
+    
+    try:
+        session = await core.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        full_path = session.workspace_path / file_path
+        
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        return FileResponse(full_path, filename=Path(file_path).name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
