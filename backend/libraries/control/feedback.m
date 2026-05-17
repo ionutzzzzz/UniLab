@@ -1,7 +1,5 @@
-function [sys] = feedback(sys1, sys2)
-    % Simplified discrete negative feedback connection for TF
+function [sys] = feedback(sys1, sys2, sign)
     if nargin < 2, sys2 = tf([1], [1]); end
-    num = conv(sys1.num, sys2.den);
-    den = sys1.den * sys2.den + sys1.num * sys2.num;
-    sys = tf(num, den);
+    if nargin < 3, sign = -1; end
+    sys = unilab_feedback(sys1, sys2, sign);
 end

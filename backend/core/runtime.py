@@ -12,49 +12,277 @@ def unilab_ifft(x): return scipy_ifft(x)
 def unilab_fftshift(x): return scipy_fftshift(x)
 def unilab_ifftshift(x): return scipy_ifftshift(x)
 
-def unilab_filter(b, a, x): return signal.lfilter(b, a, x)
-def unilab_filtfilt(b, a, x): return signal.filtfilt(b, a, x)
-def unilab_butter(*args, **kwargs): return signal.butter(*args, **kwargs)
-def unilab_cheby1(*args, **kwargs): return signal.cheby1(*args, **kwargs)
-def unilab_cheby2(*args, **kwargs): return signal.cheby2(*args, **kwargs)
-def unilab_ellip(*args, **kwargs): return signal.ellip(*args, **kwargs)
+def _unilab_vec(x):
+    """Converts a potential 2D matrix (1xN or Nx1) to a 1D vector for Scipy functions."""
+    if isinstance(x, np.ndarray):
+        if x.ndim == 2:
+            if x.shape[0] == 1:
+                return x[0]
+            if x.shape[1] == 1:
+                return x[:, 0]
+    return x
 
-def unilab_tf(num, den): return signal.TransferFunction(num, den)
+def unilab_filter(b, a, x): return signal.lfilter(_unilab_vec(b), _unilab_vec(a), x)
+def unilab_filtfilt(b, a, x): return signal.filtfilt(_unilab_vec(b), _unilab_vec(a), x)
+def unilab_butter(*args, **kwargs):
+    args = [_unilab_vec(a) for a in args]
+    kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
+    return signal.butter(*args, **kwargs)
+
+def unilab_cheby1(*args, **kwargs):
+    args = [_unilab_vec(a) for a in args]
+    kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
+    return signal.cheby1(*args, **kwargs)
+
+def unilab_cheby2(*args, **kwargs):
+    args = [_unilab_vec(a) for a in args]
+    kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
+    return signal.cheby2(*args, **kwargs)
+
+def unilab_ellip(*args, **kwargs):
+    args = [_unilab_vec(a) for a in args]
+    kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
+    return signal.ellip(*args, **kwargs)
+
+def unilab_tf(num, den): return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
+
+def unilab_tf2ss(num, den):
+    return signal.tf2ss(_unilab_vec(num), _unilab_vec(den))
+
+def unilab_ss2tf(A, B, C, D, iu=0):
+    return signal.ss2tf(A, B, C, D, input=iu)
+
 def unilab_ss(A, B, C, D): return signal.StateSpace(A, B, C, D)
-def unilab_zpk(z, p, k): return signal.ZerosPolesGain(z, p, k)
+
+def unilab_ssdata(sys):
+    if not isinstance(sys, signal.StateSpace):
+        sys = sys.to_ss()
+    return sys.A, sys.B, sys.C, sys.D
+
+def unilab_series(sys1, sys2):
+    s1 = sys1 if isinstance(sys1, signal.TransferFunction) else sys1.to_tf()
+    s2 = sys2 if isinstance(sys2, signal.TransferFunction) else sys2.to_tf()
+    num = np.convolve(s1.num, s2.num)
+    den = np.convolve(s1.den, s2.den)
+    return signal.TransferFunction(num, den)
+
+def unilab_feedback(sys1, sys2=None, sign=-1):
+    if sys2 is None:
+        sys2 = signal.TransferFunction([1], [1])
+    s1 = sys1 if isinstance(sys1, signal.TransferFunction) else sys1.to_tf()
+    s2 = sys2 if isinstance(sys2, signal.TransferFunction) else sys2.to_tf()
+    num = np.convolve(s1.num, s2.den)
+    den_part1 = np.convolve(s1.den, s2.den)
+    den_part2 = np.convolve(s1.num, s2.num)
+    max_len = max(len(den_part1), len(den_part2))
+    d1 = np.pad(den_part1, (max_len - len(den_part1), 0))
+    d2 = np.pad(den_part2, (max_len - len(den_part2), 0))
+    if sign < 0:
+        den = d1 + d2
+    else:
+        den = d1 - d2
+    return signal.TransferFunction(num, den)
+
+def unilab_rlocus(sys):
+    s = sys if isinstance(sys, signal.TransferFunction) else sys.to_tf()
+    num = s.num
+    den = s.den
+    gains = np.logspace(-2, 4, 500)
+    all_roots = []
+    for k in gains:
+        poly_num = k * num
+        max_len = max(len(den), len(poly_num))
+        p1 = np.pad(den, (max_len - len(den), 0))
+        p2 = np.pad(poly_num, (max_len - len(poly_num), 0))
+        all_roots.append(np.roots(p1 + p2))
+    
+    all_roots = np.array(all_roots)
+    
+    # Track roots to maintain branch continuity
+    tracked = np.zeros_like(all_roots)
+    tracked[0] = all_roots[0]
+    for i in range(1, len(all_roots)):
+        prev = tracked[i-1]
+        curr = all_roots[i]
+        new_row = np.zeros_like(curr)
+        used_curr = set()
+        for j in range(len(prev)):
+            best_dist = float('inf')
+            best_idx = 0
+            for k_idx in range(len(curr)):
+                if k_idx in used_curr: continue
+                dist = np.abs(curr[k_idx] - prev[j])
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = k_idx
+            new_row[j] = curr[best_idx]
+            used_curr.add(best_idx)
+        tracked[i] = new_row
+
+    plt.clf()
+    for i in range(tracked.shape[1]):
+        plt.plot(np.real(tracked[:, i]), np.imag(tracked[:, i]))
+    
+    ol_poles = np.roots(den)
+    ol_zeros = np.roots(num)
+    plt.plot(np.real(ol_poles), np.imag(ol_poles), 'rx', markersize=10, label='Poles')
+    if len(ol_zeros) > 0:
+        plt.plot(np.real(ol_zeros), np.imag(ol_zeros), 'bo', markersize=10, label='Zeros')
+    
+    plt.axhline(0, color='black', lw=1)
+    plt.axvline(0, color='black', lw=1)
+    plt.title('Root Locus')
+    plt.xlabel('Real')
+    plt.ylabel('Imaginary')
+    plt.grid(True)
+    plt.axis('equal')
+    _unilab_refresh_graph()
+    return None
+
+def unilab_zpk(z, p, k): return signal.ZerosPolesGain(_unilab_vec(z), _unilab_vec(p), k)
 
 def unilab_step(sys, T=None): 
-    t, y = signal.step(sys, T=T)
+    t, y = signal.step(sys, T=_unilab_vec(T) if T is not None else None)
     return t, y
 
 def unilab_impulse(sys, T=None): 
-    t, y = signal.impulse(sys, T=T)
+    t, y = signal.impulse(sys, T=_unilab_vec(T) if T is not None else None)
     return t, y
 
 def unilab_lsim(sys, U, T): 
-    t, y, x = signal.lsim(sys, U, T)
+    t, y, x = signal.lsim(sys, _unilab_vec(U), _unilab_vec(T))
     return t, y
 
 def unilab_bode(sys, w=None): 
-    w, mag, phase = signal.bode(sys, w=w)
+    w, mag, phase = signal.bode(sys, w=_unilab_vec(w) if w is not None else None)
     return w, mag, phase
 
 def unilab_freqfreqz(b, a, worN=None):
-    w, h = signal.freqz(b, a, worN=worN)
+    w, h = signal.freqz(_unilab_vec(b), _unilab_vec(a), worN=worN)
     return w, h
 
 def unilab_conv(a, v, mode='full'):
-    return signal.convolve(a, v, mode=mode)
+    return signal.convolve(_unilab_vec(a), _unilab_vec(v), mode=mode)
 
 def unilab_xcorr(a, v=None, mode='full'):
     if v is None: v = a
-    return signal.correlate(a, v, mode=mode)
+    return signal.correlate(_unilab_vec(a), _unilab_vec(v), mode=mode)
 
 def unilab_pwelch(x, fs=1.0):
-    f, Pxx = signal.welch(x, fs=fs)
+    f, Pxx = signal.welch(_unilab_vec(x), fs=fs)
     return f, Pxx
 
+def _poly_to_str(coeffs, var='s'):
+    n = len(coeffs) - 1
+    terms = []
+    for i, c in enumerate(coeffs):
+        p = n - i
+        if c == 0: continue
+        
+        if abs(c) == 1 and p > 0:
+            c_str = '' if c > 0 else '-'
+        else:
+            if float(c).is_integer():
+                c_str = f'{int(c)}'
+            else:
+                c_str = f'{c:.4g}'
+        
+        if p == 0:
+            if float(c).is_integer():
+                terms.append(f'{int(c)}')
+            else:
+                terms.append(f'{c:.4g}')
+        elif p == 1:
+            terms.append(f'{c_str}{var}')
+        else:
+            terms.append(f'{c_str}{var}^{p}')
+            
+    if not terms: return '0'
+    
+    res = terms[0]
+    for t in terms[1:]:
+        if t.startswith('-'):
+            res += ' - ' + t[1:]
+        else:
+            res += ' + ' + t
+    return res
+
+def _format_transfer_function(sys):
+    num_str = _poly_to_str(sys.num)
+    den_str = _poly_to_str(sys.den)
+    width = max(len(num_str), len(den_str)) + 2
+    
+    line = '-' * width
+    num_pad = ' ' * ((width - len(num_str)) // 2)
+    den_pad = ' ' * ((width - len(den_str)) // 2)
+    
+    return f'{num_pad}{num_str}\n{line}\n{den_pad}{den_str}'
+
+def _format_zpk(sys):
+    def format_roots(roots):
+        if len(roots) == 0: return ''
+        terms = []
+        for r in roots:
+            if r == 0:
+                terms.append('s')
+            else:
+                r_val = float(r) if np.isreal(r) else r
+                if isinstance(r_val, float):
+                    if r_val > 0:
+                        terms.append(f'(s - {r_val:.4g})')
+                    else:
+                        terms.append(f'(s + {abs(r_val):.4g})')
+                else:
+                    # Complex root
+                    re = r_val.real
+                    im = r_val.imag
+                    sign = '+' if im >= 0 else '-'
+                    terms.append(f'(s - ({re:.4g} {sign} {abs(im):.4g}j))')
+        return ''.join(terms)
+
+    z_str = format_roots(sys.zeros)
+    p_str = format_roots(sys.poles)
+    k = sys.gain
+    k_str = f'{k:.4g}' if not float(k).is_integer() else f'{int(k)}'
+    
+    num_str = f'{k_str}{z_str}' if z_str else k_str
+    if z_str and not k_str.endswith('-'):
+        # Add * if k is not 1 or -1 for clarity, or just keep it simple
+        if k_str != '1' and k_str != '-1':
+             num_str = f'{k_str}{z_str}' # Already have this
+        elif k_str == '-1':
+             num_str = f'-{z_str}'
+        else:
+             num_str = z_str
+    
+    den_str = p_str if p_str else '1'
+        
+    width = max(len(num_str), len(den_str)) + 2
+    line = '-' * width
+    num_pad = ' ' * ((width - len(num_str)) // 2)
+    den_pad = ' ' * ((width - len(den_str)) // 2)
+    
+    return f'{num_pad}{num_str}\n{line}\n{den_pad}{den_str}'
+
+def _format_ss(sys):
+    def matrix_to_str(mat, name):
+        if mat.ndim == 1:
+            mat = mat.reshape(1, -1)
+        lines = []
+        for row in mat:
+            row_str = '  '.join([f'{val:g}' for val in row])
+            lines.append(f'    [{row_str}]')
+        return f'{name} =\n' + '\n'.join(lines)
+
+    return f"{matrix_to_str(sys.A, 'A')}\n\n{matrix_to_str(sys.B, 'B')}\n\n{matrix_to_str(sys.C, 'C')}\n\n{matrix_to_str(sys.D, 'D')}"
+
 def _format_value(val):
+    if isinstance(val, signal.TransferFunction):
+        return _format_transfer_function(val)
+    if isinstance(val, signal.ZerosPolesGain):
+        return _format_zpk(val)
+    if isinstance(val, signal.StateSpace):
+        return _format_ss(val)
     if hasattr(val, '__module__') and 'sympy' in val.__module__:
         import sympy
         try:
@@ -404,7 +632,7 @@ def diff(x, *args, **kwargs):
         return sympy.diff(x, *args, **kwargs)
     return np.diff(x, *args, **kwargs)
 
-def int(expr, *args):
+def unilab_int(expr, *args):
     import sympy
     if not isinstance(expr, sympy.Basic):
         # Fallback for numerical integration if it's an array
