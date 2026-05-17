@@ -50,8 +50,8 @@ class TestUniLabTranspiler(unittest.TestCase):
         end
         """
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("if (x > 0):", result)
-        self.assertIn("elif (x < 0):", result)
+        self.assertIn("if unilab_gt(x, 0):", result)
+        self.assertIn("elif unilab_lt(x, 0):", result)
         self.assertIn("else:", result)
 
     def test_function_definition(self):

@@ -2,6 +2,7 @@ import asyncio
 import pathlib
 import sys
 import os
+import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -9,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.core.main import UniLabCore, BackendConfig
 
+@pytest.mark.asyncio
 async def test_all_plots():
     print("Starting Comprehensive Plot Tests...")
     cfg = BackendConfig(workspace_root=pathlib.Path("./test_workspace_all"))

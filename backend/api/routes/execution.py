@@ -169,7 +169,7 @@ async def transpile_code(
     try:
         # Get the transpiler from the engine
         transpiler = core.engines[session_id].transpiler
-        python_code = transpiler.transpile(req.code)
+        python_code, _, _ = transpiler.transpile(req.code)
         
         return TranspileResponse(
             python_code=python_code,
