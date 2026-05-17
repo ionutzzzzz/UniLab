@@ -87,7 +87,8 @@ def unilab_rlocus(sys):
     s = sys if isinstance(sys, signal.TransferFunction) else sys.to_tf()
     num = s.num
     den = s.den
-    gains = np.logspace(-2, 4, 500)
+    # Use a more balanced gain range for visibility
+    gains = np.logspace(-2, 3, 500)
     all_roots = []
     for k in gains:
         poly_num = k * num
@@ -120,24 +121,62 @@ def unilab_rlocus(sys):
         tracked[i] = new_row
 
     plt.clf()
+    # High-contrast colors for terminal
+    colors = ['#0000FF', '#008000', '#FF0000', '#800080', '#FFA500', '#00CED1']
     for i in range(tracked.shape[1]):
-        plt.plot(np.real(tracked[:, i]), np.imag(tracked[:, i]))
+        plt.plot(np.real(tracked[:, i]), np.imag(tracked[:, i]), 
+                 color=colors[i % len(colors)], linewidth=10)
     
     ol_poles = np.roots(den)
     ol_zeros = np.roots(num)
-    plt.plot(np.real(ol_poles), np.imag(ol_poles), 'rx', markersize=10, label='Poles')
+    plt.plot(np.real(ol_poles), np.imag(ol_poles), 'rx', markersize=25, markeredgewidth=8, label='Poles')
     if len(ol_zeros) > 0:
-        plt.plot(np.real(ol_zeros), np.imag(ol_zeros), 'bo', markersize=10, label='Zeros')
+        plt.plot(np.real(ol_zeros), np.imag(ol_zeros), 'bo', markersize=25, markeredgewidth=8, label='Zeros')
     
-    plt.axhline(0, color='black', lw=1)
-    plt.axvline(0, color='black', lw=1)
-    plt.title('Root Locus')
-    plt.xlabel('Real')
-    plt.ylabel('Imaginary')
-    plt.grid(True)
+    plt.axhline(0, color='black', lw=2)
+    plt.axvline(0, color='black', lw=2)
+    
+    # Add S-plane grid (constant damping and natural frequency)
+    xlim = plt.xlim()
+    ylim = plt.ylim()
+    max_r = 1.5 * max(max(abs(xlim[0]), abs(xlim[1])), max(abs(ylim[0]), abs(ylim[1])))
+    
+    # Damping ratio lines
+    zeta_vals = [0.2, 0.4, 0.6, 0.8, 0.9]
+    for z in zeta_vals:
+        angle = np.pi - np.arccos(z)
+        plt.plot([0, max_r*np.cos(angle)], [0, max_r*np.sin(angle)], 'k:', alpha=0.2, linewidth=1.5)
+        plt.plot([0, max_r*np.cos(angle)], [0, -max_r*np.sin(angle)], 'k:', alpha=0.2, linewidth=1.5)
+        
+    # Natural frequency circles
+    wn_vals = np.linspace(0, max_r, 6)[1:]
+    for w in wn_vals:
+        circle = plt.Circle((0, 0), w, color='k', fill=False, linestyle=':', alpha=0.2, linewidth=1.5)
+        plt.gca().add_artist(circle)
+
+    plt.title('Root Locus', fontweight='bold', fontsize=26)
+    plt.xlabel('Real Axis', fontweight='bold', fontsize=20)
+    plt.ylabel('Imaginary Axis', fontweight='bold', fontsize=20)
+    plt.grid(True, linestyle='--', alpha=0.5, linewidth=2)
+    plt.legend(loc='upper right', fontsize=14, framealpha=0.8)
+    
+    # Smarter axis scaling for terminal
+    plt.axis('tight')
+    xlim = plt.xlim()
+    ylim = plt.ylim()
+    # Ensure some padding
+    xr = xlim[1] - xlim[0]
+    yr = ylim[1] - ylim[0]
+    if xr < 0.2 * yr:
+        center = (xlim[0] + xlim[1]) / 2
+        plt.xlim(center - 0.25 * yr, center + 0.25 * yr)
+    elif yr < 0.2 * xr:
+        center = (ylim[0] + ylim[1]) / 2
+        plt.ylim(center - 0.25 * xr, center + 0.25 * xr)
+    
     plt.axis('equal')
     _unilab_refresh_graph()
-    return None
+    return tracked, gains
 
 def unilab_zpk(z, p, k): return signal.ZerosPolesGain(_unilab_vec(z), _unilab_vec(p), k)
 
@@ -1182,17 +1221,17 @@ def render_image_terminal(img_path, width=None):
         try: term_cols = os.get_terminal_size().columns
         except: term_cols = 80
             
-        target_w = min(width or 80, term_cols - 16)
-        target_h = int(target_w * (im.height / im.width) * 0.55)
-        if target_h < 15: target_h = 15
-        if target_h > 40: target_h = 40
+        target_w = min(width or 100, term_cols - 4)
+        target_h = int(target_w * (im.height / im.width) * 0.5)
+        if target_h < 20: target_h = 20
+        if target_h > 50: target_h = 50
         
         # Resize
         img = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
         pixels = img.load()
         
         # ASCII density ramp
-        ramp = " .:-=+*#%@"
+        ramp = " .:-=+*#%@MB"
         ramp_len = len(ramp)
 
         grid_data = []
@@ -1205,8 +1244,8 @@ def render_image_terminal(img_path, width=None):
                 idx = int((255 - luma) * (ramp_len - 1) / 255)
                 char = ramp[idx]
                 
-                # Apply TrueColor to the character if it's not basically white
-                if luma < 240:
+                # Apply TrueColor to the character
+                if luma < 250:
                     row += f"\x1b[38;2;{r};{g};{b}m{char}\x1b[0m"
                 else:
                     row += " "
