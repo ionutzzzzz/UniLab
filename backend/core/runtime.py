@@ -23,6 +23,10 @@ def disp(x):
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+def whos():
+    """Lists variables in the current workspace."""
+    pass
+
 def _should_suppress_output(val):
     if val is None: return True
     try:
@@ -177,6 +181,23 @@ def isempty(x):
     if isinstance(x, np.ndarray): return x.size == 0
     if hasattr(x, '__len__'): return len(x) == 0
     return False
+
+def find(condition):
+    if isinstance(condition, np.ndarray):
+        return np.where(condition)[0] + 1
+    return np.array([1]) if condition else np.array([])
+
+def norm(x, ord=None):
+    return np.linalg.norm(x, ord=ord)
+
+def argmin(x, axis=None):
+    return np.argmin(x, axis=axis) + 1
+
+def argmax(x, axis=None):
+    return np.argmax(x, axis=axis) + 1
+
+def argsort(x, axis=-1):
+    return np.argsort(x, axis=axis) + 1
 
 def syms(*names):
     if len(names) == 1 and isinstance(names[0], str) and ' ' in names[0]:

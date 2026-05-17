@@ -291,7 +291,11 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                         continue
 
                 is_whos = line.strip().lower() in ('whos', 'whos;')
-                result = await core.run_code(session.session_id, line)
+                exec_line = line
+                if is_whos and not line.strip().endswith(';'):
+                    exec_line = line.strip() + ';'
+                
+                result = await core.run_code(session.session_id, exec_line)
                 
                 # Update variable cache for autocomplete
                 if result.variables_snapshot:
