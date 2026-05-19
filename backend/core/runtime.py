@@ -6,6 +6,7 @@ import time
 import pathlib
 import scipy.signal as signal
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
+from backend.core.simulation.engine import unilab_simulate as simulate
 
 def unilab_fft(x): return scipy_fft(x)
 def unilab_ifft(x): return scipy_ifft(x)

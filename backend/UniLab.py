@@ -4,6 +4,8 @@ import pathlib
 import sys
 import os
 import re
+import faulthandler
+faulthandler.enable()
 import time
 from typing import Optional
 

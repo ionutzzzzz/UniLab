@@ -194,6 +194,21 @@ class TranspilerEngine(BaseEngine):
                 if not name.startswith('_'):
                     self.globals[name] = getattr(runtime, name)
             
+            # Re-verify critical constants are available
+            critical_constants = {
+                'pi': np.pi,
+                'inf': np.inf,
+                'Inf': np.inf,
+                'nan': np.nan,
+                'NaN': np.nan,
+                'eps': np.finfo(float).eps,
+                'i': 1j,
+                'j': 1j,
+                'realmax': np.finfo(float).max,
+                'realmin': np.finfo(float).tiny,
+            }
+            self.globals.update(critical_constants)
+            
             # Prepare execution environment
             out = io.StringIO()
             err = io.StringIO()

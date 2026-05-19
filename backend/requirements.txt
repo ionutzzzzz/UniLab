@@ -13,3 +13,4 @@ Pillow
 httpx 
 pytest-asyncio
 aiofiles
+PyQt5>=5.15.0

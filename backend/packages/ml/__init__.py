@@ -1,6 +1,36 @@
 import numpy as np
 from collections import Counter
 
+# --- Utilities ---
+
+def _parse_kwargs(obj, args, kwargs, defaults):
+    """Helper to parse MATLAB-style name-value pairs into object attributes."""
+    # First, apply defaults
+    for k, v in defaults.items():
+        setattr(obj, k, v)
+    
+    # Process positional arguments. If the first arg is a dict, use it as kwargs.
+    if args and isinstance(args[0], dict):
+        for k, v in args[0].items():
+            setattr(obj, k, v)
+        args = args[1:]
+    
+    # If args has even length and the first is a string, assume name-value pairs
+    if len(args) >= 2 and isinstance(args[0], str):
+        for i in range(0, len(args), 2):
+            if i + 1 < len(args):
+                setattr(obj, args[i], args[i+1])
+    elif args:
+        # Otherwise, assign positionally based on defaults keys
+        keys = list(defaults.keys())
+        for i, val in enumerate(args):
+            if i < len(keys):
+                setattr(obj, keys[i], val)
+    
+    # Finally, apply any actual Python keyword arguments
+    for k, v in kwargs.items():
+        setattr(obj, k, v)
+
 # --- Activation Functions ---
 
 def sigmoid(x):
@@ -88,20 +118,18 @@ class PolynomialFeatures:
 # --- Linear Models ---
 
 class LogisticRegression:
-    def __init__(self, lr=0.01, epochs=1000, alpha=0.01, penalty='l2', fit_intercept=True):
-        self.lr = lr
-        self.epochs = epochs
-        self.alpha = alpha
-        self.penalty = penalty
-        self.fit_intercept = fit_intercept
+    def __init__(self, *args, **kwargs):
+        defaults = {'lr': 0.01, 'epochs': 1000, 'alpha': 0.01, 'penalty': 'l2', 'fit_intercept': True}
+        _parse_kwargs(self, args, kwargs, defaults)
         self.theta = None
 
-    def fit(self, X, y):
+    def fit(self, X, y, callback=None):
         X = np.asarray(X)
         y = np.asarray(y).reshape(-1, 1)
         if self.fit_intercept: X = np.c_[np.ones((len(X), 1)), X]
-        self.theta = np.zeros((X.shape[1], 1))
-        for _ in range(self.epochs):
+        if self.theta is None:
+            self.theta = np.zeros((X.shape[1], 1))
+        for epoch in range(self.epochs):
             z = X.dot(self.theta)
             h = sigmoid(z)
             reg_grad = np.zeros_like(self.theta)
@@ -110,6 +138,10 @@ class LogisticRegression:
             gradient = (X.T.dot(h - y) + reg_grad) / len(y)
             if self.fit_intercept: gradient[0] -= reg_grad[0] / len(y)
             self.theta -= self.lr * gradient
+            if callback:
+                loss = float(-np.mean(y * np.log(h + 1e-15) + (1 - y) * np.log(1 - h + 1e-15)))
+                if callback(epoch + 1, loss) is False:
+                    break
         return self
 
     def predict_prob(self, X):
@@ -118,6 +150,10 @@ class LogisticRegression:
 
     def predict(self, X, threshold=0.5):
         return (self.predict_prob(X) >= threshold).astype(int)
+
+    def reset(self):
+        self.theta = None
+        return self
 
 # --- Decision Trees & Ensembles ---
 
@@ -330,10 +366,14 @@ class AgglomerativeClustering:
         return labels
 
 class KMeans:
-    def __init__(self, k=3, max_iters=100, init='k-means++', tol=1e-4):
-        self.k, self.max_iters, self.init, self.tol, self.centroids = k, max_iters, init, tol, None
+    def __init__(self, *args, **kwargs):
+        defaults = {'k': 3, 'max_iters': 100, 'init': 'k-means++', 'tol': 1e-4}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.k = int(self.k)
+        self.max_iters = int(self.max_iters)
+        self.centroids = None
 
-    def fit(self, X):
+    def fit(self, X, callback=None):
         X = np.asarray(X)
         if self.init == 'random': self.centroids = X[np.random.choice(len(X), self.k, replace=False)]
         else:
@@ -342,11 +382,20 @@ class KMeans:
                 dists = np.array([min([np.sum((x-c)**2) for c in self.centroids]) for x in X])
                 self.centroids.append(X[np.random.choice(len(X), p=dists/dists.sum())])
             self.centroids = np.array(self.centroids)
-        for _ in range(self.max_iters):
+        for i in range(self.max_iters):
             labels = np.argmin(np.linalg.norm(X[:, np.newaxis] - self.centroids, axis=2), axis=1)
-            new_c = np.array([X[labels==i].mean(axis=0) if np.any(labels==i) else self.centroids[i] for i in range(self.k)])
+            new_c = np.array([X[labels==j].mean(axis=0) if np.any(labels==j) else self.centroids[j] for j in range(self.k)])
+            
+            if callback:
+                if callback(i + 1, self.centroids, labels) is False:
+                    break
+                    
             if np.allclose(self.centroids, new_c, atol=self.tol): break
             self.centroids = new_c
+        return self
+
+    def reset(self):
+        self.centroids = None
         return self
 
     def predict(self, X):
@@ -355,33 +404,60 @@ class KMeans:
 # --- Neural Network (Professional) ---
 
 class NeuralNet:
-    def __init__(self, layers=[2, 4, 1], activation='relu', optimizer='adam', dropout=0.0, init='he'):
-        self.layers = np.asarray(layers).flatten().astype(int)
-        self.weights, self.biases, self.optimizer, self.dropout_rate = [], [], optimizer, dropout
+    def __init__(self, *args, **kwargs):
+        defaults = {'layers': [2, 4, 1], 'activation': 'relu', 'optimizer': 'adam', 'dropout': 0.0, 'init': 'he'}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.layers = np.asarray(self.layers).flatten().astype(int)
         funcs = {'relu': (relu, relu_derivative), 'tanh': (tanh, tanh_derivative), 'sigmoid': (sigmoid, sigmoid_derivative)}
-        self.act_func, self.act_deriv = funcs.get(activation, funcs['sigmoid'])
+        self.act_func, self.act_deriv = funcs.get(self.activation, funcs['sigmoid'])
+        self.reset()
+            
+    def _init_weights(self):
+        self.weights, self.biases = [], []
         for i in range(len(self.layers)-1):
-            limit = np.sqrt(2.0/self.layers[i]) if init=='he' else np.sqrt(1.0/self.layers[i])
+            limit = np.sqrt(2.0/self.layers[i]) if self.init=='he' else np.sqrt(1.0/self.layers[i])
             self.weights.append(np.random.randn(self.layers[i], self.layers[i+1])*limit)
             self.biases.append(np.zeros((1, self.layers[i+1])))
+
+    def reset(self):
+        self._init_weights()
+        self.optimizer_state = None
+        return self
             
     def forward(self, x, training=True):
-        self.activations, self.masks, curr_a = [x], [], x
+        activations, masks, curr_a = [x], [], x
         for i in range(len(self.weights)):
             z = np.dot(curr_a, self.weights[i]) + self.biases[i]
             curr_a = softmax(z) if i == len(self.weights)-1 and self.layers[-1] > 1 else self.act_func(z)
-            if training and self.dropout_rate > 0 and i < len(self.weights)-1:
-                mask = (np.random.rand(*curr_a.shape) > self.dropout_rate).astype(float)/(1.0-self.dropout_rate)
+            if training and self.dropout > 0 and i < len(self.weights)-1:
+                mask = (np.random.rand(*curr_a.shape) > self.dropout).astype(float)/(1.0-self.dropout)
                 curr_a *= mask
-                self.masks.append(mask)
-            else: self.masks.append(None)
-            self.activations.append(curr_a)
+                masks.append(mask)
+            else: masks.append(None)
+            activations.append(curr_a)
+        if training:
+            self.activations, self.masks = activations, masks
         return curr_a
         
-    def train(self, X, y, epochs=1000, lr=0.001, l1=0.0, l2=0.01):
+    def train(self, X, y, epochs=1000, lr=0.001, l1=0.0, l2=0.01, callback=None):
         X, y = np.asarray(X), np.asarray(y).reshape(-1, 1 if len(y.shape)==1 or y.shape[1]==1 else y.shape[1])
-        mw, vw, mb, vb = [np.zeros_like(w) for w in self.weights], [np.zeros_like(w) for w in self.weights], [np.zeros_like(b) for b in self.biases], [np.zeros_like(b) for b in self.biases]
-        for t in range(1, epochs + 1):
+        if self.optimizer == 'adam':
+            if getattr(self, 'optimizer_state', None) is None:
+                self.optimizer_state = {
+                    'mw': [np.zeros_like(w) for w in self.weights],
+                    'vw': [np.zeros_like(w) for w in self.weights],
+                    'mb': [np.zeros_like(b) for b in self.biases],
+                    'vb': [np.zeros_like(b) for b in self.biases],
+                    't': 0
+                }
+            mw, vw, mb, vb = self.optimizer_state['mw'], self.optimizer_state['vw'], self.optimizer_state['mb'], self.optimizer_state['vb']
+            t_start = self.optimizer_state['t']
+
+        for t_loop in range(1, epochs + 1):
+            if self.optimizer == 'adam':
+                self.optimizer_state['t'] += 1
+                t = self.optimizer_state['t']
+            
             out = self.forward(X, training=True)
             deltas = [out - y]
             for i in range(len(self.weights)-1, 0, -1):
@@ -397,7 +473,12 @@ class NeuralNet:
                     self.weights[i] -= lr*(mw[i]/(1-0.9**t))/(np.sqrt(vw[i]/(1-0.999**t))+1e-8)
                     self.biases[i] -= lr*(mb[i]/(1-0.9**t))/(np.sqrt(vb[i]/(1-0.999**t))+1e-8)
                 else: self.weights[i] -= lr*gw; self.biases[i] -= lr*gb
-            if t % (max(1, epochs//10)) == 0: print(f"Epoch {t}: loss = {np.mean(np.square(y-out)):.6f}")
+            
+            loss = float(np.mean(np.square(y-out)))
+            if t_loop % (max(1, epochs//10)) == 0: print(f"Epoch {t_loop}: loss = {loss:.6f}")
+            if callback:
+                if callback(t_loop, loss) is False:
+                    break
 
     def predict(self, x): return self.forward(np.asarray(x), training=False)
 
