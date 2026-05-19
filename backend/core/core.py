@@ -35,22 +35,22 @@ UniLab_GRAMMAR = r"""
 
     command_call.10: qualified_name (qualified_name | STRING | NUMBER)+
 
-    if_stmt: IF expression block elseif_clause* else_clause? END
-    elseif_clause: ELSEIF expression block
+    if_stmt: IF expression separator block elseif_clause* else_clause? END
+    elseif_clause: ELSEIF expression separator block
     else_clause: ELSE block
     
-    for_stmt: FOR identifier EQ expression block END
-    while_stmt: WHILE expression block END
+    for_stmt: FOR identifier EQ expression separator block END
+    while_stmt: WHILE expression separator block END
     
-    switch_stmt: SWITCH expression case_clause* otherwise_clause? END
-    case_clause: CASE expression block
+    switch_stmt: SWITCH expression separator* case_clause* otherwise_clause? END
+    case_clause: CASE expression separator block
     otherwise_clause: OTHERWISE block
     
     try_stmt: TRY block (CATCH identifier? block)? END
 
     global_stmt: GLOBAL simple_name (COMMA? simple_name)*
 
-    function_def.10: "function" [function_ret] simple_name "(" [arg_list] ")" block "end"
+    function_def.10: "function" [function_ret] simple_name "(" [arg_list] ")" separator block "end"
     function_ret: ret_list EQ
     ret_list: simple_name -> single_ret
             | LBRACKET (simple_name (COMMA simple_name)*)? RBRACKET -> multi_ret
@@ -99,6 +99,7 @@ UniLab_GRAMMAR = r"""
 
     ?atom: NUMBER                    -> number
          | STRING                    -> string
+         | END                       -> end_expr
          | anonymous_func
          | function_call
          | cell_indexing
@@ -215,6 +216,7 @@ class UniLabToPython(Transformer):
     def string(self, s):
         content = str(s[0])[1:-1].replace("''", "'")
         return f"'{content}'"
+    def end_expr(self, items): return "unilab_end"
     def colon_expr(self, items): return "slice(None)"
     def _escape_name(self, name):
         keywords = {
@@ -433,8 +435,8 @@ class UniLabToPython(Transformer):
     def row(self, items):
         return [str(i) for i in items if str(i) != ","]
 
-    def range2(self, items): return f"np.arange({items[0]}, {items[2]} + 1)"
-    def range3(self, items): return f"np.arange({items[0]}, {items[4]} + {items[2]}, {items[2]})"
+    def range2(self, items): return f"unilab_range({items[0]}, {items[2]})"
+    def range3(self, items): return f"unilab_range({items[0]}, {items[4]}, {items[2]})"
 
     def call_args(self, items):
         return [str(i) for i in items if str(i) != ","]
@@ -483,10 +485,12 @@ class UniLabToPython(Transformer):
     def if_stmt(self, items):
         # items: ['if', expression, block, (elseif_clause)*, (else_clause)?, 'end']
         cond = items[1]
-        block = items[2]
-        lines = [f"if {cond}:"]
+        block = items[3]
+        # Wrap condition to handle numpy arrays properly
+        cond_wrapped = f"unilab_to_bool({cond})"
+        lines = [f"if {cond_wrapped}:"]
         lines.extend(self._indent(block))
-        for i in range(3, len(items)):
+        for i in range(4, len(items)):
             item = items[i]
             if str(item) == "end": break
             if isinstance(item, list):
@@ -494,10 +498,11 @@ class UniLabToPython(Transformer):
         return lines
 
     def elseif_clause(self, items):
-        # items: ['elseif', expression, block]
+        # items: ['elseif', expression, separator, block]
         cond = items[1]
-        block = items[2]
-        return [f"elif {cond}:"] + self._indent(block)
+        block = items[3]
+        cond_wrapped = f"unilab_to_bool({cond})"
+        return [f"elif {cond_wrapped}:"] + self._indent(block)
 
     def else_clause(self, items):
         # items: ['else', block]
@@ -505,20 +510,22 @@ class UniLabToPython(Transformer):
         return ["else:"] + self._indent(block)
 
     def for_stmt(self, items):
-        # items: ['for', var, '=', expr, block, 'end']
+        # items: ['for', var, '=', expr, separator, block, 'end']
         var = items[1]
         expr = items[3]
-        block = items[4]
+        block = items[5]
         self.variables.add(str(var))
         return [f"for {var} in unilab_iter({expr}):"] + self._indent(block)
 
     def while_stmt(self, items):
-        # items: ['while', expr, block, 'end']
+        # items: ['while', expr, separator, block, 'end']
         cond = items[1]
-        block = items[2]
-        return [f"while {cond}:"] + self._indent(block)
+        block = items[3]
+        cond_wrapped = f"unilab_to_bool({cond})"
+        return [f"while {cond_wrapped}:"] + self._indent(block)
 
     def switch_stmt(self, items):
+        # items: [SWITCH, expression, separator*, case_clause*, otherwise_clause?, END]
         expr = items[1]
         self._switch_depth += 1
         var_name = f"_sw_{self._switch_depth}"
@@ -526,21 +533,22 @@ class UniLabToPython(Transformer):
         first = True
         for i in range(2, len(items) - 1):
             clause = items[i]
-            if str(clause) in [";", ",", "\n"] or clause is None: continue
-            if first:
-                clause[0] = clause[0].replace("elif", "if").replace("_sw_tmp", var_name)
-                first = False
-            else:
-                clause[0] = clause[0].replace("_sw_tmp", var_name)
-            lines.extend(clause)
+            if isinstance(clause, str) or clause is None: continue
+            if isinstance(clause, list) and len(clause) > 0:
+                if first:
+                    clause[0] = clause[0].replace("elif", "if").replace("_sw_tmp", var_name)
+                    first = False
+                else:
+                    clause[0] = clause[0].replace("_sw_tmp", var_name)
+                lines.extend(clause)
         if first: lines.append("    pass")
         self._switch_depth -= 1
         return lines
 
     def case_clause(self, items):
-        # items: [CASE, expression, block]
+        # items: [CASE, expression, separator, block]
         expr = items[1]
-        block = items[2]
+        block = items[3]
         return [f"elif _sw_tmp == {expr}:"] + self._indent(block)
 
     def otherwise_clause(self, items):
@@ -583,17 +591,17 @@ class UniLabToPython(Transformer):
         return [str(i) for i in items if str(i) != ","]
 
     def function_def(self, items):
-        # items: ['function', ret?, name, '(', args?, ')', block, 'end']
+        # items: ['function', ret?, name, '(', args?, ')', separator, block, 'end']
         filtered = [i for i in items if str(i) not in ["function", "(", ")", "end"]]
-        if len(filtered) == 4:
-            rets, name, args, block = filtered
-        elif len(filtered) == 3:
+        if len(filtered) == 5:
+            rets, name, args, sep, block = filtered
+        elif len(filtered) == 4:
             if isinstance(filtered[0], (str, list)) and not isinstance(filtered[1], list):
-                 rets, name, args, block = filtered[0], filtered[1], None, filtered[2]
+                 rets, name, args, block = filtered[0], filtered[1], None, filtered[3]
             else:
-                 rets, name, args, block = None, filtered[0], filtered[1], filtered[2]
+                 rets, name, args, block = None, filtered[0], filtered[1], filtered[3]
         else:
-            rets, name, args, block = None, filtered[0], None, filtered[1]
+            rets, name, args, block = None, filtered[0], None, filtered[2]
 
         arg_str = ""
         if args:

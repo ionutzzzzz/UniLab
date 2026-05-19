@@ -10,3 +10,6 @@ pydantic
 python-multipart
 sympy
 Pillow
+httpx 
+pytest-asyncio
+aiofiles

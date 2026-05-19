@@ -212,7 +212,8 @@ class TranspilerEngine(BaseEngine):
                 self._save_workspace()
             except Exception as e:
                 success = False
-                err.write(str(e))
+                import traceback
+                err.write(traceback.format_exc())
             finally:
                 os.chdir(old_cwd)
             

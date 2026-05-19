@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from backend.api.dependencies import get_core
 from backend.api.schemas import (
-    FunctionListResponse, FunctionSignature, LibraryListResponse, LibraryInfo
+    FunctionListResponse, FunctionSignature, LibraryListResponse, LibraryInfo,
+    SearchRequest
 )
 from backend.core.main import UniLabCore
 
@@ -279,12 +280,12 @@ async def get_library(
 
 @router.post("/functions/search")
 async def search_functions(
-    query: str,
+    request: SearchRequest,
     core: UniLabCore = Depends(get_core)
 ):
     """Search for functions by name or description."""
     results = []
-    query_lower = query.lower()
+    query_lower = request.query.lower()
     
     for name, info in BUILTIN_FUNCTIONS.items():
         # Search in name and description
@@ -301,7 +302,7 @@ async def search_functions(
     results.sort(key=lambda x: x['match_score'], reverse=True)
     
     return {
-        "query": query,
+        "query": request.query,
         "results": results,
         "total": len(results)
     }

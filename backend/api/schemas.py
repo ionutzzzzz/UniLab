@@ -226,6 +226,11 @@ class LibraryListResponse(BaseModel):
     total: int
 
 
+class SearchRequest(BaseModel):
+    """A search request with a query string."""
+    query: str
+
+
 # ==================== System & Monitoring ====================
 
 class HealthResponse(BaseModel):

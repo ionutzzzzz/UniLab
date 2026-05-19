@@ -114,23 +114,23 @@ grid on;           % Add grid lines
 
 ## 🗺️ Roadmap
 
-[x] Core computation engine (Transplier)
+- [x] Core computation engine (Transplier)
 
-[x] Testing and implementation
+- [x] Testing and implementation
 
-[x] Create custom libraries
+- [x] Create custom libraries
 
-[ ] Basic React/SCSS frontend integration
+- [ ] Basic React/SCSS frontend integration
 
-[ ] Docker containerization
+- [ ] Docker containerization
 
-[ ] Implement advanced neural network visualizers
+- [ ] Implement advanced neural network visualizers
 
-[ ] Add export support for .csv, .json, and .pdf reports
+- [ ] Add export support for .csv, .json, and .pdf reports
 
-[ ] Cloud-hosted deployment and user authentication
+- [ ] Cloud-hosted deployment and user authentication
 
-[ ] Plugin marketplace for community-driven algorithms
+- [ ] Plugin marketplace for community-driven algorithms
 
 ## 🤝 Contributing
 

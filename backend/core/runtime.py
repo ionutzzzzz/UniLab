@@ -180,8 +180,15 @@ def unilab_rlocus(sys):
 
 def unilab_zpk(z, p, k): return signal.ZerosPolesGain(_unilab_vec(z), _unilab_vec(p), k)
 
-def unilab_step(sys, T=None): 
-    t, y = signal.step(sys, T=_unilab_vec(T) if T is not None else None)
+def unilab_step(sys, T=None):
+    # Handle empty T arrays - scipy.step requires None or non-empty array
+    if T is not None and isinstance(T, np.ndarray) and T.size == 0:
+        T = None
+    elif T is not None and isinstance(T, list) and len(T) == 0:
+        T = None
+    elif T is not None:
+        T = _unilab_vec(T)
+    t, y = signal.step(sys, T=T)
     return t, y
 
 def unilab_impulse(sys, T=None): 
@@ -373,6 +380,31 @@ def unilab_print_and_save_ans(expr, val):
             print(f"ans =\n   {formatted}\n")
     return val
 
+class UnilabEnd:
+    def __init__(self, offset=0):
+        self.offset = offset
+    def __add__(self, other):
+        return UnilabEnd(self.offset + other)
+    def __sub__(self, other):
+        return UnilabEnd(self.offset - other)
+    def __radd__(self, other):
+        return UnilabEnd(self.offset + other)
+    def __repr__(self):
+        return f"unilab_end{'' if self.offset == 0 else ('+' + str(self.offset) if self.offset > 0 else str(self.offset))}"
+
+unilab_end = UnilabEnd()
+
+def unilab_range(start, stop, step=1):
+    if isinstance(stop, UnilabEnd):
+        # Return a slice that unilab_call/unilab_set will handle
+        return slice(int(start) - 1, None if stop.offset == 0 else stop.offset, int(step))
+    if isinstance(start, UnilabEnd):
+        # Very rare but possible
+        return slice(None, int(stop), int(step))
+    
+    # Standard numerical range
+    return np.arange(start, stop + step, step)
+
 def unilab_call(obj, *args):
     if callable(obj):
         return obj(*args)
@@ -387,6 +419,10 @@ def unilab_call(obj, *args):
                 res = obj[idx.flatten() if obj.ndim == 1 else idx]
                 if res.size == 1: return res.item()
                 return res
+            
+            if isinstance(idx, UnilabEnd):
+                flat = obj.flatten()
+                return flat[len(flat) + idx.offset - 1]
                 
             flat = obj.flatten()
             if isinstance(idx, (int, np.integer, float, np.floating)): return flat[int(idx)-1]
@@ -395,16 +431,23 @@ def unilab_call(obj, *args):
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
                 return res
         if isinstance(obj, (list, tuple)):
+            if isinstance(idx, UnilabEnd):
+                return obj[len(obj) + idx.offset - 1]
             if isinstance(idx, (int, np.integer, float, np.floating)): return obj[int(idx)-1]
+            if isinstance(idx, slice): return obj[idx]
             
     processed = []
-    for i in args:
-        if isinstance(i, (int, np.integer, float, np.floating)):
-            processed.append(int(i)-1)
-        elif isinstance(i, np.ndarray) and i.dtype == bool:
-            processed.append(i.flatten() if i.ndim > 1 else i)
+    for i, arg in enumerate(args):
+        if isinstance(arg, UnilabEnd):
+            processed.append(obj.shape[i] + arg.offset - 1)
+        elif isinstance(arg, (int, np.integer, float, np.floating)):
+            processed.append(int(arg)-1)
+        elif isinstance(arg, (list, np.ndarray)) and not (isinstance(arg, np.ndarray) and arg.dtype == bool):
+            processed.append(np.asarray(arg).astype(int) - 1)
+        elif isinstance(arg, np.ndarray) and arg.dtype == bool:
+            processed.append(arg.flatten() if arg.ndim > 1 else arg)
         else:
-            processed.append(i)
+            processed.append(arg)
             
     res = obj[tuple(processed)]
     
@@ -465,6 +508,43 @@ def unilab_pow(a, b):
 def unilab_and(a, b): return np.logical_and(a, b)
 def unilab_or(a, b): return np.logical_or(a, b)
 
+def all(a, axis=None):
+    """MATLAB-compatible all() function that returns True if all elements are nonzero."""
+    # Handle scalars and 0-d arrays
+    if not isinstance(a, np.ndarray) or a.ndim == 0:
+        return bool(a)
+    result = np.all(a, axis=axis)
+    # Return as Python scalar if 0-d array
+    if isinstance(result, np.ndarray) and result.ndim == 0:
+        return bool(result)
+    return result
+
+def any(a, axis=None):
+    """MATLAB-compatible any() function that returns True if any element is nonzero."""
+    # Handle scalars and 0-d arrays
+    if not isinstance(a, np.ndarray) or a.ndim == 0:
+        return bool(a)
+    result = np.any(a, axis=axis)
+    # Return as Python scalar if 0-d array
+    if isinstance(result, np.ndarray) and result.ndim == 0:
+        return bool(result)
+    return result
+
+def unilab_to_bool(val):
+    """Convert values to boolean for use in if/while statements."""
+    # Handle numpy arrays
+    if isinstance(val, np.ndarray):
+        if val.ndim == 0:  # 0-d array (scalar)
+            return bool(val)
+        elif val.size == 0:  # empty array
+            return False
+        elif val.size == 1:  # 1-element array
+            return bool(val.item())
+        else:  # multi-element array - use any() to match MATLAB behavior
+            return np.any(val)
+    # Handle standard Python types and numpy scalars
+    return bool(val)
+
 def unilab_eq(a, b):
     if _is_symbolic(a) or _is_symbolic(b):
         import sympy
@@ -512,7 +592,12 @@ def unilab_set(obj, val, *args):
         if isinstance(idx, np.ndarray) and idx.dtype == bool:
             idx_adj = idx.flatten()
         else:
-            idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
+            if isinstance(idx, UnilabEnd):
+                idx_adj = len(obj.flatten()) + idx.offset - 1
+            elif isinstance(idx, (list, np.ndarray)):
+                idx_adj = np.asarray(idx).astype(int) - 1
+            else:
+                idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
             
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1: 
@@ -529,11 +614,23 @@ def unilab_set(obj, val, *args):
                     if isinstance(idx_adj, np.ndarray) and idx_adj.dtype == bool:
                         obj[idx_adj.reshape(obj.shape)] = val
                     else:
-                        obj.flat[idx_adj] = val
+                        if isinstance(idx_adj, (list, np.ndarray, slice)):
+                            obj.flat[idx_adj] = val
+                        else:
+                            obj.flat[idx_adj] = val
             return obj
         obj[idx_adj] = val
     elif len(args) > 1:
-        processed = [int(i)-1 if isinstance(i, (int, np.integer, float, np.floating)) else i for i in args]
+        processed = []
+        for i, arg in enumerate(args):
+            if isinstance(arg, UnilabEnd):
+                processed.append(obj.shape[i] + arg.offset - 1)
+            elif isinstance(arg, (int, np.integer, float, np.floating)):
+                processed.append(int(arg)-1)
+            elif isinstance(arg, (list, np.ndarray)):
+                processed.append(np.asarray(arg).astype(int) - 1)
+            else:
+                processed.append(arg)
         obj[tuple(processed)] = val
     return obj
 
@@ -547,20 +644,20 @@ def unilab_matrix_concat(*rows):
     # If a single list or array is passed, it represents a single row (or horizontal concat)
     if len(rows) == 1 and isinstance(rows[0], (list, np.ndarray)):
         items = rows[0]
-        # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
-        if all(isinstance(r, (str, np.str_)) for r in items):
-            return "".join(str(r) for r in items)
 
-        # If any item is an array, we must horizontally stack them
+        # If any item is an array (check this FIRST before string check)
         if any(isinstance(r, np.ndarray) for r in items):
             try:
                 processed = [np.atleast_2d(r) for r in items]
-                # If they are rows, hstack them. If they have same rows, hstack.
                 # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
                 return np.hstack(processed)
             except:
                 # Fallback to standard array creation
                 return np.array(items, dtype=object)
+
+        # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
+        if all(isinstance(r, (str, np.str_)) for r in items):
+            return "".join(str(r) for r in items)
 
         return np.atleast_2d(items)
 
@@ -573,6 +670,15 @@ def unilab_matrix_concat(*rows):
                     # Handle mixed row [X, 1, 2]
                     p_row = np.hstack([np.atleast_2d(item) for item in r])
                     processed_rows.append(p_row)
+                elif isinstance(r, list) and all(isinstance(item, (str, np.str_)) for item in r):
+                    # Try numeric coercion for string lists (transpiler stringifies number tokens)
+                    try:
+                        numeric = [float(item) for item in r]
+                        vals = [int(v) if v == int(v) else v for v in numeric]
+                        processed_rows.append(np.atleast_2d(vals))
+                    except (ValueError, TypeError):
+                        # Keep as-is if not all numeric
+                        processed_rows.append(np.atleast_2d(r))
                 else:
                     processed_rows.append(np.atleast_2d(r))
             elif isinstance(r, str):
@@ -620,6 +726,13 @@ def isempty(x):
     if x is None: return True
     if isinstance(x, np.ndarray): return x.size == 0
     if hasattr(x, '__len__'): return len(x) == 0
+    return False
+
+def isvector(x):
+    if isinstance(x, np.ndarray):
+        return x.ndim == 1 or (x.ndim == 2 and (x.shape[0] == 1 or x.shape[1] == 1))
+    if isinstance(x, (list, tuple)):
+        return True
     return False
 
 def find(condition):
@@ -716,6 +829,8 @@ def unilab_int(expr, *args):
 
 def limit(expr, var, value, direction='both'):
     import sympy
+    dir_map = {'both': '+-', 'left': '-', 'right': '+'}
+    direction = dir_map.get(direction, direction)
     return sympy.limit(expr, var, value, direction)
 
 def taylor(expr, var, point=0, order=6):
@@ -745,9 +860,38 @@ def unilab_ilaplace(F, s=None, t=None):
     res = sympy.inverse_laplace_transform(F, s, t)
     return res
 
+def fprintf(*args):
+    if not args: return
+    fmt = args[0]
+    
+    # Handle file handles (1 for stdout, 2 for stderr)
+    import sys
+    if isinstance(fmt, (int, float)):
+        handle = int(fmt)
+        if len(args) < 2: return
+        fmt = args[1]
+        args = args[2:]
+        output = fmt % args if args else fmt
+        if handle == 2:
+            sys.stderr.write(output)
+            sys.stderr.flush()
+        else:
+            sys.stdout.write(output)
+            sys.stdout.flush()
+    else:
+        args = args[1:]
+        # Use Python's % operator for MATLAB-style formatting
+        # but handle common MATLAB formatters if needed
+        try:
+            output = fmt % args if args else fmt
+        except:
+            output = str(fmt)
+        sys.stdout.write(output)
+        sys.stdout.flush()
+
 def length(x):
     if hasattr(x, '__len__'):
-        if isinstance(x, np.ndarray): return max(np.shape(x))
+        if isinstance(x, np.ndarray): return int(max(np.shape(x)) if x.size > 0 else 0)
         return len(x)
     return 1
 
@@ -865,15 +1009,17 @@ def sqrt(x):
 
 def eye(n, m=None): return np.eye(int(n), int(m) if m is not None else int(n))
 def zeros(*args): 
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.zeros(args[0])
-    return np.zeros(args)
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.zeros(tuple(int(i) for i in args[0]))
+    return np.zeros(tuple(int(i) for i in args))
 def ones(*args): 
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.ones(args[0])
-    return np.ones(args)
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        return np.ones(tuple(int(i) for i in args[0]))
+    return np.ones(tuple(int(i) for i in args))
 def median(x, axis=None): return np.median(x, axis=axis)
 def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
-def var(x, axis=None): return np.var(x, axis=axis)
-def std(x, axis=None): return np.std(x, axis=axis)
+def var(x, axis=None): return np.var(x, ddof=1, axis=axis)
+def std(x, axis=None): return np.std(x, ddof=1, axis=axis)
 
 def rand(*args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.rand(*args[0])
@@ -1406,7 +1552,10 @@ def unilab_clear_workspace(g):
 def unilab_iter(x):
     """Iterates over a UniLab object (columns for 2D arrays)."""
     if isinstance(x, np.ndarray):
-        if x.ndim <= 1:
+        # Handle 0-d arrays by converting to a single-element list
+        if x.ndim == 0:
+            return iter([x.item()])
+        if x.ndim == 1:
             return iter(x)
         # Iterate over columns (MATLAB style)
         return (x[:, i] if x.shape[0] > 1 else x[0, i] for i in range(x.shape[1]))
@@ -1423,3 +1572,28 @@ def struct(*args):
         if i+1 < len(args):
             res[args[i]] = args[i+1]
     return res
+
+class UnilabEnd:
+    def __init__(self, offset=0):
+        self.offset = offset
+    def __add__(self, other):
+        return UnilabEnd(self.offset + other)
+    def __sub__(self, other):
+        return UnilabEnd(self.offset - other)
+    def __radd__(self, other):
+        return UnilabEnd(self.offset + other)
+    def __repr__(self):
+        return f"unilab_end{'' if self.offset == 0 else ('+' + str(self.offset) if self.offset > 0 else str(self.offset))}"
+
+unilab_end = UnilabEnd()
+
+def unilab_range(start, stop, step=1):
+    if isinstance(stop, UnilabEnd):
+        # Return a slice that unilab_call/unilab_set will handle
+        return slice(int(start) - 1, None if stop.offset == 0 else stop.offset, int(step))
+    if isinstance(start, UnilabEnd):
+        # Very rare but possible
+        return slice(None, int(stop), int(step))
+    
+    # Standard numerical range
+    return np.arange(start, stop + step, step)

@@ -1,7 +1,9 @@
 function [slope, intercept, r2] = linear_regression(x, y)
     % Performs simple linear regression
     % [slope, intercept, r2] = linear_regression(x, y)
-    
+
+    x = x(:);
+    y = y(:);
     n = length(x);
     x_mean = mean(x);
     y_mean = mean(y);

@@ -1,5 +1,6 @@
 function [k] = kurtosis(data)
     % Calculates the kurtosis of the data
+    data = data(:);
     m = mean(data);
     v = var(data);
     

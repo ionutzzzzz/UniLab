@@ -36,4 +36,4 @@ f_inv = ilaplace(1/(s^2 + 4), s, t);
 disp('Inverse Laplace of 1/(s^2 + 4):');
 disp(f_inv);
 
-disp('Math Lab Session Complete.');
+disp('UniLab Session Complete.');
