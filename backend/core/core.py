@@ -1,187 +1,163 @@
 from lark import Lark, Transformer, v_args, Tree
 import numpy as np
+import re
+import traceback
+import sys
+import os
+import io
+import pathlib
+import importlib.util
+from typing import Any, Dict, List, Optional, Union, Set
 
-# EBNF Grammar for a subset of UniLab
+# EBNF Grammar for UniLab (MATLAB-compatible)
 UniLab_GRAMMAR = r"""
-    start: (stmt_with_sep | separator)*
+    start: separator* (stmt_sep separator*)* [stmt_no_sep]
+    separator: SEMI | COMMA | NEWLINE
+    stmt_sep: statement separator
+    stmt_no_sep: statement (COMMA | SEMI)?
 
-    ?stmt_with_sep: statement separator -> stmt_sep
-                  | statement           -> stmt_no_sep
-
-    ?statement: if_stmt
+    ?statement: assignment
+              | if_stmt
               | for_stmt
               | while_stmt
               | switch_stmt
               | try_stmt
-              | global_stmt
               | function_def
-              | assignment
               | clear_stmt
-              | command_call
+              | global_stmt
+              | return_stmt
+              | break_stmt
+              | continue_stmt
+              | import_stmt
+              | export_stmt
               | expr_stmt
+              | command_call
 
-    separator: SEMI | COMMA | NEWLINE
-
-    assignment: lhs EQ expression -> assignment_stmt
-    expr_stmt: expression -> expr_stmt
-
-    ?lhs: qualified_name LPAR call_args RPAR -> indexed_lhs
-        | qualified_name LBRACE call_args RBRACE -> cell_indexed_lhs
-        | identifier -> single_lhs
-        | qualified_name -> qualified_lhs
-        | LBRACKET qualified_name (COMMA qualified_name)* RBRACKET -> multi_lhs
-
-    clear_stmt: CLEAR (qualified_name | "all")*
-
-    command_call.10: qualified_name (qualified_name | STRING | NUMBER)+
-
-    if_stmt: IF expression separator block elseif_clause* else_clause? END
-    elseif_clause: ELSEIF expression separator block
-    else_clause: ELSE block
+    assignment: (lhs_list EQUAL | postfix_expr EQUAL) expression
+    lhs_list: LBRACKET (IDENTIFIER (COMMA? IDENTIFIER)*)? RBRACKET
     
-    for_stmt: FOR identifier EQ expression separator block END
-    while_stmt: WHILE expression separator block END
-    
-    switch_stmt: SWITCH expression separator* case_clause* otherwise_clause? END
-    case_clause: CASE expression separator block
+    if_stmt: IF expression block (ELSEIF expression block)* [ELSE block] END
+    for_stmt: FOR IDENTIFIER EQUAL expression block END
+    while_stmt: WHILE expression block END
+    switch_stmt: SWITCH expression case_clause* [otherwise_clause] END
+    case_clause: CASE expression block
     otherwise_clause: OTHERWISE block
     
-    try_stmt: TRY block (CATCH identifier? block)? END
+    try_stmt: TRY block CATCH [IDENTIFIER] block END
+    
+    function_def: FUNCTION [function_ret] IDENTIFIER LPAR [func_params] RPAR block END
+    function_ret: (IDENTIFIER | lhs_list) EQUAL
+    func_params: IDENTIFIER (COMMA? IDENTIFIER)*
+    
+    block: separator* (stmt_sep separator*)* [stmt_no_sep]
+    
+    clear_stmt: CLEAR (IDENTIFIER | "all")*
+    global_stmt: GLOBAL IDENTIFIER+
+    return_stmt: RETURN
+    break_stmt: BREAK
+    continue_stmt: CONTINUE
+    
+    import_stmt: IMPORT qualified_name
+    export_stmt: EXPORT IDENTIFIER
+    
+    expr_stmt: expression
+    
+    ?expression: range_expr
+    ?range_expr: logical_or
+               | logical_or COLON logical_or -> range2
+               | logical_or COLON logical_or COLON logical_or -> range3
+    
+    ?logical_or: logical_and (OR logical_and)*
+    ?logical_and: comparison (AND comparison)*
+    ?comparison: addition (COMP_OP addition)*
+    ?addition: multiplication (ADD_OP multiplication)*
+    ?multiplication: power (MUL_OP power)*
+    ?power: unary (POW_OP unary)*
+    ?unary: UNARY_OP unary | postfix_expr
+    
+    ?postfix_expr: atom
+                 | function_call
+                 | cell_indexing
+                 | postfix_expr QUOTE -> transpose
+                 | postfix_expr DOT IDENTIFIER -> attr_access
 
-    global_stmt: GLOBAL simple_name (COMMA? simple_name)*
-
-    function_def.10: "function" [function_ret] simple_name "(" [arg_list] ")" separator block "end"
-    function_ret: ret_list EQ
-    ret_list: simple_name -> single_ret
-            | LBRACKET (simple_name (COMMA simple_name)*)? RBRACKET -> multi_ret
-    arg_list: simple_name (COMMA simple_name)*
-
-    block: (stmt_with_sep | separator)*
-
-    ?expression: logical_or
-
-    ?logical_or: logical_and
-               | logical_or OR_OP logical_and -> or_op
-
-    ?logical_and: comparison
-                | logical_and AND_OP comparison -> and_and_op
-
-    ?comparison: range_expr
-               | comparison EQ_OP range_expr -> eq
-               | comparison NE_OP range_expr  -> ne
-               | comparison LT_OP range_expr  -> lt
-               | comparison GT_OP range_expr  -> gt
-               | comparison LE_OP range_expr -> le
-               | comparison GE_OP range_expr -> ge
-
-    ?range_expr: add_expr
-               | add_expr COLON add_expr              -> range2
-               | add_expr COLON add_expr COLON add_expr -> range3
-
-    ?add_expr: term
-             | add_expr PLUS term   -> add
-             | add_expr MINUS term   -> sub
-
-    ?term: factor
-         | term MUL factor           -> mul
-         | term DIV factor           -> div
-         | term DOT_MUL factor       -> dot_mul
-         | term DOT_DIV factor       -> dot_div
-
-    ?factor: power
-           | MINUS factor            -> neg
-           | NOT_OP factor           -> not_op
-
-    ?power: atom
-          | power POW atom           -> pow
-          | power DOT_POW atom       -> dot_pow
-          | power TRANSPOSE          -> transpose
+    function_call.2: postfix_expr LPAR call_args? RPAR
+    cell_indexing.2: postfix_expr LBRACE call_args? RBRACE
 
     ?atom: NUMBER                    -> number
          | STRING                    -> string
          | END                       -> end_expr
          | anonymous_func
-         | function_call
-         | cell_indexing
          | qualified_name            -> var
          | LPAR expression RPAR      -> atom_group
          | matrix
          | cell_array
-
-    matrix: LBRACKET [row (SEMI row)*] RBRACKET
+    
+    anonymous_func: AT LPAR func_params? RPAR expression
+    
+    qualified_name: IDENTIFIER
+    
+    call_args: arg_item (COMMA arg_item)*
+    ?arg_item: expression | COLON -> colon_arg
+    
+    matrix: LBRACKET (row | SEMI | NEWLINE)* RBRACKET
     row: expression (COMMA? expression)*
     
-    cell_array: LBRACE [row (SEMI row)*] RBRACE
+    cell_array: LBRACE (row | SEMI | NEWLINE)* RBRACE
+    
+    command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
-    cell_indexing.2: qualified_name LBRACE call_args? RBRACE
-
-    function_call.2: qualified_name LPAR call_args? RPAR
-    ?call_arg: expression
-             | COLON -> colon_expr
-    call_args: call_arg (COMMA call_arg)*
-
-    anonymous_func: "@" LPAR [arg_list] RPAR expression
-
-    FUNCTION.2: "function"
-    END.2: "end"
-    IF.2: "if"
-    ELSEIF.2: "elseif"
-    ELSE.2: "else"
-    FOR.2: "for"
-    WHILE.2: "while"
-    SWITCH.2: "switch"
-    CASE.2: "case"
-    OTHERWISE.2: "otherwise"
-    TRY.2: "try"
-    CATCH.2: "catch"
-    GLOBAL.2: "global"
-    CLEAR.2: "clear"
-
-    EQ: "="
-    PLUS: "+"
-    MINUS: "-"
-    MUL: "*"
-    DIV: "/"
-    DOT_MUL: ".*"
-    DOT_DIV: "./"
-    POW: "^"
-    DOT_POW: ".^"
-    TRANSPOSE: "'"
+    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear)[a-zA-Z_][a-zA-Z0-9_]*/
+    NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/
+    STRING: /'[^'\n]*'/
+    
+    ADD_OP: "+" | "-" | ".+" | ".-"
+    MUL_OP: "*" | "/" | "\\" | ".*" | "./" | ".\\"
+    POW_OP: "^" | ".^"
+    UNARY_OP: "+" | "-" | "~"
+    COMP_OP: "==" | "~=" | ">=" | "<=" | ">" | "<"
+    AND: "&" | "&&"
+    OR: "|" | "||"
+    
+    EQUAL: "="
     LPAR: "("
     RPAR: ")"
     LBRACKET: "["
     RBRACKET: "]"
     LBRACE: "{"
     RBRACE: "}"
+    DOT: "."
     COMMA: ","
     SEMI: ";"
     COLON: ":"
-    DOT: "."
-    OR_OP: "||" | "|"
-    AND_OP: "&&" | "&"
-    EQ_OP: "=="
-    NE_OP: "~="
-    LT_OP: "<"
-    GT_OP: ">"
-    LE_OP: "<="
-    GE_OP: ">="
-    NOT_OP: "~"
-
-    qualified_name: IDENTIFIER (DOT IDENTIFIER)*
-    simple_name: IDENTIFIER
-    identifier: IDENTIFIER
-
-    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear)[a-zA-Z_][a-zA-Z0-9_]*/
-
-    %import common.CNAME
-    %import common.NUMBER
-    %import common.WS_INLINE
-    %import common.ESCAPED_STRING
-    STRING: "'" ("''"|/[^'\n\r]/)* "'"
-    NEWLINE: (/\r?\n/ WS_INLINE*)+
+    AT: "@"
+    QUOTE: "'"
     
+    IF: "if"
+    ELSEIF: "elseif"
+    ELSE: "else"
+    FOR: "for"
+    WHILE: "while"
+    SWITCH: "switch"
+    CASE: "case"
+    OTHERWISE: "otherwise"
+    TRY: "try"
+    CATCH: "catch"
+    FUNCTION: "function"
+    CLEAR: "clear"
+    GLOBAL: "global"
+    RETURN: "return"
+    BREAK: "break"
+    CONTINUE: "continue"
+    IMPORT: "import"
+    EXPORT: "export"
+    END: "end"
+    
+    NEWLINE: (/\r?\n/ WS_INLINE*)+
+    %import common.WS_INLINE
     %ignore WS_INLINE
-    %ignore /%.*/
+    COMMENT: /%[^\n]*/
+    %ignore COMMENT
 """
 
 class UniLabToPython(Transformer):
@@ -194,30 +170,29 @@ class UniLabToPython(Transformer):
 
     def _indent(self, lines):
         if not lines: return ["    pass"]
-        
-        def flatten(items):
-            res = []
-            if isinstance(items, str): return [items]
-            if not isinstance(items, (list, tuple, set)): return [str(items)]
-            for i in items:
-                if isinstance(i, (list, tuple, set)): res.extend(flatten(i))
-                elif i is not None: res.append(str(i))
-            return res
-            
         flat_lines = []
-        for l in flatten(lines):
-            flat_lines.extend(l.split('\n'))
-            
+        if isinstance(lines, str):
+            flat_lines = lines.split('\n')
+        else:
+            for item in lines:
+                if isinstance(item, list): flat_lines.extend(item)
+                else: flat_lines.extend(str(item).split('\n'))
+        
         res = ["    " + l if l.strip() else l for l in flat_lines]
         if not res: return ["    pass"]
         return res
 
     def number(self, n): return str(n[0])
-    def string(self, s):
-        content = str(s[0])[1:-1].replace("''", "'")
-        return f"'{content}'"
+    def string(self, s): return str(s[0])
     def end_expr(self, items): return "unilab_end"
-    def colon_expr(self, items): return "slice(None)"
+    def colon_arg(self, items): return "slice(None)"
+
+    def range2(self, items):
+        return f"unilab_range({items[0]}, {items[2]})"
+
+    def range3(self, items):
+        return f"unilab_range({items[0]}, {items[4]}, {items[2]})"
+
     def _escape_name(self, name):
         keywords = {
             'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 
@@ -226,315 +201,248 @@ class UniLabToPython(Transformer):
             'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 
             'return', 'try', 'while', 'with', 'yield'
         }
-        if name in keywords:
-            return f"{name}_"
+        if name in keywords: return f"{name}_"
         return name
 
-    def identifier(self, i):
-        return self._escape_name(str(i[0]))
+    def var(self, items):
+        name = str(items[0])
+        name = self._escape_name(name)
+        if name == "nargin": return "nargin"
+        self.variables.add(name)
+        self.called_functions.add(name)
+        return f"unilab_call({name})"
 
     def qualified_name(self, items):
-        parts = [self._escape_name(str(i)) for i in items if str(i) != "."]
-        if len(parts) == 1:
-            return parts[0]
-        
-        # Return a structure that can be used for both GET and SET
-        res = parts[0]
-        for p in parts[1:]:
-            res = f"unilab_get({res}, '{p}')"
-        
-        return {"type": "qualified_name", "full": res, "target": parts[:-1], "attr": parts[-1]}
-
-    def simple_name(self, items):
         return self._escape_name(str(items[0]))
 
-    def var(self, items):
-        item = items[0]
-        if isinstance(item, dict) and item.get("type") == "qualified_name":
-            name_str = item["full"]
-        else:
-            name_str = str(item)
-            
-        if name_str == "nargin":
-            return "nargin"
-            
-        if '(' in name_str:
-            base_name = name_str.split('(')[-1].split(',')[0].strip("'")
-        else:
-            base_name = name_str
-        self.variables.add(base_name)
-        self.called_functions.add(base_name)
-        return name_str
+    def attr_access(self, items):
+        target, attr = items[0], items[2]
+        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
+             target = target[12:-1]
+        return f"unilab_get({target}, '{attr}')"
 
-    def single_lhs(self, items): return items[0]
+    def function_call(self, items):
+        name = items[0]
+        if isinstance(name, str) and name.startswith('unilab_call(') and name.endswith(')') and ',' not in name:
+             name = name[12:-1]
+        self.called_functions.add(str(name))
+        args = items[2] if len(items) > 3 else None
+        if name == "pi" and not args: return "np.pi"
+        if name == "addpath" and args:
+            arg_list = args if isinstance(args, list) else [args]
+            for a in arg_list:
+                if str(a).startswith("'") and str(a).endswith("'"):
+                    self.added_paths.add(str(a)[1:-1])
 
-    def qualified_lhs(self, items):
-        item = items[0]
-        if isinstance(item, dict) and item.get("type") == "qualified_name":
-            # target is parts[:-1]. If target has multiple parts, we need to join them with unilab_get
-            target_parts = item["target"]
-            target_res = target_parts[0]
-            for p in target_parts[1:]:
-                target_res = f"unilab_get({target_res}, '{p}')"
-            return {"type": "attr_lhs", "target": target_res, "attr": f"'{item['attr']}'"}
-        return item
+        arg_str = ", ".join(map(str, args)) if isinstance(args, list) else (str(args) if args is not None else "")
+        if arg_str:
+            return f"unilab_call({name}, {arg_str})"
+        return f"unilab_call({name})"
 
-    def multi_lhs(self, items):
-        return [str(i["full"] if isinstance(i, dict) else i) for i in items if str(i) not in ["[", "]", ","]]
-
-    def indexed_lhs(self, items):
+    def cell_indexing(self, items):
         target = items[0]
-        if isinstance(target, dict) and target.get("type") == "qualified_name":
-            target = target["full"]
-        args = []
-        for i in items[1:]:
-            if str(i) not in ["(", ")"]:
-                args = i
-                break
-        arg_str = ", ".join(args) if isinstance(args, list) else str(args)
-        return {"type": "indexed_lhs", "target": target, "args": arg_str}
+        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
+             target = target[12:-1]
+        args = items[2] if len(items) > 3 else None
+        arg_str = ", ".join(map(str, args)) if isinstance(args, list) else (str(args) if args is not None else "")
+        if arg_str:
+            return f"unilab_call({target}, {arg_str})"
+        return f"unilab_call({target})"
 
-    def cell_indexed_lhs(self, items):
+    def transpose(self, items):
         target = items[0]
-        if isinstance(target, dict) and target.get("type") == "qualified_name":
-            target = target["full"]
-        args = []
-        for i in items[1:]:
-            if str(i) not in ["{", "}"]:
-                args = i
-                break
-        arg_str = ", ".join(args) if isinstance(args, list) else str(args)
-        return {"type": "cell_indexed_lhs", "target": target, "args": arg_str}
+        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
+             target = target[12:-1]
+        return f"{target}.T"
 
-    def clear_stmt(self, items):
-        names = [str(i) for i in items if str(i) not in [";", "clear"]]
-        if not names or 'all' in names:
-            return "unilab_clear_workspace(globals())"
-        vars_to_clear = [f"'{n}'" for n in names]
-        return f"unilab_clear_variables(globals(), [{', '.join(vars_to_clear)}])"
+    def unary(self, items):
+        if len(items) == 2:
+            op, val = str(items[0]), items[1]
+            if op == "~": return f"(not {val})"
+            return f"{op}{val}"
+        return items[0]
 
-    def command_call(self, items):
-        name = str(items[0])
-        self.called_functions.add(name)
-        args = [f"'{a}'" for a in items[1:] if str(a) not in [";", ","]]
-        return f"{name}({', '.join(args)})"
+    def power(self, items):
+        if len(items) == 1: return items[0]
+        res = items[0]
+        for i in range(1, len(items), 2):
+            res = f"unilab_pow({res}, {items[i+1]})"
+        return res
 
-    def separator(self, items):
-        return str(items[0])
+    def multiplication(self, items):
+        if len(items) == 1: return items[0]
+        res = items[0]
+        for i in range(1, len(items), 2):
+            op, right = str(items[i]), items[i+1]
+            if op == ".*": res = f"({res} * {right})"
+            elif op == "./": res = f"({res} / {right})"
+            elif op == "*": res = f"unilab_mul({res}, {right})"
+            elif op == "/": res = f"unilab_div({res}, {right})"
+            else: res = f"({res} {op} {right})" # For \ or other ops
+        return res
 
-    def stmt_sep(self, items):
-        stmt = items[0]
-        sep = items[1]
-        has_semi = (str(sep) == ";")
-        return self._process_stmt(stmt, has_semi)
+    def addition(self, items):
+        if len(items) == 1: return items[0]
+        res = f"({items[0]}"
+        for i in range(1, len(items), 2):
+            res += f" {items[i]} {items[i+1]}"
+        res += ")"
+        return res
 
-    def stmt_no_sep(self, items):
-        return self._process_stmt(items[0], False)
+    def comparison(self, items):
+        if len(items) == 1: return items[0]
+        res = items[0]
+        for i in range(1, len(items), 2):
+            op, right = str(items[i]), items[i+1]
+            if op == "==": res = f"unilab_eq({res}, {right})"
+            elif op == "~=": res = f"unilab_ne({res}, {right})"
+            elif op == ">": res = f"unilab_gt({res}, {right})"
+            elif op == "<": res = f"unilab_lt({res}, {right})"
+            elif op == ">=": res = f"unilab_ge({res}, {right})"
+            elif op == "<=": res = f"unilab_le({res}, {right})"
+        return res
 
-    def _process_stmt(self, stmt, has_semi):
-        if isinstance(stmt, dict):
-            if stmt.get("type") == "assignment":
-                lhs = stmt["lhs"]
-                expr = stmt["expr"]
-                if isinstance(lhs, dict) and (lhs.get("type") == "indexed_lhs" or lhs.get("type") == "cell_indexed_lhs"):
-                    stmt_str = f"unilab_set({lhs['target']}, {expr}, {lhs['args']})"
-                    print_target = lhs['target']
-                elif isinstance(lhs, dict) and lhs.get("type") == "attr_lhs":
-                    stmt_str = f"unilab_set({lhs['target']}, {expr}, {lhs['attr']})"
-                    attr_name = lhs['attr'].strip("'")
-                    print_target = f"{lhs['target']}.{attr_name}"
-                elif isinstance(lhs, list):
-                    for n in lhs: self.variables.add(str(n))
-                    stmt_str = f"({', '.join([str(n) for n in lhs])}) = {expr}"
-                    print_target = f"[{', '.join([str(n) for n in lhs])}]"
-                else:
-                    self.variables.add(str(lhs))
-                    stmt_str = f"{lhs} = {expr}"
-                    print_target = str(lhs)
-                
-                if not has_semi:
-                    print_target_esc = print_target.replace("'", "\\'")
-                    if isinstance(lhs, list):
-                        return f"{stmt_str}; unilab_print_var('{print_target_esc}', ({', '.join([str(n) for n in lhs])}))"
-                    else:
-                        return f"{stmt_str}; unilab_print_var('{print_target_esc}', {print_target})"
-                return stmt_str
-            
-            if stmt.get("type") == "expr":
-                expr = stmt["expr"]
-                if not has_semi:
-                    expr_esc = str(expr).replace("'", "\\'")
-                    return f"ans = unilab_print_and_save_ans('{expr_esc}', {expr})"
-                return str(expr)
+    def logical_and(self, items):
+        if len(items) == 1: return items[0]
+        res = items[0]
+        for i in range(1, len(items), 2):
+            res = f"unilab_and({res}, {items[i+1]})"
+        return res
+
+    def logical_or(self, items):
+        if len(items) == 1: return items[0]
+        res = items[0]
+        for i in range(1, len(items), 2):
+            res = f"unilab_or({res}, {items[i+1]})"
+        return res
+
+    def assignment(self, items):
+        lhs, expr = items[0], items[2]
+        if isinstance(lhs, list): # From lhs_list
+            stmt = f"({', '.join(lhs)}) = {expr}"
+            return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
         
-        if isinstance(stmt, list):
-            return "\n".join(stmt)
-        return str(stmt)
+        if isinstance(lhs, str) and lhs.startswith('unilab_call(') and lhs.endswith(')') and ',' not in lhs:
+             lhs = lhs[12:-1]
 
-    def block(self, items):
-        flattened = []
-        for s in items:
-            if isinstance(s, list):
-                flattened.extend(s)
-            elif isinstance(s, str):
-                if s.strip() and s not in [";", ",", "\n"]:
-                    flattened.append(s)
-            elif s is not None:
-                flattened.append(str(s))
-        return flattened
+        if "unilab_call" in str(lhs) or "unilab_get" in str(lhs):
+            if "unilab_call" in str(lhs):
+                match = re.match(r"unilab_call\(([^,]+)(?:,\s*(.*))?\)", str(lhs))
+                if match:
+                    obj, args = match.group(1), match.group(2)
+                    stmt = f"unilab_set({obj}, {expr}{', ' + args if args else ''})"
+                    return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+            
+            if "unilab_get" in str(lhs):
+                match = re.match(r"unilab_get\(([^,]+),\s*([^)]+)\)", str(lhs))
+                if match:
+                    obj, attr = match.group(1), match.group(2)
+                    stmt = f"unilab_set({obj}, {attr}, {expr})"
+                    return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
 
-    def start(self, items):
-        lines = self.block(items)
-        return "\n".join(lines)
-
-    def assignment_stmt(self, items):
-        return {"type": "assignment", "lhs": items[0], "expr": items[2]}
+        self.variables.add(str(lhs))
+        return {"type": "assignment", "stmt": f"{lhs} = {expr}", "lhs": str(lhs), "is_multi": False}
 
     def expr_stmt(self, items):
         return {"type": "expr", "expr": items[0]}
 
-    def add(self, items): return f"({items[0]} + {items[2]})"
-    def sub(self, items): return f"({items[0]} - {items[2]})"
-    def mul(self, items): return f"unilab_mul({items[0]}, {items[2]})"
-    def div(self, items): return f"unilab_div({items[0]}, {items[2]})"
-    def dot_mul(self, items): return f"({items[0]} * {items[2]})"
-    def dot_div(self, items): return f"({items[0]} / {items[2]})"
-    def pow(self, items): return f"unilab_pow({items[0]}, {items[2]})"
-    def dot_pow(self, items): return f"({items[0]} ** {items[2]})"
-    def transpose(self, items): return f"{items[0]}.T"
-    def neg(self, items): return f"-{items[1]}"
-    def not_op(self, items): return f"(not {items[1]})"
-    def or_op(self, items): return f"unilab_or({items[0]}, {items[2]})"
-    def and_and_op(self, items): return f"unilab_and({items[0]}, {items[2]})"
-    def eq(self, items): return f"unilab_eq({items[0]}, {items[2]})"
-    def ne(self, items): return f"unilab_ne({items[0]}, {items[2]})"
-    def lt(self, items): return f"unilab_lt({items[0]}, {items[2]})"
-    def gt(self, items): return f"unilab_gt({items[0]}, {items[2]})"
-    def le(self, items): return f"unilab_le({items[0]}, {items[2]})"
-    def ge(self, items): return f"unilab_ge({items[0]}, {items[2]})"
+    def stmt_sep(self, items):
+        return self._process_stmt(items[0], str(items[1]) == ";")
 
-    def atom_group(self, items):
-        return items[1]
+    def stmt_no_sep(self, items):
+        has_semi = len(items) > 1 and str(items[1]) == ";"
+        return self._process_stmt(items[0], has_semi)
 
-    def matrix(self, items):
-        actual_rows = [r for r in items if str(r) not in ["[", "]", ";"]]
-        row_strs = []
-        for r in actual_rows:
-            if isinstance(r, list):
-                row_strs.append(f"[{', '.join(r)}]")
-        return f"unilab_matrix_concat({', '.join(row_strs)})"
+    def _process_stmt(self, stmt, has_semi):
+        if isinstance(stmt, dict):
+            if stmt.get("type") == "assignment":
+                python_stmt = stmt["stmt"]
+                if not has_semi:
+                    lhs_esc = stmt["lhs"].replace("\\", "\\\\").replace("'", "\\'")
+                    if stmt.get("is_multi"):
+                        return f"{python_stmt}; unilab_print_var('{lhs_esc}', ({', '.join(stmt['names'])}))"
+                    else:
+                        return f"{python_stmt}; unilab_print_var('{lhs_esc}', {stmt['lhs']})"
+                return python_stmt
+            if stmt.get("type") == "expr":
+                expr = stmt["expr"]
+                if not has_semi:
+                    expr_esc = str(expr).replace("\\", "\\\\").replace("'", "\\'")
+                    return f"ans = unilab_print_and_save_ans('{expr_esc}', {expr})"
+                return str(expr)
+        if isinstance(stmt, list):
+            return "\n".join(stmt)
+        return str(stmt)
 
-    def cell_array(self, items):
-        actual_rows = [r for r in items if str(r) not in ["{", "}", ";"]]
-        row_strs = []
-        for r in actual_rows:
-            if isinstance(r, list):
-                row_strs.extend(r)
-        return f"unilab_cell_concat({', '.join(row_strs)})"
+    def separator(self, items): return ""
 
-    def row(self, items):
-        return [str(i) for i in items if str(i) != ","]
+    def lhs_list(self, items):
+        names = [str(i) for i in items if str(i) not in ["[", "]", ","]]
+        for n in names: self.variables.add(n)
+        return names
 
-    def range2(self, items): return f"unilab_range({items[0]}, {items[2]})"
-    def range3(self, items): return f"unilab_range({items[0]}, {items[4]}, {items[2]})"
+    def function_ret(self, items):
+        return items[0]
 
-    def call_args(self, items):
-        return [str(i) for i in items if str(i) != ","]
-
-    def cell_indexing(self, items):
-        target = items[0]
-        if isinstance(target, dict) and target.get("type") == "qualified_name":
-            target = target["full"]
-        else:
-            target = str(target)
-            
-        self.called_functions.add(target)
-        args = items[2] if len(items) > 3 else None
-        arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
-        return f"unilab_call({target}, {arg_str})"
-
-    def anonymous_func(self, items):
-        args = []
-        expr = items[-1]
-        for i in items[:-1]:
+    def block(self, items):
+        res = []
+        for i in items:
+            if i is None: continue
             if isinstance(i, list):
-                args = i
-        arg_str = ", ".join(args)
-        return f"(lambda {arg_str}: {expr})"
+                for sub in i:
+                    if sub: res.append(str(sub))
+            else:
+                s = str(i)
+                if s: res.append(s)
+        return res
 
-    def function_call(self, items):
-        name = items[0]
-        if isinstance(name, dict) and name.get("type") == "qualified_name":
-            name = name["full"]
-        else:
-            name = str(name)
-            
-        self.called_functions.add(name)
-        if name == "addpath" and len(items) > 2:
-            args = items[2]
-            if isinstance(args, list):
-                for a in args:
-                    if str(a).startswith("'") and str(a).endswith("'"):
-                        self.added_paths.add(str(a)[1:-1])
-
-        args = items[2] if len(items) > 3 else None
-        if name == "pi" and not args: return "np.pi"
-        arg_str = ", ".join(args) if isinstance(args, list) else (str(args) if args is not None else "")
-        return f"unilab_call({name}, {arg_str})"
+    def start(self, items):
+        return "\n".join(self.block(items))
 
     def if_stmt(self, items):
-        # items: ['if', expression, block, (elseif_clause)*, (else_clause)?, 'end']
         cond = items[1]
-        block = items[3]
-        # Wrap condition to handle numpy arrays properly
-        cond_wrapped = f"unilab_to_bool({cond})"
-        lines = [f"if {cond_wrapped}:"]
+        block = items[2]
+        lines = [f"if unilab_to_bool({cond}):"]
         lines.extend(self._indent(block))
-        for i in range(4, len(items)):
+        i = 3
+        while i < len(items):
             item = items[i]
-            if str(item) == "end": break
-            if isinstance(item, list):
-                lines.extend(item)
+            if str(item) == "elseif":
+                e_cond, e_block = items[i+1], items[i+2]
+                lines.append(f"elif unilab_to_bool({e_cond}):")
+                lines.extend(self._indent(e_block))
+                i += 3
+            elif str(item) == "else":
+                lines.append("else:")
+                lines.extend(self._indent(items[i+1]))
+                i += 2
+            else: i += 1
         return lines
 
-    def elseif_clause(self, items):
-        # items: ['elseif', expression, separator, block]
-        cond = items[1]
-        block = items[3]
-        cond_wrapped = f"unilab_to_bool({cond})"
-        return [f"elif {cond_wrapped}:"] + self._indent(block)
-
-    def else_clause(self, items):
-        # items: ['else', block]
-        block = items[1]
-        return ["else:"] + self._indent(block)
-
     def for_stmt(self, items):
-        # items: ['for', var, '=', expr, separator, block, 'end']
-        var = items[1]
-        expr = items[3]
-        block = items[5]
-        self.variables.add(str(var))
-        return [f"for {var} in unilab_iter({expr}):"] + self._indent(block)
+        var, expr, block = str(items[1]), items[3], items[4]
+        self.variables.add(var)
+        lines = [f"for {var} in unilab_iter({expr}):"]
+        lines.extend(self._indent(block))
+        return lines
 
     def while_stmt(self, items):
-        # items: ['while', expr, separator, block, 'end']
-        cond = items[1]
-        block = items[3]
-        cond_wrapped = f"unilab_to_bool({cond})"
-        return [f"while {cond_wrapped}:"] + self._indent(block)
+        cond, block = items[1], items[2]
+        lines = [f"while unilab_to_bool({cond}):"]
+        lines.extend(self._indent(block))
+        return lines
 
     def switch_stmt(self, items):
-        # items: [SWITCH, expression, separator*, case_clause*, otherwise_clause?, END]
         expr = items[1]
         self._switch_depth += 1
         var_name = f"_sw_{self._switch_depth}"
         lines = [f"{var_name} = {expr}"]
+        
+        # items[2:-1] are case_clause* and [otherwise_clause]
+        clauses = items[2:-1]
         first = True
-        for i in range(2, len(items) - 1):
-            clause = items[i]
-            if isinstance(clause, str) or clause is None: continue
-            if isinstance(clause, list) and len(clause) > 0:
+        for clause in clauses:
+            if isinstance(clause, list):
                 if first:
                     clause[0] = clause[0].replace("elif", "if").replace("_sw_tmp", var_name)
                     first = False
@@ -546,15 +454,11 @@ class UniLabToPython(Transformer):
         return lines
 
     def case_clause(self, items):
-        # items: [CASE, expression, separator, block]
-        expr = items[1]
-        block = items[3]
+        expr, block = items[1], items[2]
         return [f"elif _sw_tmp == {expr}:"] + self._indent(block)
 
     def otherwise_clause(self, items):
-        # items: [OTHERWISE, block]
-        block = items[1]
-        return ["else:"] + self._indent(block)
+        return ["else:"] + self._indent(items[1])
 
     def try_stmt(self, items):
         lines = ["try:"]
@@ -563,89 +467,107 @@ class UniLabToPython(Transformer):
         idx = 2
         if idx < len(items) and str(items[idx]) == "catch":
             idx += 1
-            err_var = None
-            if not str(items[idx]) == "end" and not isinstance(items[idx], list):
-                err_var = items[idx]
-                idx += 1
+            err_var = items[idx] if not isinstance(items[idx], list) and str(items[idx]) != "END" else None
+            if err_var: idx += 1
             catch_block = items[idx]
-            if err_var:
-                lines.append(f"except Exception as {err_var}:")
-            else:
-                lines.append("except Exception:")
+            lines.append(f"except Exception as {err_var if err_var else 'e'}:")
             lines.extend(self._indent(catch_block))
         return lines
 
-    def global_stmt(self, items):
-        names = [str(i) for i in items[1:]]
-        for n in names: self.globals.add(n)
-        return [f"global {', '.join(names)}"]
-
-    def function_ret(self, items):
-        return items[0]
-
-    def single_ret(self, items): return str(items[0])
-    def multi_ret(self, items):
-        return [str(i) for i in items if str(i) not in ["[", "]", ","]]
-
-    def arg_list(self, items):
-        return [str(i) for i in items if str(i) != ","]
-
     def function_def(self, items):
-        # items: ['function', ret?, name, '(', args?, ')', separator, block, 'end']
-        filtered = [i for i in items if str(i) not in ["function", "(", ")", "end"]]
-        if len(filtered) == 5:
-            rets, name, args, sep, block = filtered
-        elif len(filtered) == 4:
-            if isinstance(filtered[0], (str, list)) and not isinstance(filtered[1], list):
-                 rets, name, args, block = filtered[0], filtered[1], None, filtered[3]
-            else:
-                 rets, name, args, block = None, filtered[0], filtered[1], filtered[3]
-        else:
-            rets, name, args, block = None, filtered[0], None, filtered[2]
-
-        arg_str = ""
-        if args:
-            arg_names = [str(a) for a in (args if isinstance(args, list) else [args])]
-            arg_names = [a for a in arg_names if a not in [",", ";"]]
-            arg_str = ", ".join([f"{a}=None" for a in arg_names])
-
-        lines = [f"def {name}({arg_str}):"]
-        lines.append("    global ans")
-        if args:
-            arg_names = [str(a) for a in (args if isinstance(args, list) else [args])]
-            arg_names = [a for a in arg_names if a not in [",", ";"]]
-            lines.append(f"    nargin = unilab_nargin_sum(1 for x in [{', '.join(arg_names)}] if x is not None)")
-        else:
-            lines.append("    nargin = 0")
-        lines.extend(self._indent(block))
-        if rets:
-            if isinstance(rets, list): lines.append(f"    return ({', '.join(rets)})")
-            else: lines.append(f"    return {rets}")
+        ret = items[1] if not isinstance(items[1], str) or items[1] not in ["(", ")"] else None
+        name = str(items[2]) if ret else str(items[1])
+        params = items[4] if (ret and len(items) > 4) or (not ret and len(items) > 3) else []
+        if isinstance(params, str): params = []
+        block = items[-2]
+        
+        raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
+        param_list_with_defaults = [f"{p}=None" for p in raw_params]
+        
+        lines = [f"def {name}({', '.join(param_list_with_defaults)}):"]
+        inner = [f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params)}] if x is not None)"]
+        inner.extend(block)
+        if ret:
+            if isinstance(ret, list): # From lhs_list
+                inner.append(f"return ({', '.join(ret)})")
+            else: inner.append(f"return {ret}")
+        lines.extend(self._indent(inner))
         return lines
+
+    def return_stmt(self, items): return "return"
+    def break_stmt(self, items): return "break"
+    def continue_stmt(self, items): return "continue"
+
+    def func_params(self, items): return [str(i) for i in items if str(i) != ","]
+    def call_args(self, items): return [str(i) for i in items if str(i) != ","]
+    def matrix(self, items):
+        rows = []
+        current_row = []
+        for item in items:
+            if isinstance(item, list):
+                current_row.extend(item)
+            elif item is not None and str(item).strip() in [";", "\n", ""]:
+                if str(item).strip() == ";" or "\n" in str(item):
+                    if current_row:
+                        rows.append(current_row)
+                        current_row = []
+        if current_row:
+            rows.append(current_row)
+        
+        row_strs = [f"[{', '.join(r)}]" for r in rows]
+        return f"unilab_matrix_concat({', '.join(row_strs)})"
+
+    def cell_array(self, items):
+        rows = []
+        current_row = []
+        for item in items:
+            if isinstance(item, list):
+                current_row.extend(item)
+            elif item is not None and str(item).strip() in [";", "\n", ""]:
+                if str(item).strip() == ";" or "\n" in str(item):
+                    if current_row:
+                        rows.append(current_row)
+                        current_row = []
+        if current_row:
+            rows.append(current_row)
+
+        if not rows: return "unilab_cell_concat()"
+        row_strs = [f"[{', '.join(map(str, r))}]" for r in rows]
+        return f"unilab_cell_concat({', '.join(row_strs)})"
+    def row(self, items): return [str(i) for i in items if str(i) != ","]
+    def anonymous_func(self, items):
+        params = items[2] if len(items) > 3 else []
+        expr = items[-1]
+        param_list = [str(p) for p in params if str(p) not in [",", "(", ")"]]
+        return f"(lambda {', '.join(param_list)}: ({expr}))"
+    def cmd_call(self, items):
+        name, args = str(items[0]), [f"'{str(a)}'" for a in items[1:]]
+        return f"{name}({', '.join(args)})"
+    def clear_stmt(self, items):
+        names = [str(i) for i in items if str(i) not in ["clear", " "]]
+        if not names or "all" in names: return "unilab_clear_workspace(globals())"
+        quoted = [f"'{n}'" for n in names]
+        return f"unilab_clear_variables(globals(), [{', '.join(quoted)}])"
+    def global_stmt(self, items):
+        names = [str(i) for i in items if str(i) != "global"]
+        for n in names: self.globals.add(n)
+        return f"global {', '.join(names)}"
+    def import_stmt(self, items): return f"import {items[1]}"
+    def export_stmt(self, items): return f"# export {items[1]}"
+    def atom_group(self, items): return items[1]
 
 class UniLabTranspiler:
     def __init__(self):
-        self.parser = Lark(UniLab_GRAMMAR, parser='earley')
+        self.parser = Lark(UniLab_GRAMMAR, parser='earley', ambiguity='resolve')
         self.transformer = UniLabToPython()
-
-    def transpile(self, matlab_code):
-        self.transformer.variables = set()
-        self.transformer.globals = set()
-        self.transformer.called_functions = set()
-        self.transformer.added_paths = set()
-        tree = self.parser.parse(matlab_code)
-        result = self.transformer.transform(tree)
-        return str(result), self.transformer.called_functions, self.transformer.added_paths
-
-def transpile(UniLab_code):
-    transpiler = UniLabTranspiler()
-    return transpiler.transpile(UniLab_code)
+    def transpile(self, code: str):
+        try:
+            tree = self.parser.parse(code + "\n")
+            self.transformer.variables, self.transformer.called_functions, self.transformer.added_paths = set(), set(), set()
+            result = self.transformer.transform(tree)
+            return str(result), self.transformer.called_functions, self.transformer.added_paths
+        except Exception as e: raise Exception(f"Transpilation Error: {str(e)}")
 
 if __name__ == "__main__":
     t = UniLabTranspiler()
-    test_code = """
-    function [y] = my_func(x)
-        y = x * 2;
-    end
-    """
-    print(t.transpile(test_code))
+    print(t.transpile("disp('hello')"))

@@ -63,18 +63,6 @@ class TranspilerEngine(BaseEngine):
             '__builtins__': __builtins__,
             'addpath': self._add_path,
             'ans': None,
-            'inf': np.inf,
-            'Inf': np.inf,
-            'nan': np.nan,
-            'NaN': np.nan,
-            'pi': np.pi,
-            'eps': np.finfo(float).eps,
-            'i': 1j,
-            'j': 1j,
-            'realmax': np.finfo(float).max,
-            'realmin': np.finfo(float).tiny,
-            'true': True,
-            'false': False,
         })
         
         # Inject runtime functions
@@ -225,8 +213,13 @@ class TranspilerEngine(BaseEngine):
                 
                 # Save workspace after successful execution
                 self._save_workspace()
+            except NameError as ne:
+                success = False
+                var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
+                err.write(f"Could not recognise command or function '{var_name}'")
             except Exception as e:
                 success = False
+                # For other errors, show a cleaner message if possible, or the last line of traceback
                 import traceback
                 err.write(traceback.format_exc())
             finally:

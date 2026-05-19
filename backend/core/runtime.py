@@ -4,6 +4,7 @@ import os
 import io
 import time
 import pathlib
+import builtins
 import scipy.signal as signal
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
 from backend.core.simulation.engine import unilab_simulate as simulate
@@ -46,6 +47,20 @@ def unilab_ellip(*args, **kwargs):
     return signal.ellip(*args, **kwargs)
 
 def unilab_tf(num, den): return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
+
+# --- Standard UniLab Constants ---
+inf = np.inf
+Inf = np.inf
+nan = np.nan
+NaN = np.nan
+pi = np.pi
+eps = np.finfo(float).eps
+i = 1j
+j = 1j
+realmax = np.finfo(float).max
+realmin = np.finfo(float).tiny
+true = True
+false = False
 
 def unilab_tf2ss(num, den):
     return signal.tf2ss(_unilab_vec(num), _unilab_vec(den))
@@ -330,7 +345,7 @@ def _format_value(val):
         return _format_zpk(val)
     if isinstance(val, signal.StateSpace):
         return _format_ss(val)
-    if hasattr(val, '__module__') and 'sympy' in val.__module__:
+    if hasattr(val, '__module__') and val.__module__ is not None and 'sympy' in val.__module__:
         import sympy
         try:
             return sympy.pretty(val, use_unicode=True)
@@ -404,7 +419,7 @@ def unilab_range(start, stop, step=1):
         return slice(None, int(stop), int(step))
     
     # Standard numerical range
-    return np.arange(start, stop + step, step)
+    return np.atleast_2d(np.arange(start, stop + step, step))
 
 def unilab_call(obj, *args):
     if callable(obj):
@@ -428,8 +443,11 @@ def unilab_call(obj, *args):
             flat = obj.flatten()
             if isinstance(idx, (int, np.integer, float, np.floating)): return flat[int(idx)-1]
             if isinstance(idx, (list, np.ndarray, slice)): 
+                if isinstance(idx, slice) and idx == slice(None):
+                    return flat.reshape(-1, 1)
                 res = flat[np.asarray(idx).astype(int) - 1] if not isinstance(idx, slice) else flat[idx]
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
+                if isinstance(res, np.ndarray) and res.ndim == 1: return res.reshape(1, -1)
                 return res
         if isinstance(obj, (list, tuple)):
             if isinstance(idx, UnilabEnd):
@@ -444,7 +462,11 @@ def unilab_call(obj, *args):
         elif isinstance(arg, (int, np.integer, float, np.floating)):
             processed.append(int(arg)-1)
         elif isinstance(arg, (list, np.ndarray)) and not (isinstance(arg, np.ndarray) and arg.dtype == bool):
-            processed.append(np.asarray(arg).astype(int) - 1)
+            arr_arg = np.asarray(arg)
+            if arr_arg.ndim > 1 and (arr_arg.shape[0] == 1 or arr_arg.shape[1] == 1):
+                processed.append(arr_arg.flatten().astype(int) - 1)
+            else:
+                processed.append(arr_arg.astype(int) - 1)
         elif isinstance(arg, np.ndarray) and arg.dtype == bool:
             processed.append(arg.flatten() if arg.ndim > 1 else arg)
         else:
@@ -455,7 +477,7 @@ def unilab_call(obj, *args):
     # If the result is an array but we indexed with multiple values, 
     # try to keep it 2D if the original was 2D and we sliced.
     if isinstance(res, np.ndarray) and isinstance(obj, np.ndarray) and obj.ndim >= 2:
-        if res.ndim == 1:
+        if res.ndim == 1 and len(args) >= 2:
             # If we took a column, make it Mx1. If we took a row, make it 1xN.
             # Heuristic: if first arg was a slice and second was int, it's a column.
             if isinstance(args[0], (slice, str)) and isinstance(args[1], (int, np.integer, float, np.floating)):
@@ -647,7 +669,7 @@ def unilab_matrix_concat(*rows):
         items = rows[0]
 
         # If any item is an array (check this FIRST before string check)
-        if any(isinstance(r, np.ndarray) for r in items):
+        if builtins.any(isinstance(r, np.ndarray) for r in items):
             try:
                 processed = [np.atleast_2d(r) for r in items]
                 # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
@@ -657,7 +679,7 @@ def unilab_matrix_concat(*rows):
                 return np.array(items, dtype=object)
 
         # Check for MATLAB-style string concatenation ['abc', 'def'] -> 'abcdef'
-        if all(isinstance(r, (str, np.str_)) for r in items):
+        if builtins.all(isinstance(r, (str, np.str_)) for r in items):
             return "".join(str(r) for r in items)
 
         return np.atleast_2d(items)
@@ -667,11 +689,11 @@ def unilab_matrix_concat(*rows):
         processed_rows = []
         for r in rows:
             if isinstance(r, (list, np.ndarray)):
-                if isinstance(r, list) and any(isinstance(item, np.ndarray) for item in r):
+                if isinstance(r, list) and builtins.any(isinstance(item, np.ndarray) for item in r):
                     # Handle mixed row [X, 1, 2]
                     p_row = np.hstack([np.atleast_2d(item) for item in r])
                     processed_rows.append(p_row)
-                elif isinstance(r, list) and all(isinstance(item, (str, np.str_)) for item in r):
+                elif isinstance(r, list) and builtins.all(isinstance(item, (str, np.str_)) for item in r):
                     # Try numeric coercion for string lists (transpiler stringifies number tokens)
                     try:
                         numeric = [float(item) for item in r]
@@ -690,19 +712,24 @@ def unilab_matrix_concat(*rows):
         return np.vstack(processed_rows)
     except:
         # Fallback
-        if all(isinstance(r, (str, np.str_)) for r in rows):
+        if builtins.all(isinstance(r, (str, np.str_)) for r in rows):
             return "".join(str(r) for r in rows)
         return np.array(rows, dtype=object)
 def unilab_nargin_sum(gen):
     import builtins
     return builtins.sum(gen)
 
-def unilab_cell_concat(*args):
-    res = []
-    for a in args:
-        if isinstance(a, list): res.extend(a)
-        else: res.append(a)
-    return res
+def unilab_cell_concat(*rows):
+    if not rows: return np.empty((0, 0), dtype=object)
+    try:
+        processed = [np.array(r, dtype=object) for r in rows]
+        return np.vstack(processed)
+    except:
+        res = []
+        for r in rows:
+            if isinstance(r, list): res.extend(r)
+            else: res.append(r)
+        return res
 
 def cell(*args):
     if len(args) == 0: return np.empty((0, 0), dtype=object)
@@ -897,9 +924,17 @@ def length(x):
     return 1
 
 def size(x, dim=None):
-    s = np.shape(x)
-    if len(s) == 0: s = (1, len(x)) if isinstance(x, (str, bytes)) else (1, 1)
+    try:
+        s = np.shape(x)
+    except:
+        if isinstance(x, list):
+            s = (len(x),)
+        else:
+            s = ()
+            
+    if len(s) == 0: s = (1, len(x)) if isinstance(x, (str, bytes, list)) else (1, 1)
     elif len(s) == 1: s = (1, s[0])
+    
     if dim is not None: return s[dim-1] if dim <= len(s) else 1
     return s
 
@@ -936,8 +971,8 @@ def svd(x):
     U, S, Vh = np.linalg.svd(x)
     return U, np.diag(S), Vh.T
 
-def linspace(start, stop, n=100): return np.linspace(start, stop, int(n))
-def logspace(start, stop, n=50): return np.logspace(start, stop, int(n))
+def linspace(start, stop, n=100): return np.atleast_2d(np.linspace(start, stop, int(n)))
+def logspace(start, stop, n=50): return np.atleast_2d(np.logspace(start, stop, int(n)))
 def meshgrid(x, y=None): return np.meshgrid(x, y if y is not None else x)
 def randperm(n): return np.random.permutation(int(n)) + 1
 def _is_symbolic(x):
@@ -1022,6 +1057,78 @@ def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
 def var(x, axis=None): return np.var(x, ddof=1, axis=axis)
 def std(x, axis=None): return np.std(x, ddof=1, axis=axis)
 
+def fprintf(fmt, *args):
+    import sys
+    if not args:
+        sys.stdout.write(str(fmt))
+    else:
+        if isinstance(fmt, (int, float)):
+             fmt = args[0]
+             args = args[1:]
+        try:
+            sys.stdout.write(fmt % args)
+        except:
+            sys.stdout.write(str(fmt))
+    sys.stdout.flush()
+
+class UnilabCVPartition:
+    def __init__(self, n, method='HoldOut', p=0.3):
+        self.n = n
+        self.method = method
+        self.p = p
+        indices = np.random.permutation(n)
+        if method.lower() == 'holdout':
+            n_test = int(n * p)
+            self.test_indices = indices[:n_test]
+            self.train_indices = indices[n_test:]
+        else:
+            self.train_indices = indices
+            self.test_indices = np.array([])
+
+def cvpartition(n, method='HoldOut', p=0.3):
+    return UnilabCVPartition(int(n), method, p)
+
+def training(cv):
+    mask = np.zeros(cv.n, dtype=bool)
+    mask[cv.train_indices] = True
+    return mask
+
+def test(cv):
+    mask = np.zeros(cv.n, dtype=bool)
+    mask[cv.test_indices] = True
+    return mask
+
+def rng(seed=None, generator=None):
+    """Control the random number generator."""
+    if seed is not None:
+        if isinstance(seed, (int, np.integer)):
+            np.random.seed(int(seed))
+        elif str(seed) == 'default':
+            np.random.seed(0)
+    return None
+
+_tic_stack = []
+
+def tic():
+    """Start a stopwatch timer."""
+    import time
+    _tic_stack.append(time.time())
+
+def toc():
+    """Read the stopwatch timer."""
+    import time
+    if not _tic_stack:
+        print("Error: toc called without a preceding tic.")
+        return 0.0
+    elapsed = time.time() - _tic_stack.pop()
+    print(f"Elapsed time is {elapsed:.6f} seconds.")
+    return elapsed
+
+def clc():
+    """Clear Command Window."""
+    import os
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 def rand(*args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.rand(*args[0])
     return np.random.rand(*args)
@@ -1048,7 +1155,12 @@ def diag(v, k=0):
 
 def num2str(x, precision=None):
     if precision is not None:
-        return f"{x:.{precision}f}"
+        if isinstance(precision, str) and '%' in precision:
+            return precision % x
+        try:
+            return f"{x:.{precision}f}"
+        except:
+            return str(x)
     return str(x)
 
 def mat2str(x):
@@ -1057,12 +1169,10 @@ def mat2str(x):
     return str(x)
 
 def sprintf(fmt, *args):
-    # MATLAB uses % for formatting, similar to Python's old style
-    # but we need to handle the case where fmt contains MATLAB-style formatters
     try:
         return fmt % args
     except:
-        return fmt # Fallback
+        return str(fmt)
 
 def _unilab_refresh_graph():
     try:
@@ -1364,15 +1474,124 @@ def _terminal_heatmap(M):
     _unilab_refresh_graph()
     plt.close()
 
+def _parse_matlab_style_args(args):
+    MATLAB_PROPS = {
+        'linecolor', 'linewidth', 'markerfacecolor', 'markeredgecolor',
+        'markersize', 'displayname', 'location', 'name', 'position',
+        'color', 'edgecolor', 'facecolor', 'marker', 'linestyle', 'alpha',
+        'interpreter', 'fontweight', 'fontsize'
+    }
+    
+    pos_args = []
+    kwargs = {}
+    i = 0
+    while i < len(args):
+        if i + 1 < len(args) and isinstance(args[i], str) and args[i].lower() in MATLAB_PROPS:
+            key = args[i].lower()
+            val = args[i+1]
+            key_map = {
+                'linecolor': 'edgecolor',
+                'markerfacecolor': 'facecolor',
+                'markeredgecolor': 'edgecolor',
+                'displayname': 'label',
+                'location': 'loc'
+            }
+            kwargs[key_map.get(key, key)] = val
+            i += 2
+        else:
+            pos_args.append(args[i])
+            i += 1
+    return pos_args, kwargs
+
 def scatter(*args, **kwargs):
-    res = plt.scatter(*args, **kwargs); _unilab_refresh_graph(); return res
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    
+    # Matplotlib scatter is filled by default. Remove MATLAB flag.
+    p_args = [a for a in p_args if not (isinstance(a, str) and a == 'filled')]
+    
+    # Map 'markersize' to 's'
+    if 'markersize' in kwargs:
+        kwargs['s'] = kwargs.pop('markersize')
+            
+    res = plt.scatter(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
 def bar(*args, **kwargs):
-    res = plt.bar(*args, **kwargs); _unilab_refresh_graph(); return res
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    res = plt.bar(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
 def hist(*args, **kwargs):
-    res = plt.hist(*args, **kwargs); _unilab_refresh_graph(); return res
-def title(t): plt.title(t, fontweight='bold', fontsize=22); _unilab_refresh_graph()
-def xlabel(l): plt.xlabel(l, fontweight='bold', fontsize=18); _unilab_refresh_graph()
-def ylabel(l): plt.ylabel(l, fontweight='bold', fontsize=18); _unilab_refresh_graph()
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
+def title(t, *args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    plt.title(t, fontweight='bold', fontsize=22, **kwargs); _unilab_refresh_graph()
+
+def xlabel(l, *args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    plt.xlabel(l, fontweight='bold', fontsize=18, **kwargs); _unilab_refresh_graph()
+
+def ylabel(l, *args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    plt.ylabel(l, fontweight='bold', fontsize=18, **kwargs); _unilab_refresh_graph()
+
+def gca(): return plt.gca()
+
+def figure(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    # Map some figure properties
+    if 'name' in kwargs: kwargs.pop('name')
+    if 'position' in kwargs: kwargs.pop('position')
+    return plt.figure(**kwargs)
+
+def subplot(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    return plt.subplot(*p_args, **kwargs)
+
+def hold(state): pass
+def axis(state): plt.axis(state); _unilab_refresh_graph()
+
+def legend(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if len(p_args) > 2:
+        p_args = [p_args]
+    plt.legend(*p_args, **kwargs); _unilab_refresh_graph()
+
+def contourf(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    # MATLAB often passes levels as a 1xN matrix, Matplotlib wants 1D
+    if len(p_args) >= 4 and isinstance(p_args[3], np.ndarray):
+        p_args[3] = p_args[3].flatten()
+    res = plt.contourf(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
+def colormap(*args):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    if len(p_args) > 0:
+        cmap = p_args[-1]
+        if isinstance(cmap, np.ndarray):
+            from matplotlib.colors import ListedColormap
+            import matplotlib as mpl
+            cmap_obj = ListedColormap(cmap, name='unilab_custom')
+            try:
+                mpl.colormaps.register(cmap_obj, force=True)
+            except:
+                # Older matplotlib
+                plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
+            plt.set_cmap('unilab_custom')
+        else:
+            plt.set_cmap(cmap)
+    _unilab_refresh_graph()
+
 def grid(state='on'):
     plt.grid(state == 'on' or state == True or state == 1, linewidth=1.5); _unilab_refresh_graph()
 
@@ -1543,12 +1762,27 @@ def list_libraries():
     print("\n" + "-" * 50)
 
 def unilab_clear_workspace(g):
-    keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__'}
+    """Clears all variables from the workspace except protected ones."""
+    import types
+    keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
+    
+    # Protect everything from this runtime module
     import backend.core.runtime as rt
     for name in dir(rt):
         if not name.startswith('_'): keys_to_keep.add(name)
+        
+    # Also protect any modules (libraries like ml, stats)
+    modules_to_keep = [k for k, v in g.items() if isinstance(v, types.ModuleType)]
+    keys_to_keep.update(modules_to_keep)
+    
     to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
     for k in to_remove: del g[k]
+
+def unilab_clear_variables(g, names):
+    """Clears specific variables from the workspace."""
+    for name in names:
+        if name in g:
+            del g[name]
 
 def unilab_iter(x):
     """Iterates over a UniLab object (columns for 2D arrays)."""
@@ -1573,28 +1807,3 @@ def struct(*args):
         if i+1 < len(args):
             res[args[i]] = args[i+1]
     return res
-
-class UnilabEnd:
-    def __init__(self, offset=0):
-        self.offset = offset
-    def __add__(self, other):
-        return UnilabEnd(self.offset + other)
-    def __sub__(self, other):
-        return UnilabEnd(self.offset - other)
-    def __radd__(self, other):
-        return UnilabEnd(self.offset + other)
-    def __repr__(self):
-        return f"unilab_end{'' if self.offset == 0 else ('+' + str(self.offset) if self.offset > 0 else str(self.offset))}"
-
-unilab_end = UnilabEnd()
-
-def unilab_range(start, stop, step=1):
-    if isinstance(stop, UnilabEnd):
-        # Return a slice that unilab_call/unilab_set will handle
-        return slice(int(start) - 1, None if stop.offset == 0 else stop.offset, int(step))
-    if isinstance(start, UnilabEnd):
-        # Very rare but possible
-        return slice(None, int(stop), int(step))
-    
-    # Standard numerical range
-    return np.arange(start, stop + step, step)
