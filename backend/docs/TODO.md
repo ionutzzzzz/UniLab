@@ -227,7 +227,7 @@
 ## Notes
 
 - UniLab is positioned as a modern alternative to MATLAB/Octave
-- Focus on accessibility: web-based, no installation needed
+- Focus on accessibility: web-based or application, limited installation needed
 - Key differentiator: modern UI + open-source + extensible
 - Timeline: Realistic to reach v1.0 in 12-18 months
 - Community contributions will be critical for library ecosystem
