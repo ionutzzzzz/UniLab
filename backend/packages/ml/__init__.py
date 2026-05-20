@@ -399,20 +399,21 @@ class KMeans:
         self.centroids = None
 
     def fit(self, X, callback=None):
-        X = np.asarray(X)
+        X = np.asarray(X).astype(float)
         if self.centroids is None:
             if self.init == 'random': self.centroids = X[np.random.choice(len(X), self.k, replace=False)]
             else:
                 self.centroids = [X[np.random.randint(len(X))]]
                 for _ in range(1, self.k):
                     dists = np.array([min([np.sum((x-c)**2) for c in self.centroids]) for x in X])
-                    self.centroids.append(X[np.random.choice(len(X), p=dists/dists.sum())])
+                    probs = (dists/dists.sum()).flatten()
+                    self.centroids.append(X[np.random.choice(len(X), p=probs)])
                 self.centroids = np.array(self.centroids)
         for i in range(self.max_iters):
             labels = np.argmin(np.linalg.norm(X[:, np.newaxis] - self.centroids, axis=2), axis=1)
             new_c = np.array([X[labels==j].mean(axis=0) if np.any(labels==j) else self.centroids[j] for j in range(self.k)])
             if callback:
-                if callback(i + 1, self.centroids, labels) is False:
+                if callback(i + 1, self.centroids, labels.astype(float)) is False:
                     break
             if np.allclose(self.centroids, new_c, atol=self.tol): break
             self.centroids = new_c
@@ -448,30 +449,44 @@ class NeuralNet:
         return self
             
     def forward(self, x, training=True):
-        self.activations, self.masks, curr_a = [x], [], x
+        activations, masks, curr_a = [x], [], x
         for i in range(len(self.weights)):
             z = np.dot(curr_a, self.weights[i]) + self.biases[i]
             curr_a = softmax(z) if i == len(self.weights)-1 and self.layers[-1] > 1 else self.act_func(z)
             if training and self.dropout > 0 and i < len(self.weights)-1:
                 mask = (np.random.rand(*curr_a.shape) > self.dropout).astype(float)/(1.0-self.dropout)
                 curr_a *= mask
-                self.masks.append(mask)
-            else: self.masks.append(None)
-            self.activations.append(curr_a)
+                masks.append(mask)
+            else: masks.append(None)
+            activations.append(curr_a)
+        if training:
+            self.activations, self.masks = activations, masks
         return curr_a
         
     def train(self, X, y, epochs=1000, lr=0.001, l1=0.0, l2=0.01, callback=None):
         X, y = np.asarray(X), np.asarray(y).reshape(-1, 1 if len(y.shape)==1 or y.shape[1]==1 else y.shape[1])
         mw, vw, mb, vb = [np.zeros_like(w) for w in self.weights], [np.zeros_like(w) for w in self.weights], [np.zeros_like(b) for b in self.biases], [np.zeros_like(b) for b in self.biases]
         for t in range(1, epochs + 1):
-            out = self.forward(X, training=True)
+            # Use a local version of forward logic to be thread-safe with simulator calls
+            activations, masks, curr_a = [X], [], X
+            for i in range(len(self.weights)):
+                z = np.dot(curr_a, self.weights[i]) + self.biases[i]
+                curr_a = softmax(z) if i == len(self.weights)-1 and self.layers[-1] > 1 else self.act_func(z)
+                if self.dropout > 0 and i < len(self.weights)-1:
+                    mask = (np.random.rand(*curr_a.shape) > self.dropout).astype(float)/(1.0-self.dropout)
+                    curr_a *= mask
+                    masks.append(mask)
+                else: masks.append(None)
+                activations.append(curr_a)
+                
+            out = activations[-1]
             deltas = [out - y]
             for i in range(len(self.weights)-1, 0, -1):
-                d = deltas[0].dot(self.weights[i].T) * self.act_deriv(self.activations[i])
-                if self.masks[i-1] is not None: d *= self.masks[i-1]
+                d = deltas[0].dot(self.weights[i].T) * self.act_deriv(activations[i])
+                if masks[i-1] is not None: d *= masks[i-1]
                 deltas.insert(0, d)
             for i in range(len(self.weights)):
-                gw = self.activations[i].T.dot(deltas[i])/len(X) + l2*self.weights[i] + l1*np.sign(self.weights[i])
+                gw = activations[i].T.dot(deltas[i])/len(X) + l2*self.weights[i] + l1*np.sign(self.weights[i])
                 gb = np.mean(deltas[i], axis=0, keepdims=True)
                 if self.optimizer == 'adam':
                     mw[i] = 0.9*mw[i] + 0.1*gw; vw[i] = 0.999*vw[i] + 0.001*(gw**2)

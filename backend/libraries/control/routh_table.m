@@ -9,7 +9,7 @@ function RT = routh_table(coeff)
     RT(2, 1:length(row2)) = row2;
 
     for i = 3:n
-        for j = 1:num_cols-1
+        for j = 1:(num_cols-1)
             a = RT(i-1, 1);
             
             if a == 0

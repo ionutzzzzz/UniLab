@@ -83,6 +83,15 @@ class TranspilerEngine(BaseEngine):
             if not name.startswith('_'):
                 self.globals[name] = getattr(runtime, name)
         
+        # Ensure builtins don't shadow runtime functions
+        self.globals['abs'] = runtime.unilab_abs
+        self.globals['round'] = runtime.round
+        self.globals['floor'] = runtime.floor
+        self.globals['ceil'] = runtime.ceil
+        self.globals['max'] = runtime.max
+        self.globals['min'] = runtime.min
+        self.globals['sum'] = runtime.sum
+        
         # Load custom packages from backend/packages
         self._load_custom_packages()
         
@@ -247,24 +256,30 @@ class TranspilerEngine(BaseEngine):
             
             plots = []
             if plot_indices:
-                # Keep track of which line we'll put the render on (the last one)
-                render_target_idx = plot_indices[-1]
+                render_func = self.globals.get('render_image_terminal')
+                
+                # Deduplicate: only keep the last update for each unique figure
+                fig_to_last_marker = {}
                 for idx in plot_indices:
                     line = stdout_lines[idx]
-                    p = line.split("::GRAPHICAL_PLOT::", 1)[1].strip()
-                    plots.append(p)
+                    parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
+                    filename = parts[0].strip()
+                    fig_num = parts[1].strip() if len(parts) > 1 else "default"
+                    fig_to_last_marker[fig_num] = (idx, filename)
+                
+                final_render_indices = {v[0] for v in fig_to_last_marker.values()}
+                
+                for idx in plot_indices:
+                    line = stdout_lines[idx]
+                    parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
+                    filename = parts[0].strip()
+                    plots.append(filename)
                     
-                    if idx == render_target_idx:
-                        # Render the final version of the plot
-                        full_path = self.workspace_path / p
-                        render_func = self.globals.get('render_image_terminal')
-                        if render_func:
-                            render_out = render_func(str(full_path))
-                            stdout_lines[idx] = render_out if render_out else ""
-                        else:
-                            stdout_lines[idx] = ""
+                    if idx in final_render_indices and render_func:
+                        full_path = self.workspace_path / filename
+                        render_out = render_func(str(full_path))
+                        stdout_lines[idx] = render_out if render_out else ""
                     else:
-                        # Hide intermediate plot markers
                         stdout_lines[idx] = ""
 
             return ExecutionResult(

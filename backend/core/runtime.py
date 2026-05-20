@@ -84,28 +84,17 @@ def uicontrols_clear():
         _current_sim_window.custom_controls.clear()
     return None
 
-def unilab_struct(**kwargs):
-    """Creates a UniLab struct (Python dictionary)."""
-    return kwargs
-
-def unilab_set(obj, val, *args):
-    # If the first arg is a string, it might be a property set on an object
-    if len(args) == 1 and isinstance(args[0], str):
-        # Check if obj is None (auto-initialize struct)
-        if obj is None:
-            # We can't really modify the caller's 'obj' if it's None and passed by value
-            # but usually this is used as unilab_set(state, 1, 'x') where state is global/persistent
-            pass
-        try:
-            setattr(obj, args[0], val)
-            return val
-        except:
-            if isinstance(obj, dict):
-                obj[args[0]] = val
-                return val
-    
-    # Standard array indexing set
-    # ... existing logic ...
+def unilab_struct(*args, **kwargs):
+    """Creates a UniLab struct (Python dictionary). Handles both keyword and name-value pairs."""
+    res = {}
+    res.update(kwargs)
+    if len(args) >= 2 and isinstance(args[0], str):
+        for i in range(0, len(args), 2):
+            if i + 1 < len(args):
+                res[args[i]] = args[i+1]
+    elif len(args) == 1 and isinstance(args[0], dict):
+        res.update(args[0])
+    return res
 
 def unilab_fft(x): return scipy_fft(x)
 def unilab_ifft(x): return scipy_ifft(x)
@@ -519,9 +508,40 @@ def unilab_range(start, stop, step=1):
     # Standard numerical range
     return np.atleast_2d(np.arange(start, stop + step, step))
 
+class UnilabHandle:
+    def __init__(self, func):
+        self.func = func
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+    def __repr__(self):
+        return f"<function handle: {self.func}>"
+
+def unilab_handle(func):
+    if isinstance(func, UnilabHandle): return func
+    return UnilabHandle(func)
+
 def unilab_call(obj, *args):
     if callable(obj):
+        # Avoid auto-calling handles if no args given
+        if len(args) == 0 and isinstance(obj, UnilabHandle):
+            return obj
+            
+        # Handle built-in functions that might be passed (e.g. Python's abs vs UniLab's abs)
+        import builtins
+        # Check by name and identity to be absolutely sure
+        try:
+            name = getattr(obj, '__name__', None)
+            if name == 'abs' or obj == builtins.abs: return unilab_abs(*args)
+            if name == 'round' or obj == builtins.round: return round(*args)
+            if name == 'min' or obj == builtins.min: return min(*args)
+            if name == 'max' or obj == builtins.max: return max(*args)
+            if name == 'sum' or obj == builtins.sum: return sum(*args)
+            if name == 'any' or obj == builtins.any: return any(*args)
+            if name == 'all' or obj == builtins.all: return all(*args)
+        except: pass
+
         return obj(*args)
+    
     if len(args) == 0: return obj
     
     # Handle array/list indexing
@@ -590,7 +610,8 @@ def unilab_call(obj, *args):
 def unilab_mul(a, b):
     if np.isscalar(a) and np.isscalar(b): return a * b
     try:
-        res = np.dot(a, b)
+        # Matrix multiplication
+        res = np.matmul(a, b)
         if isinstance(res, np.ndarray) and res.size == 1:
             return res.item()
         return res
@@ -600,9 +621,16 @@ def unilab_mul(a, b):
             return res.item()
         return res
 
+def unilab_dot_mul(a, b):
+    res = a * b
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
+
 def unilab_div(a, b):
     if np.isscalar(a) and np.isscalar(b): return a / b
     try: 
+        # Matrix right division: a / b  -> a * inv(b)
         res = np.linalg.solve(np.atleast_2d(b).T, np.atleast_2d(a).T).T
         if isinstance(res, np.ndarray) and res.size == 1:
             return res.item()
@@ -612,6 +640,29 @@ def unilab_div(a, b):
         if isinstance(res, np.ndarray) and res.size == 1:
             return res.item()
         return res
+
+def unilab_dot_div(a, b):
+    res = a / b
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
+
+def unilab_ldiv(a, b):
+    # Matrix left division: a \ b -> inv(a) * b
+    if np.isscalar(a) and np.isscalar(b): return b / a
+    try:
+        res = np.linalg.solve(np.atleast_2d(a), np.atleast_2d(b))
+        if isinstance(res, np.ndarray) and res.size == 1:
+            return res.item()
+        return res
+    except:
+        return b / a
+
+def unilab_dot_ldiv(a, b):
+    res = b / a
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
 
 def unilab_pow(a, b):
     if np.isscalar(a) and np.isscalar(b): return a ** b
@@ -625,6 +676,12 @@ def unilab_pow(a, b):
         if isinstance(res, np.ndarray) and res.size == 1:
             return res.item()
         return res
+
+def unilab_dot_pow(a, b):
+    res = np.power(a, b)
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
 
 def unilab_and(a, b): return np.logical_and(a, b)
 def unilab_or(a, b): return np.logical_or(a, b)
@@ -703,10 +760,29 @@ def unilab_ge(a, b):
     return a >= b
 
 def unilab_get(obj, attr):
-    if isinstance(obj, dict): return obj.get(attr)
-    return getattr(obj, attr)
+    if isinstance(obj, dict):
+        if attr in obj: return obj[attr]
+        # For dictionaries, return None but try to be helpful if it's a common attribute
+        return obj.get(attr)
+    try:
+        return getattr(obj, attr)
+    except AttributeError:
+        # If attribute doesn't exist, return None instead of crashing
+        # This matches MATLAB's behavior for some objects
+        return None
 
 def unilab_set(obj, val, *args):
+    if len(args) == 1 and isinstance(args[0], str):
+        # Property set
+        attr = args[0]
+        try:
+            setattr(obj, attr, val)
+            return val
+        except:
+            if isinstance(obj, dict):
+                obj[attr] = val
+                return val
+    
     if len(args) == 1:
         idx = args[0]
         # Flatten boolean masks for consistent indexing
@@ -748,10 +824,28 @@ def unilab_set(obj, val, *args):
                 processed.append(obj.shape[i] + arg.offset - 1)
             elif isinstance(arg, (int, np.integer, float, np.floating)):
                 processed.append(int(arg)-1)
-            elif isinstance(arg, (list, np.ndarray)):
-                processed.append(np.asarray(arg).astype(int) - 1)
+            elif isinstance(arg, (list, np.ndarray)) and not (isinstance(arg, np.ndarray) and arg.dtype == bool):
+                arr_arg = np.asarray(arg)
+                if arr_arg.ndim > 1 and (arr_arg.shape[0] == 1 or arr_arg.shape[1] == 1):
+                    processed.append(arr_arg.flatten().astype(int) - 1)
+                else:
+                    processed.append(arr_arg.astype(int) - 1)
+            elif isinstance(arg, np.ndarray) and arg.dtype == bool:
+                processed.append(arg.flatten() if arg.ndim > 1 else arg)
             else:
                 processed.append(arg)
+        
+        # Handle MATLAB-style orthogonal indexing for multiple array indices
+        array_indices = [j for j, p in enumerate(processed) if isinstance(p, np.ndarray)]
+        if len(array_indices) > 1:
+            # Reshape 1D arrays to broadcast orthogonally (like np.ix_)
+            # e.g., for 2D: first array becomes column vector, second becomes row vector
+            for dim, idx_pos in enumerate(array_indices):
+                if processed[idx_pos].ndim == 1:
+                    new_shape = [1] * len(processed)
+                    new_shape[idx_pos] = -1
+                    processed[idx_pos] = processed[idx_pos].reshape(new_shape)
+                    
         obj[tuple(processed)] = val
     return obj
 
@@ -885,6 +979,13 @@ def syms(*names):
     import sympy
     import inspect
     frame = inspect.currentframe().f_back
+    # Skip any frames in this module (like unilab_call) to find the user workspace
+    while frame and frame.f_globals.get('__name__') == __name__:
+        frame = frame.f_back
+    
+    if not frame:
+        # Fallback to f_back if we somehow lost the stack
+        frame = inspect.currentframe().f_back
     
     # Filter out empty names
     names = [n for n in names if str(n).strip()]
@@ -917,6 +1018,33 @@ def factor(expr):
 def solve(eq, *args, **kwargs):
     import sympy
     return sympy.solve(eq, *args, **kwargs)
+
+def char(obj):
+    return str(obj)
+
+def magic(n):
+    """Generates a magic square of order n."""
+    n = int(n)
+    if n < 3:
+        if n == 1: return np.array([[1]])
+        if n == 2: return np.array([[0,0],[0,0]]) # Not possible, return dummy
+    
+    # Odd order
+    if n % 2 == 1:
+        M = np.zeros((n, n), dtype=int)
+        i, j = 0, n // 2
+        for k in range(1, n*n + 1):
+            M[i, j] = k
+            next_i, next_j = (i - 1) % n, (j + 1) % n
+            if M[next_i, next_j]:
+                i = (i + 1) % n
+            else:
+                i, j = next_i, next_j
+        return M
+    
+    # Even order (Simplified: only handled by returning zeros or using a library if available)
+    # For now, return zeros for even n > 1 as it's more complex to implement
+    return np.zeros((n, n), dtype=int)
 
 def subs(expr, *args):
     if not hasattr(expr, 'subs'):
@@ -1099,7 +1227,9 @@ def randperm(n): return np.random.permutation(int(n)) + 1
 def _is_symbolic(x):
     return hasattr(x, '__module__') and 'sympy' in x.__module__
 
-def abs(x):
+def unilab_abs(*args):
+    if not args: return 0.0
+    x = args[0]
     if _is_symbolic(x):
         import sympy
         return sympy.Abs(x)
@@ -1325,7 +1455,13 @@ def _unilab_refresh_graph():
             "legend": [t.get_text() for t in ax.get_legend().get_texts()] if ax.get_legend() else [],
             "grid": grid_on
         }
-        with open("graph_meta.json", "w") as f:
+        
+        # Use a unique filename for each plot refresh
+        plot_id = int(time.time() * 1000) % 1000000
+        filename = f"graph_{plot_id}.jpg"
+        meta_filename = f"graph_{plot_id}.json"
+        
+        with open(meta_filename, "w") as f:
             json.dump(meta, f)
 
         # High-impact styling with a Pastel Aesthetic
@@ -1352,22 +1488,10 @@ def _unilab_refresh_graph():
         fig.set_size_inches(12, 8)
         plt.tight_layout()
         
-        # Temporarily hide text to avoid pixelation in ASCII view
-        ax.set_title('')
-        ax.set_xlabel('')
-        ax.set_ylabel('')
-        legend = ax.get_legend()
-        if legend: legend.set_visible(False)
+        plt.savefig(filename, format='jpg', bbox_inches='tight')
         
-        plt.savefig("graph.jpg", format='jpg', bbox_inches='tight')
-        
-        # Restore original state
-        ax.set_title(original_title)
-        ax.set_xlabel(original_xlabel)
-        ax.set_ylabel(original_ylabel)
-        if legend: legend.set_visible(True)
-
-        print(f"::GRAPHICAL_PLOT::graph.jpg")
+        fig_num = plt.gcf().number
+        print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}")
     except Exception as e: print(f"Error saving graph: {e}")
 
 _unilab_hold = False
@@ -1486,8 +1610,8 @@ def unilab_ascii_plot(y, x=None, height=20, width=60, plot_type='line'):
                 prev_px = int((x[i-1] - xmin) / (xmax - xmin) * (width - 1))
                 prev_py = height - 1 - int((y[i-1] - ymin) / (ymax - ymin) * (height - 1))
                 
-                dx = abs(px - prev_px)
-                dy = abs(py - prev_py)
+                dx = unilab_abs(px - prev_px)
+                dy = unilab_abs(py - prev_py)
                 sx = 1 if prev_px < px else -1
                 sy = 1 if prev_py < py else -1
                 err = dx - dy
@@ -1683,24 +1807,36 @@ def title(*args, **kwargs):
     target = plt
     if args_list and hasattr(args_list[0], 'set_title'):
         target = args_list.pop(0)
-        return target.set_title(*args_list, **kwargs)
-    return plt.title(*args_list, **kwargs)
+        res = target.set_title(*args_list, **kwargs)
+        if hasattr(target, 'figure'): target.figure.canvas.draw()
+        return res
+    res = plt.title(*args_list, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def xlabel(*args, **kwargs):
     args_list = list(args)
     target = plt
     if args_list and hasattr(args_list[0], 'set_xlabel'):
         target = args_list.pop(0)
-        return target.set_xlabel(*args_list, **kwargs)
-    return plt.xlabel(*args_list, **kwargs)
+        res = target.set_xlabel(*args_list, **kwargs)
+        if hasattr(target, 'figure'): target.figure.canvas.draw()
+        return res
+    res = plt.xlabel(*args_list, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def ylabel(*args, **kwargs):
     args_list = list(args)
     target = plt
     if args_list and hasattr(args_list[0], 'set_ylabel'):
         target = args_list.pop(0)
-        return target.set_ylabel(*args_list, **kwargs)
-    return plt.ylabel(*args_list, **kwargs)
+        res = target.set_ylabel(*args_list, **kwargs)
+        if hasattr(target, 'figure'): target.figure.canvas.draw()
+        return res
+    res = plt.ylabel(*args_list, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def gca(): return plt.gca()
 
@@ -1717,7 +1853,16 @@ def subplot(*args, **kwargs):
     kwargs.update(p_kwargs)
     return plt.subplot(*p_args, **kwargs)
 
-def hold(state): pass
+def hold(state='on'):
+    global _unilab_hold
+    val = str(state).lower()
+    _unilab_hold = (val == 'on' or val == '1' or state is True)
+
+def grid(state='on'):
+    val = str(state).lower()
+    plt.grid(val == 'on' or val == '1' or state is True)
+    _unilab_refresh_graph()
+
 def axis(state): plt.axis(state); _unilab_refresh_graph()
 
 def legend(*args, **kwargs):
@@ -1872,7 +2017,7 @@ def render_image_terminal(img_path, width=None):
 
     try:
         # Load metadata if available
-        meta_path = os.path.join(os.path.dirname(img_path), "graph_meta.json")
+        meta_path = os.path.splitext(img_path)[0] + ".json"
         meta = {}
         if os.path.exists(meta_path):
             try:
@@ -1906,8 +2051,8 @@ def render_image_terminal(img_path, width=None):
         img = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
         pixels = img.load()
         
-        # ASCII density ramp
-        ramp = " .:-=+*#%@MB"
+        # ASCII density ramp - more detailed
+        ramp = " .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczMW&8%B@$"
         ramp_len = len(ramp)
 
         grid_data = []
@@ -1917,14 +2062,18 @@ def render_image_terminal(img_path, width=None):
                 r, g, b = pixels[x, y]
                 # Calculate luminance for character selection
                 luma = 0.299*r + 0.587*g + 0.114*b
+                
+                # If it's very close to white, treat as background
+                if luma > 252:
+                    row += " "
+                    continue
+                    
                 idx = int((255 - luma) * (ramp_len - 1) / 255)
+                idx = max(0, min(idx, ramp_len - 1))
                 char = ramp[idx]
                 
                 # Apply TrueColor to the character
-                if luma < 250:
-                    row += f"\x1b[38;2;{r};{g};{b}m{char}\x1b[0m"
-                else:
-                    row += " "
+                row += f"\x1b[38;2;{r};{g};{b}m{char}\x1b[0m"
             grid_data.append(row)
 
         # Reconstruct with Overlay

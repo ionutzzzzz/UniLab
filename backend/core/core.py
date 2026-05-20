@@ -33,7 +33,9 @@ UniLab_GRAMMAR = r"""
               | expr_stmt
               | command_call
 
-    assignment: (lhs_list EQUAL | postfix_expr EQUAL) expression
+    ?assignment: multi_assignment | single_assignment
+    multi_assignment.10: lhs_list EQUAL expression
+    single_assignment: postfix_expr EQUAL expression
     lhs_list: LBRACKET (IDENTIFIER (COMMA? IDENTIFIER)*)? RBRACKET
     
     if_stmt: IF expression block (ELSEIF expression block)* [ELSE block] END
@@ -62,16 +64,18 @@ UniLab_GRAMMAR = r"""
     
     expr_stmt: expression
     
-    ?expression: range_expr
-    ?range_expr: logical_or
-               | logical_or COLON logical_or -> range2
-               | logical_or COLON logical_or COLON logical_or -> range3
+    ?expression: anonymous_func | logical_or
     
     ?logical_or: logical_and (OR logical_and)*
     ?logical_and: comparison (AND comparison)*
-    ?comparison: addition (COMP_OP addition)*
-    ?addition: multiplication (ADD_OP multiplication)*
-    ?multiplication: power (MUL_OP power)*
+    ?comparison: range_expr (COMP_OP range_expr)*
+    
+    ?range_expr: addition
+               | addition COLON addition -> range2
+               | addition COLON addition COLON addition -> range3
+
+    ?addition.5: multiplication (ADD_OP multiplication)*
+    ?multiplication.5: power (MUL_OP power)*
     ?power: unary (POW_OP unary)*
     ?unary: UNARY_OP unary | postfix_expr
     
@@ -81,19 +85,20 @@ UniLab_GRAMMAR = r"""
                  | postfix_expr QUOTE -> transpose
                  | postfix_expr DOT IDENTIFIER -> attr_access
 
-    function_call.2: postfix_expr LPAR call_args? RPAR
-    cell_indexing.2: postfix_expr LBRACE call_args? RBRACE
+    function_call.10: postfix_expr LPAR call_args? RPAR
+    cell_indexing.10: postfix_expr LBRACE call_args? RBRACE
 
     ?atom: NUMBER                    -> number
          | STRING                    -> string
+         | function_handle
          | END                       -> end_expr
-         | anonymous_func
-         | qualified_name            -> var
+         | IDENTIFIER                -> var
          | LPAR expression RPAR      -> atom_group
          | matrix
          | cell_array
     
     anonymous_func: AT LPAR func_params? RPAR expression
+    function_handle: AT qualified_name
     
     ?qualified_name: IDENTIFIER (DOT IDENTIFIER)*
     
@@ -107,9 +112,9 @@ UniLab_GRAMMAR = r"""
     
     command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
-    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear)[a-zA-Z_][a-zA-Z0-9_]*/
+    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export)[a-zA-Z_][a-zA-Z0-9_]*/
     NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
-    STRING: /'[^'\n]*'/
+    STRING: /'(?:[^'\n]|'')*'/
     
     ADD_OP: "+" | "-" | ".+" | ".-"
     MUL_OP: "*" | "/" | "\\" | ".*" | "./" | ".\\"
@@ -156,6 +161,8 @@ UniLab_GRAMMAR = r"""
     NEWLINE: (/\r?\n/ WS_INLINE*)+
     %import common.WS_INLINE
     %ignore WS_INLINE
+    CONTINUATION: "..." /.*/ NEWLINE
+    %ignore CONTINUATION
     COMMENT: /%[^\n]*/
     %ignore COMMENT
 """
@@ -228,10 +235,13 @@ class UniLabToPython(Transformer):
 
     def function_call(self, items):
         name = items[0]
+        # items[1] is LPAR, items[2] is call_args?
+        args = items[2] if len(items) > 3 else None
+        
         if isinstance(name, str) and name.startswith('unilab_call(') and name.endswith(')') and ',' not in name:
              name = name[12:-1]
         self.called_functions.add(str(name))
-        args = items[2] if len(items) > 3 else None
+        
         if name == "pi" and not args: return "np.pi"
         if name == "addpath" and args:
             arg_list = args if isinstance(args, list) else [args]
@@ -271,7 +281,11 @@ class UniLabToPython(Transformer):
         if len(items) == 1: return items[0]
         res = items[0]
         for i in range(1, len(items), 2):
-            res = f"unilab_pow({res}, {items[i+1]})"
+            op = str(items[i])
+            if op == ".^":
+                res = f"unilab_dot_pow({res}, {items[i+1]})"
+            else:
+                res = f"unilab_pow({res}, {items[i+1]})"
         return res
 
     def multiplication(self, items):
@@ -279,10 +293,12 @@ class UniLabToPython(Transformer):
         res = items[0]
         for i in range(1, len(items), 2):
             op, right = str(items[i]), items[i+1]
-            if op == ".*": res = f"unilab_mul({res}, {right})"
-            elif op == "./": res = f"unilab_div({res}, {right})"
+            if op == ".*": res = f"unilab_dot_mul({res}, {right})"
+            elif op == "./": res = f"unilab_dot_div({res}, {right})"
+            elif op == ".\\": res = f"unilab_dot_ldiv({res}, {right})"
             elif op == "*": res = f"unilab_mul({res}, {right})"
             elif op == "/": res = f"unilab_div({res}, {right})"
+            elif op == "\\": res = f"unilab_ldiv({res}, {right})"
             else: res = f"({res} {op} {right})" 
         return res
 
@@ -321,12 +337,28 @@ class UniLabToPython(Transformer):
             res = f"unilab_or({res}, {items[i+1]})"
         return res
 
-    def assignment(self, items):
+    def multi_assignment(self, items):
         lhs, expr = items[0], items[2]
-        if isinstance(lhs, list):
-            stmt = f"({', '.join(lhs)}) = {expr}"
-            return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
+        # items[0] is from lhs_list, which returns a list of strings
+        stmt = f"({', '.join(lhs)}) = {expr}"
+        return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
+
+    def single_assignment(self, items):
+        lhs, expr = items[0], items[2]
         
+        # Hack to fix mis-parsed multi-assignments where Lark preferred 'matrix' atom
+        if isinstance(lhs, str) and lhs.startswith('unilab_matrix_concat('):
+             # Try to extract identifiers from unilab_call(name) patterns
+             matches = re.findall(r"unilab_call\(([^,)]+)\)", lhs)
+             if matches and 'unilab_matrix_concat' not in str(matches):
+                  # Check if there are any non-identifiers
+                  is_pure_ids = all(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", m) for m in matches)
+                  if is_pure_ids:
+                      stmt = f"({', '.join(matches)}) = {expr}"
+                      for n in matches: self.variables.add(n)
+                      return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(matches)}]", "is_multi": True, "names": matches}
+
+        # items[0] is from postfix_expr, which returns a string
         if isinstance(lhs, str) and lhs.startswith('unilab_call(') and lhs.endswith(')') and ',' not in lhs:
              lhs = lhs[12:-1]
 
@@ -342,7 +374,7 @@ class UniLabToPython(Transformer):
                 match = re.match(r"unilab_get\(([^,]+),\s*([^)]+)\)", str(lhs))
                 if match:
                     obj, attr = match.group(1), match.group(2)
-                    stmt = f"unilab_set({obj}, {attr}, {expr})"
+                    stmt = f"unilab_set({obj}, {expr}, {attr})"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
 
         self.variables.add(str(lhs))
@@ -379,7 +411,10 @@ class UniLabToPython(Transformer):
             return "\n".join(stmt)
         return str(stmt)
 
-    def separator(self, items): return ""
+    def separator(self, items):
+        s = str(items[0])
+        if s == ",": return ""
+        return s
 
     def lhs_list(self, items):
         names = [str(i) for i in items if str(i) not in ["[", "]", ","]]
@@ -478,9 +513,10 @@ class UniLabToPython(Transformer):
         return lines
 
     def function_def(self, items):
-        ret = items[1] if not isinstance(items[1], str) or items[1] not in ["(", ")"] else None
-        name = str(items[2]) if ret else str(items[1])
-        params = items[4] if (ret and len(items) > 4) or (not ret and len(items) > 3) else []
+        ret = items[1]
+        name = str(items[2])
+        params = items[4]
+        if params is None: params = []
         if isinstance(params, str): params = []
         block = items[-2]
         raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
@@ -490,7 +526,13 @@ class UniLabToPython(Transformer):
         inner.extend(block)
         if ret:
             if isinstance(ret, list): inner.append(f"return ({', '.join(ret)})")
-            else: inner.append(f"return {ret}")
+            elif isinstance(ret, dict) and ret.get("type") == "assignment":
+                # Handle 'y = ' from function_ret
+                ret_name = ret["lhs"]
+                inner.append(f"return {ret_name}")
+            else:
+                # If function_ret returned something else
+                inner.append(f"return {ret}")
         lines.extend(self._indent(inner))
         return lines
 
@@ -532,7 +574,10 @@ class UniLabToPython(Transformer):
         params = items[2] if len(items) > 3 else []
         expr = items[-1]
         param_list = [str(p) for p in params if str(p) not in [",", "(", ")"]]
-        return f"(lambda {', '.join(param_list)}: ({expr}))"
+        return f"unilab_handle(lambda {', '.join(param_list)}: ({expr}))"
+        
+    def function_handle(self, items):
+        return f"unilab_handle({str(items[1])})"
         
     def cmd_call(self, items):
         name, args = str(items[0]), [f"'{str(a)}'" for a in items[1:]]
