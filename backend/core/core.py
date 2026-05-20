@@ -95,7 +95,7 @@ UniLab_GRAMMAR = r"""
     
     anonymous_func: AT LPAR func_params? RPAR expression
     
-    qualified_name: IDENTIFIER
+    ?qualified_name: IDENTIFIER (DOT IDENTIFIER)*
     
     call_args: arg_item (COMMA arg_item)*
     ?arg_item: expression | COLON -> colon_arg
@@ -108,7 +108,7 @@ UniLab_GRAMMAR = r"""
     command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
     IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear)[a-zA-Z_][a-zA-Z0-9_]*/
-    NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/
+    NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
     STRING: /'[^'\n]*'/
     
     ADD_OP: "+" | "-" | ".+" | ".-"
@@ -182,8 +182,13 @@ class UniLabToPython(Transformer):
         if not res: return ["    pass"]
         return res
 
-    def number(self, n): return str(n[0])
-    def string(self, s): return str(s[0])
+    def number(self, n):
+        s = str(n[0])
+        if s.endswith('i'): return s[:-1] + 'j'
+        return s
+    def string(self, s):
+        content = str(s[0])[1:-1].replace("''", "'")
+        return repr(content)
     def end_expr(self, items): return "unilab_end"
     def colon_arg(self, items): return "slice(None)"
 
@@ -213,7 +218,7 @@ class UniLabToPython(Transformer):
         return f"unilab_call({name})"
 
     def qualified_name(self, items):
-        return self._escape_name(str(items[0]))
+        return ".".join(str(i) for i in items if str(i) != '.')
 
     def attr_access(self, items):
         target, attr = items[0], items[2]
@@ -258,7 +263,7 @@ class UniLabToPython(Transformer):
     def unary(self, items):
         if len(items) == 2:
             op, val = str(items[0]), items[1]
-            if op == "~": return f"(not {val})"
+            if op == "~": return f"unilab_not({val})"
             return f"{op}{val}"
         return items[0]
 
@@ -274,11 +279,11 @@ class UniLabToPython(Transformer):
         res = items[0]
         for i in range(1, len(items), 2):
             op, right = str(items[i]), items[i+1]
-            if op == ".*": res = f"({res} * {right})"
-            elif op == "./": res = f"({res} / {right})"
+            if op == ".*": res = f"unilab_mul({res}, {right})"
+            elif op == "./": res = f"unilab_div({res}, {right})"
             elif op == "*": res = f"unilab_mul({res}, {right})"
             elif op == "/": res = f"unilab_div({res}, {right})"
-            else: res = f"({res} {op} {right})" # For \ or other ops
+            else: res = f"({res} {op} {right})" 
         return res
 
     def addition(self, items):
@@ -318,7 +323,7 @@ class UniLabToPython(Transformer):
 
     def assignment(self, items):
         lhs, expr = items[0], items[2]
-        if isinstance(lhs, list): # From lhs_list
+        if isinstance(lhs, list):
             stmt = f"({', '.join(lhs)}) = {expr}"
             return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
         
@@ -437,8 +442,6 @@ class UniLabToPython(Transformer):
         self._switch_depth += 1
         var_name = f"_sw_{self._switch_depth}"
         lines = [f"{var_name} = {expr}"]
-        
-        # items[2:-1] are case_clause* and [otherwise_clause]
         clauses = items[2:-1]
         first = True
         for clause in clauses:
@@ -480,16 +483,13 @@ class UniLabToPython(Transformer):
         params = items[4] if (ret and len(items) > 4) or (not ret and len(items) > 3) else []
         if isinstance(params, str): params = []
         block = items[-2]
-        
         raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
         param_list_with_defaults = [f"{p}=None" for p in raw_params]
-        
         lines = [f"def {name}({', '.join(param_list_with_defaults)}):"]
         inner = [f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params)}] if x is not None)"]
         inner.extend(block)
         if ret:
-            if isinstance(ret, list): # From lhs_list
-                inner.append(f"return ({', '.join(ret)})")
+            if isinstance(ret, list): inner.append(f"return ({', '.join(ret)})")
             else: inner.append(f"return {ret}")
         lines.extend(self._indent(inner))
         return lines
@@ -500,58 +500,55 @@ class UniLabToPython(Transformer):
 
     def func_params(self, items): return [str(i) for i in items if str(i) != ","]
     def call_args(self, items): return [str(i) for i in items if str(i) != ","]
+    
     def matrix(self, items):
         rows = []
         current_row = []
         for item in items:
-            if isinstance(item, list):
-                current_row.extend(item)
+            if isinstance(item, list): current_row.extend(item)
             elif item is not None and str(item).strip() in [";", "\n", ""]:
                 if str(item).strip() == ";" or "\n" in str(item):
-                    if current_row:
-                        rows.append(current_row)
-                        current_row = []
-        if current_row:
-            rows.append(current_row)
-        
-        row_strs = [f"[{', '.join(r)}]" for r in rows]
+                    if current_row: rows.append(current_row); current_row = []
+        if current_row: rows.append(current_row)
+        row_strs = [f"[{', '.join(map(str, r))}]" for r in rows]
         return f"unilab_matrix_concat({', '.join(row_strs)})"
 
     def cell_array(self, items):
         rows = []
         current_row = []
         for item in items:
-            if isinstance(item, list):
-                current_row.extend(item)
+            if isinstance(item, list): current_row.extend(item)
             elif item is not None and str(item).strip() in [";", "\n", ""]:
                 if str(item).strip() == ";" or "\n" in str(item):
-                    if current_row:
-                        rows.append(current_row)
-                        current_row = []
-        if current_row:
-            rows.append(current_row)
-
+                    if current_row: rows.append(current_row); current_row = []
+        if current_row: rows.append(current_row)
         if not rows: return "unilab_cell_concat()"
         row_strs = [f"[{', '.join(map(str, r))}]" for r in rows]
         return f"unilab_cell_concat({', '.join(row_strs)})"
+        
     def row(self, items): return [str(i) for i in items if str(i) != ","]
+    
     def anonymous_func(self, items):
         params = items[2] if len(items) > 3 else []
         expr = items[-1]
         param_list = [str(p) for p in params if str(p) not in [",", "(", ")"]]
         return f"(lambda {', '.join(param_list)}: ({expr}))"
+        
     def cmd_call(self, items):
         name, args = str(items[0]), [f"'{str(a)}'" for a in items[1:]]
         return f"{name}({', '.join(args)})"
+        
     def clear_stmt(self, items):
         names = [str(i) for i in items if str(i) not in ["clear", " "]]
         if not names or "all" in names: return "unilab_clear_workspace(globals())"
         quoted = [f"'{n}'" for n in names]
         return f"unilab_clear_variables(globals(), [{', '.join(quoted)}])"
+        
     def global_stmt(self, items):
         names = [str(i) for i in items if str(i) != "global"]
         for n in names: self.globals.add(n)
         return f"global {', '.join(names)}"
+        
     def import_stmt(self, items): return f"import {items[1]}"
     def export_stmt(self, items): return f"# export {items[1]}"
     def atom_group(self, items): return items[1]
@@ -567,7 +564,3 @@ class UniLabTranspiler:
             result = self.transformer.transform(tree)
             return str(result), self.transformer.called_functions, self.transformer.added_paths
         except Exception as e: raise Exception(f"Transpilation Error: {str(e)}")
-
-if __name__ == "__main__":
-    t = UniLabTranspiler()
-    print(t.transpile("disp('hello')"))

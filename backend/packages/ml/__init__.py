@@ -1,6 +1,36 @@
 import numpy as np
 from collections import Counter
 
+# --- Utilities ---
+
+def _parse_kwargs(obj, args, kwargs, defaults):
+    """Helper to parse MATLAB-style name-value pairs into object attributes."""
+    # First, apply defaults
+    for k, v in defaults.items():
+        setattr(obj, k, v)
+    
+    # Process positional arguments. If the first arg is a dict, use it as kwargs.
+    if args and isinstance(args[0], dict):
+        for k, v in args[0].items():
+            setattr(obj, k, v)
+        args = args[1:]
+    
+    # If args has even length and the first is a string, assume name-value pairs
+    if len(args) >= 2 and isinstance(args[0], str):
+        for i in range(0, len(args), 2):
+            if i + 1 < len(args):
+                setattr(obj, args[i], args[i+1])
+    elif args:
+        # Otherwise, assign positionally based on defaults keys
+        keys = list(defaults.keys())
+        for i, val in enumerate(args):
+            if i < len(keys):
+                setattr(obj, keys[i], val)
+    
+    # Finally, apply any actual Python keyword arguments
+    for k, v in kwargs.items():
+        setattr(obj, k, v)
+
 # --- Activation Functions ---
 
 def sigmoid(x):
@@ -38,7 +68,11 @@ class StandardScaler:
         X = np.asarray(X)
         if self.with_mean: self.mean = np.mean(X, axis=0)
         if self.with_std: self.std = np.std(X, axis=0)
-        if self.std is not None: self.std[self.std == 0] = 1.0
+        if self.std is not None: 
+            if isinstance(self.std, np.ndarray):
+                self.std[self.std == 0] = 1.0
+            elif self.std == 0:
+                self.std = 1.0
         return self
 
     def transform(self, X):
@@ -65,7 +99,10 @@ class MinMaxScaler:
     def transform(self, X):
         X = np.asarray(X)
         denom = self.max - self.min
-        denom[denom == 0] = 1.0
+        if isinstance(denom, np.ndarray):
+            denom[denom == 0] = 1.0
+        elif denom == 0:
+            denom = 1.0
         X_std = (X - self.min) / denom
         return X_std * (self.feature_range[1] - self.feature_range[0]) + self.feature_range[0]
 
@@ -79,6 +116,7 @@ class PolynomialFeatures:
 
     def fit_transform(self, X):
         X = np.asarray(X)
+        if len(X.shape) == 1: X = X.reshape(-1, 1)
         n_samples, n_features = X.shape
         out = [np.ones((n_samples, 1))] if self.include_bias else []
         for d in range(1, self.degree + 1):
@@ -88,20 +126,18 @@ class PolynomialFeatures:
 # --- Linear Models ---
 
 class LogisticRegression:
-    def __init__(self, lr=0.01, epochs=1000, alpha=0.01, penalty='l2', fit_intercept=True):
-        self.lr = lr
-        self.epochs = epochs
-        self.alpha = alpha
-        self.penalty = penalty
-        self.fit_intercept = fit_intercept
+    def __init__(self, *args, **kwargs):
+        defaults = {'lr': 0.01, 'epochs': 1000, 'alpha': 0.01, 'penalty': 'l2', 'fit_intercept': True}
+        _parse_kwargs(self, args, kwargs, defaults)
         self.theta = None
 
-    def fit(self, X, y):
+    def fit(self, X, y, callback=None):
         X = np.asarray(X)
         y = np.asarray(y).reshape(-1, 1)
         if self.fit_intercept: X = np.c_[np.ones((len(X), 1)), X]
-        self.theta = np.zeros((X.shape[1], 1))
-        for _ in range(self.epochs):
+        if self.theta is None:
+            self.theta = np.zeros((X.shape[1], 1))
+        for epoch in range(self.epochs):
             z = X.dot(self.theta)
             h = sigmoid(z)
             reg_grad = np.zeros_like(self.theta)
@@ -110,14 +146,23 @@ class LogisticRegression:
             gradient = (X.T.dot(h - y) + reg_grad) / len(y)
             if self.fit_intercept: gradient[0] -= reg_grad[0] / len(y)
             self.theta -= self.lr * gradient
+            if callback:
+                loss = float(-np.mean(y * np.log(h + 1e-15) + (1 - y) * np.log(1 - h + 1e-15)))
+                if callback(epoch + 1, loss) is False:
+                    break
         return self
 
     def predict_prob(self, X):
+        X = np.asarray(X)
         if self.fit_intercept: X = np.c_[np.ones((len(X), 1)), X]
         return sigmoid(np.dot(X, self.theta))
 
     def predict(self, X, threshold=0.5):
         return (self.predict_prob(X) >= threshold).astype(int)
+
+    def reset(self):
+        self.theta = None
+        return self
 
 # --- Decision Trees & Ensembles ---
 
@@ -141,9 +186,10 @@ class DecisionTree:
         return 1.0 - sum(p**2 for p in probs)
 
     def fit(self, X, y):
-        X, y = np.asarray(X), np.asarray(y).flatten()
+        X, y = np.asarray(X), np.asarray(y)
+        if len(X.shape) == 1: X = X.reshape(-1, 1)
         self.n_features_ = X.shape[1]
-        if self.max_features is None or self.max_features == 'all': self.max_features_ = self.n_features_
+        if self.max_features is None: self.max_features_ = self.n_features_
         elif self.max_features == 'sqrt': self.max_features_ = int(np.sqrt(self.n_features_))
         elif self.max_features == 'log2': self.max_features_ = int(np.log2(self.n_features_))
         else: self.max_features_ = int(self.max_features)
@@ -152,7 +198,7 @@ class DecisionTree:
 
     def _grow_tree(self, X, y, depth=0):
         n_samples, n_labels = len(X), len(np.unique(y))
-        if depth >= self.max_depth or n_labels == 1 or n_samples < self.min_samples_split:
+        if depth >= self.max_depth or (self.task == 'classification' and n_labels == 1) or n_samples < self.min_samples_split:
             return DecisionNode(value=self._calculate_leaf_value(y))
         best_feat, best_thresh, best_gain = self._best_split(X, y)
         if best_feat is None or best_gain < self.min_impurity_decrease:
@@ -167,6 +213,8 @@ class DecisionTree:
         feat_indices = np.random.choice(self.n_features_, min(self.max_features_, self.n_features_), replace=False)
         for feat_idx in feat_indices:
             thresholds = np.unique(X[:, feat_idx])
+            if len(thresholds) > 100: # Limit candidate thresholds for speed
+                thresholds = np.percentile(thresholds, np.linspace(0, 100, 100))
             for thresh in thresholds:
                 gain = self._information_gain(y, X[:, feat_idx], thresh)
                 if gain > best_gain: best_gain, split_idx, split_thresh = gain, feat_idx, thresh
@@ -185,19 +233,25 @@ class DecisionTree:
         return Counter(y).most_common(1)[0][0] if self.task == 'classification' else np.mean(y)
 
     def predict(self, X):
-        return np.array([self._traverse_tree(x, self.root) for x in np.asarray(X)])
+        X = np.asarray(X)
+        if len(X.shape) == 1: X = X.reshape(-1, 1)
+        return np.array([self._traverse_tree(x, self.root) for x in X])
 
     def _traverse_tree(self, x, node):
         if node.value is not None: return node.value
         return self._traverse_tree(x, node.left) if x[node.feature_idx] <= node.threshold else self._traverse_tree(x, node.right)
 
 class RandomForest:
-    def __init__(self, n_trees=10, max_depth=10, min_samples_split=2, max_features='sqrt', bootstrap=True, task='classification'):
-        self.n_trees, self.max_depth, self.min_samples_split = n_trees, max_depth, min_samples_split
-        self.max_features, self.bootstrap, self.task, self.trees = max_features, bootstrap, task, []
+    def __init__(self, *args, **kwargs):
+        defaults = {'n_trees': 10, 'max_depth': 10, 'min_samples_split': 2, 'max_features': 'sqrt', 'bootstrap': True, 'task': 'classification'}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.n_trees = int(self.n_trees)
+        self.max_depth = int(self.max_depth)
+        self.trees = []
 
     def fit(self, X, y):
-        X, y = np.asarray(X), np.asarray(y).flatten()
+        X, y = np.asarray(X), np.asarray(y)
+        self.trees = []
         for _ in range(self.n_trees):
             tree = DecisionTree(max_depth=self.max_depth, min_samples_split=self.min_samples_split, task=self.task, max_features=self.max_features)
             idx = np.random.choice(len(X), len(X), replace=True) if self.bootstrap else np.arange(len(X))
@@ -206,17 +260,23 @@ class RandomForest:
         return self
 
     def predict(self, X):
+        X = np.asarray(X)
         tree_preds = np.array([tree.predict(X) for tree in self.trees])
-        if self.task == 'classification': return np.array([Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])])
+        if self.task == 'classification': 
+            return np.array([Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])])
         return np.mean(tree_preds, axis=0)
 
 class GradientBoosting:
-    def __init__(self, n_estimators=100, lr=0.1, max_depth=3, task='regression'):
-        self.n_estimators, self.lr, self.max_depth, self.task, self.trees = n_estimators, lr, max_depth, task, []
+    def __init__(self, *args, **kwargs):
+        defaults = {'n_estimators': 100, 'lr': 0.1, 'max_depth': 3, 'task': 'regression'}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.n_estimators = int(self.n_estimators)
+        self.trees = []
         self.init_prediction = None
 
     def fit(self, X, y):
-        X, y = np.asarray(X), np.asarray(y).flatten()
+        X, y = np.asarray(X), np.asarray(y)
+        self.trees = []
         self.init_prediction = np.mean(y) if self.task == 'regression' else np.log(np.mean(y)/(1-np.mean(y)+1e-9))
         curr_pred = np.full(y.shape, self.init_prediction)
         for _ in range(self.n_estimators):
@@ -229,16 +289,16 @@ class GradientBoosting:
         return self
 
     def predict(self, X):
+        X = np.asarray(X)
         preds = np.full(X.shape[0], self.init_prediction)
         for tree in self.trees: preds += self.lr * tree.predict(X)
         return preds if self.task == 'regression' else (1/(1+np.exp(-preds)) >= 0.5).astype(int)
 
-# --- Anomaly Detection ---
-
 class IsolationForest:
-    def __init__(self, n_estimators=100, max_samples='auto'):
-        self.n_estimators = n_estimators
-        self.max_samples = max_samples
+    def __init__(self, *args, **kwargs):
+        defaults = {'n_estimators': 100, 'max_samples': 'auto'}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.n_estimators = int(self.n_estimators)
         self.trees = []
 
     def fit(self, X):
@@ -246,6 +306,7 @@ class IsolationForest:
         n_samples = X.shape[0]
         if self.max_samples == 'auto': self.max_samples_ = min(256, n_samples)
         else: self.max_samples_ = min(self.max_samples, n_samples)
+        self.trees = []
         for _ in range(self.n_estimators):
             idx = np.random.choice(n_samples, self.max_samples_, replace=False)
             tree = DecisionTree(max_depth=int(np.ceil(np.log2(self.max_samples_))), task='regression')
@@ -253,7 +314,7 @@ class IsolationForest:
             self.trees.append(tree)
         return self
 
-    def predict(self, X): # Simplified: return random scores as structural placeholder
+    def predict(self, X): # Simplified structural placeholder
         return np.random.rand(len(X))
 
 # --- Probabilistic & Kernel Models ---
@@ -330,55 +391,76 @@ class AgglomerativeClustering:
         return labels
 
 class KMeans:
-    def __init__(self, k=3, max_iters=100, init='k-means++', tol=1e-4):
-        self.k, self.max_iters, self.init, self.tol, self.centroids = k, max_iters, init, tol, None
+    def __init__(self, *args, **kwargs):
+        defaults = {'k': 3, 'max_iters': 100, 'init': 'k-means++', 'tol': 1e-4}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.k = int(self.k)
+        self.max_iters = int(self.max_iters)
+        self.centroids = None
 
-    def fit(self, X):
+    def fit(self, X, callback=None):
         X = np.asarray(X)
-        if self.init == 'random': self.centroids = X[np.random.choice(len(X), self.k, replace=False)]
-        else:
-            self.centroids = [X[np.random.randint(len(X))]]
-            for _ in range(1, self.k):
-                dists = np.array([min([np.sum((x-c)**2) for c in self.centroids]) for x in X])
-                self.centroids.append(X[np.random.choice(len(X), p=dists/dists.sum())])
-            self.centroids = np.array(self.centroids)
-        for _ in range(self.max_iters):
+        if self.centroids is None:
+            if self.init == 'random': self.centroids = X[np.random.choice(len(X), self.k, replace=False)]
+            else:
+                self.centroids = [X[np.random.randint(len(X))]]
+                for _ in range(1, self.k):
+                    dists = np.array([min([np.sum((x-c)**2) for c in self.centroids]) for x in X])
+                    self.centroids.append(X[np.random.choice(len(X), p=dists/dists.sum())])
+                self.centroids = np.array(self.centroids)
+        for i in range(self.max_iters):
             labels = np.argmin(np.linalg.norm(X[:, np.newaxis] - self.centroids, axis=2), axis=1)
-            new_c = np.array([X[labels==i].mean(axis=0) if np.any(labels==i) else self.centroids[i] for i in range(self.k)])
+            new_c = np.array([X[labels==j].mean(axis=0) if np.any(labels==j) else self.centroids[j] for j in range(self.k)])
+            if callback:
+                if callback(i + 1, self.centroids, labels) is False:
+                    break
             if np.allclose(self.centroids, new_c, atol=self.tol): break
             self.centroids = new_c
+        return self
+
+    def reset(self):
+        self.centroids = None
         return self
 
     def predict(self, X):
         return np.argmin(np.linalg.norm(np.asarray(X)[:, np.newaxis] - self.centroids, axis=2), axis=1)
 
-# --- Neural Network (Professional) ---
+# --- Neural Network ---
 
 class NeuralNet:
-    def __init__(self, layers=[2, 4, 1], activation='relu', optimizer='adam', dropout=0.0, init='he'):
-        self.layers = np.asarray(layers).flatten().astype(int)
-        self.weights, self.biases, self.optimizer, self.dropout_rate = [], [], optimizer, dropout
+    def __init__(self, *args, **kwargs):
+        defaults = {'layers': [2, 4, 1], 'activation': 'relu', 'optimizer': 'adam', 'dropout': 0.0, 'init': 'he'}
+        _parse_kwargs(self, args, kwargs, defaults)
+        self.layers = np.asarray(self.layers).flatten().astype(int)
         funcs = {'relu': (relu, relu_derivative), 'tanh': (tanh, tanh_derivative), 'sigmoid': (sigmoid, sigmoid_derivative)}
-        self.act_func, self.act_deriv = funcs.get(activation, funcs['sigmoid'])
+        self.act_func, self.act_deriv = funcs.get(self.activation, funcs['sigmoid'])
+        self._init_weights()
+            
+    def _init_weights(self):
+        self.weights, self.biases = [], []
         for i in range(len(self.layers)-1):
-            limit = np.sqrt(2.0/self.layers[i]) if init=='he' else np.sqrt(1.0/self.layers[i])
+            limit = np.sqrt(2.0/self.layers[i]) if self.init=='he' else np.sqrt(1.0/self.layers[i])
             self.weights.append(np.random.randn(self.layers[i], self.layers[i+1])*limit)
             self.biases.append(np.zeros((1, self.layers[i+1])))
+
+    def reset(self):
+        self._init_weights()
+        return self
             
     def forward(self, x, training=True):
         self.activations, self.masks, curr_a = [x], [], x
         for i in range(len(self.weights)):
             z = np.dot(curr_a, self.weights[i]) + self.biases[i]
             curr_a = softmax(z) if i == len(self.weights)-1 and self.layers[-1] > 1 else self.act_func(z)
-            if training and self.dropout_rate > 0 and i < len(self.weights)-1:
-                mask = (np.random.rand(*curr_a.shape) > self.dropout_rate).astype(float)/(1.0-self.dropout_rate)
+            if training and self.dropout > 0 and i < len(self.weights)-1:
+                mask = (np.random.rand(*curr_a.shape) > self.dropout).astype(float)/(1.0-self.dropout)
                 curr_a *= mask
                 self.masks.append(mask)
             else: self.masks.append(None)
             self.activations.append(curr_a)
         return curr_a
         
-    def train(self, X, y, epochs=1000, lr=0.001, l1=0.0, l2=0.01):
+    def train(self, X, y, epochs=1000, lr=0.001, l1=0.0, l2=0.01, callback=None):
         X, y = np.asarray(X), np.asarray(y).reshape(-1, 1 if len(y.shape)==1 or y.shape[1]==1 else y.shape[1])
         mw, vw, mb, vb = [np.zeros_like(w) for w in self.weights], [np.zeros_like(w) for w in self.weights], [np.zeros_like(b) for b in self.biases], [np.zeros_like(b) for b in self.biases]
         for t in range(1, epochs + 1):
@@ -397,7 +479,9 @@ class NeuralNet:
                     self.weights[i] -= lr*(mw[i]/(1-0.9**t))/(np.sqrt(vw[i]/(1-0.999**t))+1e-8)
                     self.biases[i] -= lr*(mb[i]/(1-0.9**t))/(np.sqrt(vb[i]/(1-0.999**t))+1e-8)
                 else: self.weights[i] -= lr*gw; self.biases[i] -= lr*gb
-            if t % (max(1, epochs//10)) == 0: print(f"Epoch {t}: loss = {np.mean(np.square(y-out)):.6f}")
+            loss = float(np.mean(np.square(y-out)))
+            if t % (max(1, epochs//10)) == 0: print(f"Epoch {t}: loss = {loss:.6f}")
+            if callback and callback(t, loss) is False: break
 
     def predict(self, x): return self.forward(np.asarray(x), training=False)
 

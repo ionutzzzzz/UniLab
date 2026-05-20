@@ -3,6 +3,12 @@ import argparse
 import pathlib
 import sys
 import os
+
+# Fix for Qt stability on some Linux distros
+os.environ['GTK_MODULES'] = ''
+os.environ['QT_QPA_PLATFORMTHEME'] = ''
+os.environ['QT_STYLE_OVERRIDE'] = 'Fusion'
+
 import re
 import faulthandler
 faulthandler.enable()

@@ -9,6 +9,104 @@ import scipy.signal as signal
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
 from backend.core.simulation.engine import unilab_simulate as simulate
 
+def uibutton(label, callback):
+    """Adds a custom button to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_button(label, callback, layout=layout)
+    return None
+
+def uislider(label, min_v, max_v, init_v, callback):
+    """Adds a custom slider to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_slider(label, min_v, max_v, init_v, callback, layout=layout)
+    return None
+
+def uicheckbox(label, initial_state, callback):
+    """Adds a custom checkbox to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_checkbox(label, initial_state, callback, layout=layout)
+    return None
+
+def uidropdown(label, options, callback):
+    """Adds a custom dropdown to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_dropdown(label, options, callback, layout=layout)
+    return None
+
+def uiedit(label, initial_text, callback):
+    """Adds a custom text input to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_input(label, initial_text, callback, layout=layout)
+    return None
+
+def uilabel(label_id, initial_text):
+    """Adds a custom label to the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', getattr(_current_sim_window, 'controls_layout', None))
+        return _current_sim_window.add_custom_label(label_id, initial_text, layout=layout)
+    return None
+
+def uiset(control_id, value):
+    """Updates the value of a custom UI control."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        _current_sim_window.update_control_value(control_id, value)
+    return None
+
+def uitext(x, y, string, **kwargs):
+    """Adds custom text to the current simulation plot."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window and hasattr(_current_sim_window, 'ax'):
+        return _current_sim_window.ax.text(x, y, str(string), **kwargs)
+    return None
+
+def uicontrols_clear():
+    """Clears all custom UI controls from the current simulation window."""
+    from backend.core.simulation.engine import _current_sim_window
+    if _current_sim_window:
+        layout = getattr(_current_sim_window, 'custom_layout', None)
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget: widget.deleteLater()
+        _current_sim_window.custom_controls.clear()
+    return None
+
+def unilab_struct(**kwargs):
+    """Creates a UniLab struct (Python dictionary)."""
+    return kwargs
+
+def unilab_set(obj, val, *args):
+    # If the first arg is a string, it might be a property set on an object
+    if len(args) == 1 and isinstance(args[0], str):
+        # Check if obj is None (auto-initialize struct)
+        if obj is None:
+            # We can't really modify the caller's 'obj' if it's None and passed by value
+            # but usually this is used as unilab_set(state, 1, 'x') where state is global/persistent
+            pass
+        try:
+            setattr(obj, args[0], val)
+            return val
+        except:
+            if isinstance(obj, dict):
+                obj[args[0]] = val
+                return val
+    
+    # Standard array indexing set
+    # ... existing logic ...
+
 def unilab_fft(x): return scipy_fft(x)
 def unilab_ifft(x): return scipy_ifft(x)
 def unilab_fftshift(x): return scipy_fftshift(x)
@@ -563,8 +661,8 @@ def unilab_to_bool(val):
             return False
         elif val.size == 1:  # 1-element array
             return bool(val.item())
-        else:  # multi-element array - use any() to match MATLAB behavior
-            return np.any(val)
+        else:  # multi-element array - use all() to match MATLAB behavior
+            return np.all(val)
     # Handle standard Python types and numpy scalars
     return bool(val)
 
@@ -948,8 +1046,31 @@ def reshape(x, *args):
         return np.reshape(x, args[0])
     return np.reshape(x, args)
 
-def sum(x, axis=None): return np.sum(x, axis=axis)
-def mean(x, axis=None): return np.mean(x, axis=axis)
+def sum(x, axis=None):
+
+    if axis is not None:
+
+        # MATLAB is 1-based, NumPy is 0-based
+
+        if isinstance(axis, (int, float)):
+
+            axis = int(axis) - 1
+
+    return np.sum(x, axis=axis)
+
+
+
+def mean(x, axis=None):
+
+    if axis is not None:
+
+        if isinstance(axis, (int, float)):
+
+            axis = int(axis) - 1
+
+    return np.mean(x, axis=axis)
+
+
 def min(*args, axis=None):
     if len(args) == 1: return np.min(args[0], axis=axis)
     return np.minimum(*args)
@@ -1259,34 +1380,65 @@ def clf():
     plt.clf()
     _unilab_refresh_graph()
 
+def text(*args, **kwargs):
+    """Adds text to the plot."""
+    args_list = list(args)
+    target_ax = plt
+    if args_list and hasattr(args_list[0], 'text'):
+        target_ax = args_list.pop(0)
+    return target_ax.text(*args_list, **kwargs)
+
 def plot(*args, **kwargs):
     """
     Plot vectors or matrices.
     Example:
-        x = 0:0.1:10;
-        y = sin(x);
-        plot(x, y);
+        plot(x, y, 'LineWidth', 2);
     """
-    # Intercept 'grid' argument from args if it's a 'Name', Value pair
     args_list = list(args)
-    grid_state = kwargs.pop('grid', None)
+    target_ax = plt
     
+    # Check if first arg is an axes object
+    if args_list and hasattr(args_list[0], 'plot'):
+        target_ax = args_list.pop(0)
+
+    # MATLAB-style Name-Value pair extraction
+    matlab_names = {
+        'LineWidth': 'linewidth',
+        'MarkerSize': 'markersize',
+        'MarkerFaceColor': 'markerfacecolor',
+        'MarkerEdgeColor': 'markeredgecolor',
+        'Color': 'color',
+        'LineStyle': 'linestyle',
+        'Marker': 'marker',
+        'DisplayName': 'label'
+    }
+    
+    # Process Name-Value pairs from args_list
     i = 0
     while i < len(args_list) - 1:
-        if isinstance(args_list[i], str) and args_list[i].lower() == 'grid':
-            grid_state = args_list[i+1]
+        name = args_list[i]
+        if isinstance(name, str) and (name in matlab_names or name.lower() == 'grid'):
+            val = args_list[i+1]
+            if name.lower() == 'grid':
+                if hasattr(target_ax, 'grid'):
+                    target_ax.grid(val == 'on' or val == True or val == 1)
+            else:
+                kwargs[matlab_names[name]] = val
             args_list.pop(i)
             args_list.pop(i)
             continue
         i += 1
-    
-    if not _unilab_hold:
+
+    if target_ax == plt and not _unilab_hold:
         plt.clf()
         
-    res = plt.plot(*args_list, **kwargs)
-    if grid_state is not None:
-        plt.grid(grid_state == 'on' or grid_state == True or grid_state == 1)
-    _unilab_refresh_graph()
+    res = target_ax.plot(*args_list, **kwargs)
+    
+    if target_ax == plt:
+        _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'):
+        target_ax.figure.canvas.draw()
+        
     return res
 
 def unilab_ascii_plot(y, x=None, height=20, width=60, plot_type='line'):
@@ -1526,20 +1678,29 @@ def hist(*args, **kwargs):
     kwargs.update(p_kwargs)
     res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
-def title(t, *args, **kwargs):
-    p_args, p_kwargs = _parse_matlab_style_args(args)
-    kwargs.update(p_kwargs)
-    plt.title(t, fontweight='bold', fontsize=22, **kwargs); _unilab_refresh_graph()
+def title(*args, **kwargs):
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'set_title'):
+        target = args_list.pop(0)
+        return target.set_title(*args_list, **kwargs)
+    return plt.title(*args_list, **kwargs)
 
-def xlabel(l, *args, **kwargs):
-    p_args, p_kwargs = _parse_matlab_style_args(args)
-    kwargs.update(p_kwargs)
-    plt.xlabel(l, fontweight='bold', fontsize=18, **kwargs); _unilab_refresh_graph()
+def xlabel(*args, **kwargs):
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'set_xlabel'):
+        target = args_list.pop(0)
+        return target.set_xlabel(*args_list, **kwargs)
+    return plt.xlabel(*args_list, **kwargs)
 
-def ylabel(l, *args, **kwargs):
-    p_args, p_kwargs = _parse_matlab_style_args(args)
-    kwargs.update(p_kwargs)
-    plt.ylabel(l, fontweight='bold', fontsize=18, **kwargs); _unilab_refresh_graph()
+def ylabel(*args, **kwargs):
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'set_ylabel'):
+        target = args_list.pop(0)
+        return target.set_ylabel(*args_list, **kwargs)
+    return plt.ylabel(*args_list, **kwargs)
 
 def gca(): return plt.gca()
 
@@ -1574,26 +1735,44 @@ def contourf(*args, **kwargs):
         p_args[3] = p_args[3].flatten()
     res = plt.contourf(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
-def colormap(*args):
-    p_args, p_kwargs = _parse_matlab_style_args(args)
-    if len(p_args) > 0:
-        cmap = p_args[-1]
-        if isinstance(cmap, np.ndarray):
-            from matplotlib.colors import ListedColormap
-            import matplotlib as mpl
-            cmap_obj = ListedColormap(cmap, name='unilab_custom')
-            try:
-                mpl.colormaps.register(cmap_obj, force=True)
-            except:
-                # Older matplotlib
-                plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
-            plt.set_cmap('unilab_custom')
-        else:
-            plt.set_cmap(cmap)
-    _unilab_refresh_graph()
 
-def grid(state='on'):
-    plt.grid(state == 'on' or state == True or state == 1, linewidth=1.5); _unilab_refresh_graph()
+def colormap(*args):
+    """Sets the colormap."""
+    args_list = list(args)
+    target_ax = None
+    
+    if args_list and hasattr(args_list[0], 'imshow'):
+        target_ax = args_list.pop(0)
+    
+    if not args_list:
+        return
+        
+    cmap = args_list[0]
+    
+    if isinstance(cmap, np.ndarray):
+        from matplotlib.colors import ListedColormap
+        import matplotlib as mpl
+        cmap_obj = ListedColormap(cmap, name='unilab_custom')
+        try:
+            mpl.colormaps.register(cmap_obj, force=True)
+        except:
+            plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
+        cmap_name = 'unilab_custom'
+    else:
+        cmap_name = str(cmap)
+        maps = {'bone': 'bone', 'jet': 'jet', 'hot': 'hot', 'cool': 'cool', 'spring': 'spring', 'summer': 'summer'}
+        cmap_name = maps.get(cmap_name.lower(), cmap_name)
+    
+    if target_ax is None:
+        plt.set_cmap(cmap_name)
+        _unilab_refresh_graph()
+    else:
+        images = target_ax.get_images()
+        if images:
+            for img in images:
+                img.set_cmap(cmap_name)
+        if hasattr(target_ax, 'figure'):
+            target_ax.figure.canvas.draw()
 
 def _scatter_plot(x, y, t=None):
     plt.clf()
@@ -1607,12 +1786,64 @@ def _hist_plot(data, bins=10, t=None):
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
 
-def _plot_matrix(M, t=None):
-    plt.clf()
-    plt.imshow(M, cmap='viridis', interpolation='nearest')
+def heatmap(M):
+    plt.imshow(M, interpolation='nearest')
     plt.colorbar()
-    if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
+
+def imagesc(*args, **kwargs):
+    """Displays image with scaled colors."""
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'imshow'):
+        target = args_list.pop(0)
+    
+    # Heuristic for transpose if needed
+    if len(args_list) > 0 and isinstance(args_list[0], np.ndarray):
+        M = args_list[0]
+        # In MATLAB imagesc(data) uses (row, col) which maps to (y, x)
+        res = target.imshow(M, interpolation='nearest', aspect='auto', **kwargs)
+    else:
+        res = target.imshow(*args_list, **kwargs)
+        
+    if target == plt:
+        _unilab_refresh_graph()
+    elif hasattr(target, 'figure'):
+        target.figure.canvas.draw()
+    return res
+
+def colormap(*args):
+    """Sets the colormap."""
+    args_list = list(args)
+    target_ax = None
+    
+    # Correctly identify if the first argument is an axes object
+    if args_list and hasattr(args_list[0], 'imshow'):
+        target_ax = args_list.pop(0)
+    
+    if not args_list:
+        return
+        
+    cmap_name = str(args_list[0])
+    # Map MATLAB names to matplotlib names
+    maps = {'bone': 'bone', 'jet': 'jet', 'hot': 'hot', 'cool': 'cool', 'spring': 'spring', 'summer': 'summer'}
+    cmap_name = maps.get(cmap_name.lower(), cmap_name)
+    
+    if target_ax is None:
+        plt.set_cmap(cmap_name)
+        _unilab_refresh_graph()
+    else:
+        # Directly set on axes images to avoid pyplot sca() error
+        images = target_ax.get_images()
+        if images:
+            for img in images:
+                img.set_cmap(cmap_name)
+        else:
+            # Fallback: setting current axes might still fail if not in pyplot, 
+            # but we can try setting the attribute if matplotlib allows it
+            pass
+        if hasattr(target_ax, 'figure'):
+            target_ax.figure.canvas.draw()
 
 def plot_nn(layers, title="Neural Network Architecture"):
     """Plots a neural network architecture."""

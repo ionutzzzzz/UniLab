@@ -63,6 +63,19 @@ class TranspilerEngine(BaseEngine):
             '__builtins__': __builtins__,
             'addpath': self._add_path,
             'ans': None,
+            'inf': np.inf,
+            'Inf': np.inf,
+            'nan': np.nan,
+            'NaN': np.nan,
+            'pi': np.pi,
+            'eps': np.finfo(float).eps,
+            'i': 1j,
+            'j': 1j,
+            'realmax': np.finfo(float).max,
+            'realmin': np.finfo(float).tiny,
+            'true': True,
+            'false': False,
+            'struct': runtime.unilab_struct,
         })
         
         # Inject runtime functions

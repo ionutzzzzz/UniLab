@@ -9,7 +9,7 @@ function [y] = erf_approx(x)
     a5 =  1.061405429;
     p  =  0.3275911;
 
-    sign_x = (x >= 0) - (x < 0);
+    sign_x = (x >= 0)*1.0 - (x < 0)*1.0;
     x = abs(x);
 
     t = 1.0 ./ (1.0 + p .* x);
