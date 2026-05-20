@@ -233,20 +233,45 @@ async def download_file(
     core: UniLabCore = Depends(get_core)
 ):
     """Download a file from workspace."""
-    from fastapi.responses import FileResponse
+    from fastapi import Response
+    import logging
+    import os
+    from pathlib import Path
+    logger = logging.getLogger("api.files")
     
     try:
         session = await core.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        full_path = session.workspace_path / file_path
+        # Security: prevent directory traversal
+        filename = os.path.basename(file_path)
+        workspace_base = session.workspace_path.resolve()
+        full_path = workspace_base / filename
+        
+        # Check standard location
+        if not full_path.exists():
+            for sub in ['plots', 'exports']:
+                alt_path = workspace_base / sub / filename
+                if alt_path.exists():
+                    full_path = alt_path
+                    break
         
         if not full_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
         
-        return FileResponse(full_path, filename=Path(file_path).name)
+        # Read file directly and return binary Response
+        # This is more robust than FileResponse in some setups
+        try:
+            content = full_path.read_bytes()
+            media_type = "image/png" if filename.endswith(".png") else "application/octet-stream"
+            return Response(content=content, media_type=media_type)
+        except Exception as e:
+            logger.error(f"Failed to read file for download: {e}")
+            raise HTTPException(status_code=500, detail=f"Read error: {str(e)}")
+            
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Download Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

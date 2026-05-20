@@ -1683,6 +1683,10 @@ class SimulatorEngine:
         except Exception as e: print(f"Sim Error: {e}"); import traceback; traceback.print_exc()
 
 def unilab_simulate(model, *args):
+    if os.environ.get('UNILAB_WEB_MODE') == '1':
+        print("\n\x1b[38;2;253;253;150m[ Interactive simulation window skipped in web mode ]\x1b[0m")
+        return
+
     kwargs = {}
     if len(args) % 2 == 0:
         for i in range(0, len(args), 2):

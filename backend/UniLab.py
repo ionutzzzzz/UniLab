@@ -61,6 +61,14 @@ workspace_vars = []
 _m_file_cache = []
 _last_cache_update = 0
 
+def print_error(msg: str):
+    """Prints a message in pastel red to stdout."""
+    print(f"\x1b[38;2;255;105;97mError: {msg}\x1b[0m", file=sys.stderr)
+
+def print_warning(msg: str):
+    """Prints a message in pastel yellow to stdout."""
+    print(f"\x1b[38;2;253;253;150mWarning: {msg}\x1b[0m")
+
 def update_m_file_cache():
     global _m_file_cache, _last_cache_update
     now = time.time()
@@ -78,7 +86,10 @@ def update_m_file_cache():
         if libs_dir.exists():
             for p in libs_dir.rglob('*.m'):
                 m_files.add(p.stem)
-    except: pass
+    except OSError as e:
+        print_warning(f"Could not update function cache: {e}")
+    except Exception as e:
+        print_warning(f"Unexpected error updating cache: {e}")
     
     _m_file_cache = list(m_files)
     _last_cache_update = now
@@ -138,11 +149,15 @@ except ImportError:
 async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
     path = pathlib.Path(script_path)
     if not path.exists():
-        print(f"Error: Script '{script_path}' not found.")
+        print_error(f"Script '{script_path}' not found.")
         return
 
     workspace_root = pathlib.Path("./test_runs").resolve()
-    workspace_root.mkdir(exist_ok=True)
+    try:
+        workspace_root.mkdir(exist_ok=True)
+    except OSError as e:
+        print_error(f"Could not create test runs directory: {e}")
+        return
     
     cfg = BackendConfig(
         workspace_root=workspace_root,
@@ -150,14 +165,31 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
     )
     
     core = UniLabCore(cfg)
-    await core.start()
+    try:
+        await core.start()
+    except Exception as e:
+        print_error(f"Failed to start UniLabCore: {e}")
+        return
 
     try:
         session = await core.create_session(username="script_user", engine=engine_name)
-        code = path.read_text(encoding="utf-8")
+        
+        try:
+            code = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            print_error(f"Script '{path.name}' contains invalid UTF-8 characters.")
+            return
+        except OSError as e:
+            print_error(f"Could not read script '{path.name}': {e}")
+            return
         
         print(f"\n{'='*20} Executing: {path.name} {'='*20}")
-        result = await core.run_code(session.session_id, code)
+        try:
+            # Wrap execution in timeout to prevent hanging
+            result = await asyncio.wait_for(core.run_code(session.session_id, code), timeout=60.0)
+        except asyncio.TimeoutError:
+            print_error(f"Execution of '{path.name}' timed out after 60s.")
+            return
         
         print(f"\nStatus: {'SUCCESS' if result.success else 'FAILED'}")
         print(f"Duration: {result.duration_s:.4f}s")
@@ -179,14 +211,18 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         print(f"\n{'='*60}\n")
                 
     except Exception as e:
-        print(f"An error occurred during execution: {e}")
+        print_error(f"An unexpected error occurred during execution: {e}")
     finally:
         await core.stop()
 
 async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
     global workspace_vars
     workspace_root = pathlib.Path("./console_workspaces").resolve()
-    workspace_root.mkdir(exist_ok=True)
+    try:
+        workspace_root.mkdir(exist_ok=True)
+    except OSError as e:
+        print_error(f"Could not create console workspace: {e}")
+        return
     
     history_file = workspace_root / ".unilab_history"
     if not command and readline:
@@ -201,8 +237,10 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                 readline.parse_and_bind("bind ^I rl_complete")
             else:
                 readline.parse_and_bind("tab: complete")
+        except OSError as e:
+            print_warning(f"Could not load history file: {e}")
         except Exception as e:
-            print(f"Warning: Could not load history file or set completer: {e}")
+            print_warning(f"Unexpected error initializing readline: {e}")
 
     cfg = BackendConfig(
         workspace_root=workspace_root,
@@ -210,7 +248,11 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
     )
     
     core = UniLabCore(cfg)
-    await core.start()
+    try:
+        await core.start()
+    except Exception as e:
+        print_error(f"Failed to start UniLabCore: {e}")
+        return
     
     try:
         session = await core.create_session(username="console_user", engine=engine_name)
@@ -218,7 +260,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
         is_tty = sys.stdin.isatty() and not command
         if is_tty:
             print("\n" + "="*60)
-            print(f" 🧪 UniLab Interactive Console")
+            print(f" \U0001F9EA UniLab Interactive Console")
             print(" Type 'exit' or 'quit' to close.")
             print(" Type 'list_libraries();' to explore toolboxes.")
             print("="*60 + "\n")
@@ -282,7 +324,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                         path = await core.export_workspace(session.session_id, format=fmt)
                         print(f"Workspace exported to: {path}")
                     except Exception as e:
-                        print(f"Export failed: {e}")
+                        print_error(f"Export failed: {e}")
                     if command: break
                     continue
 
@@ -312,10 +354,14 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                     print(result.stdout.rstrip())
                                 if result.stderr:
                                     print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
+                            except UnicodeDecodeError:
+                                print_error(f"Script '{script_path.name}' contains invalid characters.")
+                            except OSError as e:
+                                print_error(f"Could not read script '{script_path.name}': {e}")
                             except Exception as e:
-                                print(f"Error running script: {e}")
+                                print_error(f"Error running script: {e}")
                         else:
-                            print(f"Error: Script '{script_name}' not found.")
+                            print_error(f"Script '{script_name}' not found.")
                     
                     if command: break
                     continue
@@ -335,8 +381,8 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                     os.chdir(parts[1])
                                 else:
                                     print(os.getcwd())
-                            except Exception as e:
-                                print(f"Error: {e}")
+                            except OSError as e:
+                                print_error(f"cd failed: {e}")
                         else:
                             os.system(line.strip())
                 
@@ -348,27 +394,33 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                 if is_whos and not line.strip().endswith(';'):
                     exec_line = line.strip() + ';'
                 
-                result = await core.run_code(session.session_id, exec_line)
-                
-                # Update variable cache for autocomplete
-                if result.variables_snapshot:
-                    workspace_vars = list(result.variables_snapshot.keys())
-                
-                if result.stdout:
-                    print(result.stdout.rstrip())
-                
-                if result.stderr:
-                    print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
-                
-                if is_whos:
+                try:
+                    # Added a reasonable timeout for interactive commands
+                    result = await asyncio.wait_for(core.run_code(session.session_id, exec_line), timeout=30.0)
+                    
+                    # Update variable cache for autocomplete
                     if result.variables_snapshot:
-                        print("\nName           Size            Class")
-                        print("-" * 45)
-                        for name, info in result.variables_snapshot.items():
-                            shape_str = str(info['shape']) if info['shape'] else "1x1"
-                            dtype = info['dtype']
-                            print(f"{name:14} {shape_str:15} {dtype}")
-                        print("")
+                        workspace_vars = list(result.variables_snapshot.keys())
+                    
+                    if result.stdout:
+                        print(result.stdout.rstrip())
+                    
+                    if result.stderr:
+                        print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
+                    
+                    if is_whos:
+                        if result.variables_snapshot:
+                            print("\nName           Size            Class")
+                            print("-" * 45)
+                            for name, info in result.variables_snapshot.items():
+                                shape_str = str(info['shape']) if info['shape'] else "1x1"
+                                dtype = info['dtype']
+                                print(f"{name:14} {shape_str:15} {dtype}")
+                            print("")
+                except asyncio.TimeoutError:
+                    print_error("Command timed out after 30s.")
+                except Exception as e:
+                    print_error(f"Execution error: {e}")
                 
                 if command:
                     break
@@ -379,15 +431,15 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                 if command: break
                 print("\nUse 'exit' to quit.")
             except Exception as e:
-                print(f"Error executing command: {e}")
+                print_error(f"Unexpected error in console loop: {e}")
                 if command: break
 
     finally:
         if is_tty and readline:
             try:
                 readline.write_history_file(str(history_file))
-            except Exception as e:
-                print(f"Warning: Could not save history file: {e}")
+            except OSError as e:
+                print_warning(f"Could not save history file: {e}")
         await core.stop()
         if is_tty:
             print("\nConsole closed.")
@@ -417,3 +469,6 @@ if __name__ == "__main__":
             parser.print_help()
     except KeyboardInterrupt:
         print("\nOperation cancelled.")
+    except Exception as e:
+        print_error(f"Fatal error: {e}")
+        sys.exit(1)

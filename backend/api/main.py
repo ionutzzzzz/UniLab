@@ -3,7 +3,13 @@ import sys
 import pathlib
 from contextlib import asynccontextmanager
 
-# Add the project root to sys.path to allow absolute imports of the backend package
+# Force Headless Mode for Matplotlib and Qt
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['UNILAB_WEB_MODE'] = '1'
+import matplotlib
+matplotlib.use('Agg')
+
+# Add the project root to sys.path
 current_dir = pathlib.Path(__file__).resolve().parent
 project_root = (current_dir / ".." / "..").resolve()
 if str(project_root) not in sys.path:
@@ -12,6 +18,7 @@ if str(project_root) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
 from backend.api.routes import (
     compute, sessions, execution, workspace, files, export, metadata, system
 )
@@ -44,6 +51,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount Web Terminal
+web_dir = pathlib.Path(__file__).resolve().parent.parent / "web"
+if web_dir.exists():
+    app.mount("/terminal", StaticFiles(directory=str(web_dir), html=True), name="web_terminal")
+
 # Include Routers
 app.include_router(sessions.router)
 app.include_router(execution.router)
@@ -53,6 +65,12 @@ app.include_router(export.router)
 app.include_router(metadata.router)
 app.include_router(system.router)
 app.include_router(compute.router)  # Keep legacy routes for backward compatibility
+
+from fastapi.responses import Response
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 @app.get("/")
 async def root():

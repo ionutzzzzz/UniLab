@@ -24,6 +24,7 @@ class UniLabCore:
         self.sessions: Dict[str, SessionInfo] = {}
         self.engines: Dict[str, BaseEngine] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
+        self._execution_lock = asyncio.Lock() # Global lock for directory stability
         self._event_queue: asyncio.Queue = asyncio.Queue()
         self._plugin_hooks: Dict[str, List[Callable[..., Any]]] = {}
         self._rooms: Dict[str, SessionInfo] = {}
@@ -98,10 +99,22 @@ class UniLabCore:
         engine = self.engines.get(session_id)
         if not engine: raise KeyError(f"No engine for session {session_id}")
         
-        async with self._locks[session_id]:
-            res = await engine.run_code(code, timeout=timeout)
-            self._metrics["runs"] += 1
-            return res
+        # We use a global execution lock because engines use os.chdir
+        # which is process-wide. This ensures session isolation for paths.
+        async with self._execution_lock:
+            async with self._locks[session_id]:
+                res = await engine.run_code(code, timeout=timeout)
+                self._metrics["runs"] += 1
+                return res
+
+    async def complete(self, session_id: str, text: str, line: str) -> List[str]:
+        """Provides autocomplete suggestions for a session."""
+        engine = self.engines.get(session_id)
+        if not engine: raise KeyError(f"No engine for session {session_id}")
+        
+        if hasattr(engine, 'complete'):
+            return engine.complete(text, line)
+        return []
 
     # File operations refactored to be simpler
     async def list_files(self, session_id: str, path: Optional[str] = None) -> List[Dict[str, Any]]:

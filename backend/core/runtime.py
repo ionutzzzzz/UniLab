@@ -6,8 +6,12 @@ import time
 import pathlib
 import builtins
 import scipy.signal as signal
+from contextvars import ContextVar
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
 from backend.core.simulation.engine import unilab_simulate as simulate
+
+# ContextVar for thread-safe session workspace path
+unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
 
 def uibutton(label, callback):
     """Adds a custom button to the current simulation window."""
@@ -1425,74 +1429,77 @@ def sprintf(fmt, *args):
     except:
         return str(fmt)
 
+# High-impact styling with a Pastel Aesthetic (Module Level)
+plt.rcParams.update({
+    'axes.prop_cycle': plt.cycler(color=['#A8D8EA', '#AA96DA', '#FCBAD3', '#FFFFD2', '#FF8080', '#BAE1FF']),
+    'axes.linewidth': 1.5, 
+    'axes.edgecolor': '#555555',
+    'grid.color': '#DDDDDD',
+    'grid.linestyle': '--',
+    'grid.linewidth': 0.8,
+    'lines.linewidth': 4.0,
+    'font.size': 20,
+    'font.weight': 'bold',
+    'figure.facecolor': 'white',
+    'axes.facecolor': '#FAFAFA',
+    'axes.labelweight': 'bold',
+    'axes.titleweight': 'bold',
+    'xtick.labelsize': 16,
+    'ytick.labelsize': 16,
+    'legend.fontsize': 16,
+    'figure.dpi': 120
+})
+
 def _unilab_refresh_graph():
+    """Triggers a graph refresh by saving to a file and printing a marker."""
     try:
         import json
+        fig = plt.gcf()
         ax = plt.gca()
-        
-        # Check if grid is on (safer way)
-        grid_on = False
-        try:
-            grid_on = ax.xaxis._grid_on_major or ax.yaxis._grid_on_major
-        except:
-            try:
-                grid_on = any(line.get_visible() for line in ax.xaxis.get_gridlines())
-            except: pass
+        if ax is None: return
 
-        # Extract metadata for ASCII overlay
-        original_title = ax.get_title()
-        original_xlabel = ax.get_xlabel()
-        original_ylabel = ax.get_ylabel()
-        
+        # Extract metadata for ASCII overlay (Internal use)
         meta = {
-            "title": original_title,
-            "xlabel": original_xlabel,
-            "ylabel": original_ylabel,
+            "title": ax.get_title(),
+            "xlabel": ax.get_xlabel(),
+            "ylabel": ax.get_ylabel(),
             "xmin": float(ax.get_xlim()[0]),
             "xmax": float(ax.get_xlim()[1]),
             "ymin": float(ax.get_ylim()[0]),
             "ymax": float(ax.get_ylim()[1]),
-            "legend": [t.get_text() for t in ax.get_legend().get_texts()] if ax.get_legend() else [],
-            "grid": grid_on
         }
         
         # Use a unique filename for each plot refresh
         plot_id = int(time.time() * 1000) % 1000000
-        filename = f"graph_{plot_id}.jpg"
-        meta_filename = f"graph_{plot_id}.json"
         
-        with open(meta_filename, "w") as f:
+        # Determine where to save based on session isolation (Context-safe)
+        ws_path = unilab_workspace_ctx.get()
+        prefix = pathlib.Path(ws_path).name.split('_')[-1][:6] + "_" if ws_path else ""
+        filename = f"graph_{prefix}{plot_id}.png"
+        meta_filename = f"graph_{prefix}{plot_id}.json"
+        
+        save_path = pathlib.Path(ws_path) / filename if ws_path else pathlib.Path(filename)
+        save_meta_path = pathlib.Path(ws_path) / meta_filename if ws_path else pathlib.Path(meta_filename)
+        
+        with open(str(save_meta_path), "w") as f:
             json.dump(meta, f)
 
-        # High-impact styling with a Pastel Aesthetic
-        plt.rcParams.update({
-            'axes.prop_cycle': plt.cycler(color=['#A8D8EA', '#AA96DA', '#FCBAD3', '#FFFFD2', '#FF8080', '#BAE1FF']),
-            'axes.linewidth': 1.5, 
-            'axes.edgecolor': '#555555',
-            'grid.color': '#DDDDDD',
-            'grid.linestyle': '--',
-            'grid.linewidth': 0.8,
-            'lines.linewidth': 4.0,
-            'font.size': 20,
-            'font.weight': 'bold',
-            'figure.facecolor': 'white',
-            'axes.facecolor': '#FAFAFA',
-            'axes.labelweight': 'bold',
-            'axes.titleweight': 'bold',
-            'xtick.labelsize': 16,
-            'ytick.labelsize': 16,
-            'legend.fontsize': 16,
-            'figure.dpi': 120
-        })
-        fig = plt.gcf()
+        # Prepare for saving
         fig.set_size_inches(12, 8)
-        plt.tight_layout()
         
-        plt.savefig(filename, format='jpg', bbox_inches='tight')
+        # tight_layout often fails on 3D or with Agg in certain ways, so we use it carefully
+        if ax.name != '3d':
+            try: fig.tight_layout()
+            except: pass
         
-        fig_num = plt.gcf().number
+        # Critical: Force a draw before saving in headless mode
+        fig.canvas.draw()
+        plt.savefig(str(save_path), format='png', bbox_inches='tight', dpi=120)
+        
+        fig_num = fig.number
         print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}")
-    except Exception as e: print(f"Error saving graph: {e}")
+    except Exception as e:
+        print(f"Error saving graph: {e}")
 
 _unilab_hold = False
 
@@ -1989,6 +1996,65 @@ def colormap(*args):
             pass
         if hasattr(target_ax, 'figure'):
             target_ax.figure.canvas.draw()
+
+def plot3(*args, **kwargs):
+    """Plot lines and points in 3D."""
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.gcf()
+    
+    # Ensure 3D axes
+    if not fig.axes or fig.gca().name != '3d':
+        ax = fig.add_subplot(111, projection='3d')
+    else:
+        ax = fig.gca()
+        
+    res = ax.plot(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
+def surf(*args, **kwargs):
+    """Create a 3D surface plot."""
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.gcf()
+    
+    # Ensure 3D axes
+    if not fig.axes or fig.gca().name != '3d':
+        ax = fig.add_subplot(111, projection='3d')
+    else:
+        ax = fig.gca()
+    
+    if len(args) == 1:
+        Z = np.asarray(args[0])
+        rows, cols = Z.shape
+        X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+        res = ax.plot_surface(X, Y, Z, **kwargs)
+    else:
+        res = ax.plot_surface(*args, **kwargs)
+        
+    _unilab_refresh_graph()
+    return res
+
+def mesh(*args, **kwargs):
+    """Create a 3D wireframe mesh plot."""
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.gcf()
+    
+    # Ensure 3D axes
+    if not fig.axes or fig.gca().name != '3d':
+        ax = fig.add_subplot(111, projection='3d')
+    else:
+        ax = fig.gca()
+    
+    if len(args) == 1:
+        Z = np.asarray(args[0])
+        rows, cols = Z.shape
+        X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+        res = ax.plot_wireframe(X, Y, Z, **kwargs)
+    else:
+        res = ax.plot_wireframe(*args, **kwargs)
+        
+    _unilab_refresh_graph()
+    return res
 
 def plot_nn(layers, title="Neural Network Architecture"):
     """Plots a neural network architecture."""

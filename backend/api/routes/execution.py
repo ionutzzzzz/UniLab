@@ -47,7 +47,8 @@ async def execute_code(
             duration_s=result.duration_s,
             variables_snapshot=variables_snapshot,
             plots=result.plots,
-            execution_id=str(uuid.uuid4())
+            execution_id=str(uuid.uuid4()),
+            extra=result.extra
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Session not found")

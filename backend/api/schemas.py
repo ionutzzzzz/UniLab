@@ -60,6 +60,7 @@ class ExecutionResultResponse(BaseModel):
     variables_snapshot: Dict[str, VariableInfo] = {}
     plots: List[str] = []
     execution_id: Optional[str] = None
+    extra: Dict[str, Any] = {}
 
 
 class BatchExecuteRequest(BaseModel):

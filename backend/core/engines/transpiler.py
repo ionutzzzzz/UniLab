@@ -54,7 +54,16 @@ class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
         self.transpiler = UniLabTranspiler()
-        self.search_paths = [self.workspace_path]
+        
+        # Set initial CWD to sample folder in web mode
+        if os.environ.get('UNILAB_WEB_MODE') == '1':
+            project_root = pathlib.Path(__file__).resolve().parents[3]
+            sample_dir = project_root / 'sample'
+            self.cwd = sample_dir if sample_dir.exists() else self.workspace_path
+        else:
+            self.cwd = self.workspace_path
+
+        self.search_paths = [self.cwd, self.workspace_path]
         
         # Use our new AutoloadDict
         self.globals = AutoloadDict(self)
@@ -155,152 +164,247 @@ class TranspilerEngine(BaseEngine):
         # Handle 'help topic' style calls specifically
         stripped_code = code.strip().rstrip(';')
         
-        if stripped_code.startswith('help'):
-            parts = stripped_code.split()
-            # Handle help() or help topic
-            topic = None
-            if len(parts) > 1:
-                topic = parts[1].rstrip(';')
-            elif '(' in stripped_code and ')' in stripped_code:
-                # Handle help('topic') or help("topic")
-                match = re.search(r"help\(['\"]?(\w+)['\"]?\)", stripped_code)
-                if match:
-                    topic = match.group(1)
-            
-            return await self._get_help(topic)
-
-        # Auto-help: if user types a single function name without () or args
-        if stripped_code and re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', stripped_code):
-            # 1. Check if it exists as a function in runtime or search paths
-            is_func = False
-            if hasattr(runtime, stripped_code) and not stripped_code.startswith('_'):
-                is_func = True
-            if not is_func:
-                for path in self.search_paths:
-                    if (path / f"{stripped_code}.m").exists():
-                        is_func = True
-                        break
-            
-            # 2. Check if it's ALREADY a variable in globals (and not just a function pointer)
-            is_var = False
-            if stripped_code in self.globals:
-                val = self.globals[stripped_code]
-                if not callable(val) or isinstance(val, np.ndarray):
-                    is_var = True
-            
-            if is_func and not is_var:
-                return await self._get_help(stripped_code)
-
-        start_ts = time.time()
+        # Ensure we are in the correct directory for this session
+        old_cwd = os.getcwd()
+        os.chdir(self.cwd)
+        
+        # Set context-safe workspace path for the runtime
+        from ..runtime import unilab_workspace_ctx
+        token = unilab_workspace_ctx.set(str(self.workspace_path))
+        
         try:
-            python_code, called_funcs, added_paths = self.transpiler.transpile(code)
+            # --- Shell Command Handling ---
+            import subprocess
+            import shlex
             
-            # Temporary add paths for resolution (from addpath calls in the code)
-            for ap in added_paths:
-                self._add_path(ap)
-            
-            # Re-verify critical runtime functions are in globals
-            for name in dir(runtime):
-                if not name.startswith('_'):
-                    self.globals[name] = getattr(runtime, name)
-            
-            # Re-verify critical constants are available
-            critical_constants = {
-                'pi': np.pi,
-                'inf': np.inf,
-                'Inf': np.inf,
-                'nan': np.nan,
-                'NaN': np.nan,
-                'eps': np.finfo(float).eps,
-                'i': 1j,
-                'j': 1j,
-                'realmax': np.finfo(float).max,
-                'realmin': np.finfo(float).tiny,
-            }
-            self.globals.update(critical_constants)
-            
-            # Prepare execution environment
-            out = io.StringIO()
-            err = io.StringIO()
-            
-            # Set current directory to workspace
-            old_cwd = os.getcwd()
-            os.chdir(self.workspace_path)
-            
-            success = True
-            try:
-                # We use a custom globals dict to persist state between runs in the same session
-                with redirect_stdout(out), redirect_stderr(err):
-                    exec(python_code, self.globals)
+            parts = stripped_code.split()
+            if not parts:
+                return ExecutionResult(True, "", "", 0, 0.0, self._get_variables(), [])
                 
-                # Save workspace after successful execution
-                self._save_workspace()
-            except NameError as ne:
-                success = False
-                var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
-                err.write(f"Could not recognise command or function '{var_name}'")
-            except Exception as e:
-                success = False
-                # For other errors, show a cleaner message if possible, or the last line of traceback
-                import traceback
-                err.write(traceback.format_exc())
-            finally:
-                os.chdir(old_cwd)
+            cmd = parts[0].lower()
             
-            duration = time.time() - start_ts
-            stdout = out.getvalue()
-            stdout_lines = stdout.splitlines()
-            
-            # Find all plot markers
-            plot_indices = [i for i, line in enumerate(stdout_lines) if "::GRAPHICAL_PLOT::" in line]
-            
-            plots = []
-            if plot_indices:
-                render_func = self.globals.get('render_image_terminal')
-                
-                # Deduplicate: only keep the last update for each unique figure
-                fig_to_last_marker = {}
-                for idx in plot_indices:
-                    line = stdout_lines[idx]
-                    parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
-                    filename = parts[0].strip()
-                    fig_num = parts[1].strip() if len(parts) > 1 else "default"
-                    fig_to_last_marker[fig_num] = (idx, filename)
-                
-                final_render_indices = {v[0] for v in fig_to_last_marker.values()}
-                
-                for idx in plot_indices:
-                    line = stdout_lines[idx]
-                    parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
-                    filename = parts[0].strip()
-                    plots.append(filename)
-                    
-                    if idx in final_render_indices and render_func:
-                        full_path = self.workspace_path / filename
-                        render_out = render_func(str(full_path))
-                        stdout_lines[idx] = render_out if render_out else ""
-                    else:
-                        stdout_lines[idx] = ""
+            # 1. Handle 'cd' (Directory Persistence)
+            if cmd == 'cd':
+                try:
+                    target_dir = parts[1] if len(parts) > 1 else str(self.workspace_path)
+                    os.chdir(target_dir)
+                    # Persist the change
+                    self.cwd = pathlib.Path(os.getcwd()).resolve()
+                    return ExecutionResult(True, str(self.cwd), "", 0, 0.0, self._get_variables(), [])
+                except Exception as e:
+                    return ExecutionResult(False, "", str(e), 1, 0.0, self._get_variables(), [])
 
-            return ExecutionResult(
-                success=success,
-                stdout="\n".join(l for l in stdout_lines if l or l == ""),
-                stderr=err.getvalue(),
-                return_code=0 if success else 1,
-                duration_s=duration,
-                variables_snapshot=self._get_variables(),
-                plots=plots
-            )
-        except Exception as e:
-            return ExecutionResult(
-                success=False,
-                stdout='',
-                stderr=f"Transpilation Error: {str(e)}",
-                return_code=1,
-                duration_s=time.time() - start_ts,
-                variables_snapshot={},
-                plots=[]
-            )
+            # 2. Handle 'ls', 'pwd', 'dir', 'mkdir', 'rm', 'cp', 'mv'
+            if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv') or stripped_code.startswith('!'):
+                try:
+                    exec_cmd = stripped_code[1:] if stripped_code.startswith('!') else stripped_code
+                    proc = subprocess.run(shlex.split(exec_cmd), capture_output=True, text=True, timeout=timeout)
+                    return ExecutionResult(
+                        proc.returncode == 0,
+                        proc.stdout,
+                        proc.stderr,
+                        proc.returncode,
+                        0.0,
+                        self._get_variables(),
+                        []
+                    )
+                except Exception as e:
+                    return ExecutionResult(False, "", str(e), 1, 0.0, self._get_variables(), [])
+
+            # 3. Handle 'run' command (recursive execution)
+            if cmd == 'run' and len(parts) > 1:
+                script_name = parts[1]
+                if not script_name.endswith('.m'): script_name += '.m'
+                script_path = pathlib.Path(script_name)
+                
+                # Try relative to CWD, then workspace, then parent (project root)
+                if not script_path.exists():
+                    script_path = self.cwd / script_name
+                if not script_path.exists():
+                    script_path = self.workspace_path / script_name
+                if not script_path.exists():
+                    # Fallback to absolute project root
+                    root = pathlib.Path(__file__).resolve().parents[3]
+                    script_path = root / script_name
+
+                if script_path.exists():
+                    try:
+                        script_code = script_path.read_text(encoding="utf-8")
+                        # Restore CWD before recursive call to let it handle its own chdir
+                        os.chdir(old_cwd)
+                        return await self.run_code(script_code, timeout=timeout)
+                    except Exception as e:
+                        return ExecutionResult(False, "", f"Error running script: {e}", 1, 0.0, self._get_variables(), [])
+                else:
+                    return ExecutionResult(False, "", f"Script '{script_name}' not found.", 1, 0.0, self._get_variables(), [])
+
+            # 4. Handle 'clc' (Clear)
+            if cmd == 'clc':
+                return ExecutionResult(True, "::CLEAR_TERMINAL::", "", 0, 0.0, self._get_variables(), [])
+
+            if stripped_code.startswith('help'):
+                parts = stripped_code.split()
+                # Handle help() or help topic
+                topic = None
+                if len(parts) > 1:
+                    topic = parts[1].rstrip(';')
+                elif '(' in stripped_code and ')' in stripped_code:
+                    # Handle help('topic') or help("topic")
+                    match = re.search(r"help\(['\"]?(\w+)['\"]?\)", stripped_code)
+                    if match:
+                        topic = match.group(1)
+                
+                return await self._get_help(topic)
+
+            # Auto-help: if user types a single function name without () or args
+            if stripped_code and re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', stripped_code):
+                # 1. Check if it exists as a function in runtime or search paths
+                is_func = False
+                if hasattr(runtime, stripped_code) and not stripped_code.startswith('_'):
+                    is_func = True
+                if not is_func:
+                    for path in self.search_paths:
+                        if (path / f"{stripped_code}.m").exists():
+                            is_func = True
+                            break
+                
+                # 2. Check if it's ALREADY a variable in globals (and not just a function pointer)
+                is_var = False
+                if stripped_code in self.globals:
+                    val = self.globals[stripped_code]
+                    if not callable(val) or isinstance(val, np.ndarray):
+                        is_var = True
+                
+                if is_func and not is_var:
+                    return await self._get_help(stripped_code)
+
+            start_ts = time.time()
+            try:
+                python_code, called_funcs, added_paths = self.transpiler.transpile(code)
+                
+                # Temporary add paths for resolution (from addpath calls in the code)
+                for ap in added_paths:
+                    self._add_path(ap)
+                
+                # Re-verify critical runtime functions are in globals
+                for name in dir(runtime):
+                    if not name.startswith('_'):
+                        self.globals[name] = getattr(runtime, name)
+                
+                # Re-verify critical constants are available
+                critical_constants = {
+                    'pi': np.pi,
+                    'inf': np.inf,
+                    'Inf': np.inf,
+                    'nan': np.nan,
+                    'NaN': np.nan,
+                    'eps': np.finfo(float).eps,
+                    'i': 1j,
+                    'j': 1j,
+                    'realmax': np.finfo(float).max,
+                    'realmin': np.finfo(float).tiny,
+                }
+                self.globals.update(critical_constants)
+                
+                # Prepare execution environment
+                out = io.StringIO()
+                err = io.StringIO()
+                
+                success = True
+                try:
+                    # We use a custom globals dict to persist state between runs in the same session
+                    with redirect_stdout(out), redirect_stderr(err):
+                        exec(python_code, self.globals)
+                    
+                    # If code changed directory, update persistent CWD
+                    self.cwd = pathlib.Path(os.getcwd()).resolve()
+                    
+                    # Save workspace after successful execution
+                    self._save_workspace()
+                except NameError as ne:
+                    success = False
+                    var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
+                    err.write(f"Could not recognise command or function '{var_name}'")
+                except Exception as e:
+                    success = False
+                    # For other errors, show a cleaner message if possible, or the last line of traceback
+                    import traceback
+                    err.write(traceback.format_exc())
+                
+                duration = time.time() - start_ts
+                stdout = out.getvalue()
+                stdout_lines = stdout.splitlines()
+                
+                # Find all plot markers
+                plot_indices = [i for i, line in enumerate(stdout_lines) if "::GRAPHICAL_PLOT::" in line]
+
+                plots = []
+                plot_data_b64 = []
+
+                if plot_indices:
+                    render_func = self.globals.get('render_image_terminal')
+
+                    # Deduplicate: only keep the last update for each unique figure
+                    fig_to_last_marker = {}
+                    for idx in plot_indices:
+                        line = stdout_lines[idx]
+                        parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
+                        filename = parts[0].strip()
+                        fig_num = parts[1].strip() if len(parts) > 1 else "default"
+                        fig_to_last_marker[fig_num] = (idx, filename)
+
+                    final_render_indices = {v[0] for v in fig_to_last_marker.values()}
+
+                    import base64
+                    # We only want to base64 the FINAL versions of each unique figure
+                    for fig_num, (idx, filename) in fig_to_last_marker.items():
+                        plots.append(filename)
+                        if os.environ.get('UNILAB_WEB_MODE') == '1':
+                            # Try workspace then CWD
+                            p = self.workspace_path / filename
+                            if not p.exists(): p = self.cwd / filename
+
+                            if p.exists():
+                                try:
+                                    b64 = base64.b64encode(p.read_bytes()).decode('utf-8')
+                                    plot_data_b64.append(f"data:image/png;base64,{b64}")
+                                except Exception as e:
+                                    print(f"Base64 conversion error for {filename}: {e}")
+
+                    # Clean up stdout markers
+                    for idx in plot_indices:
+                        if idx in final_render_indices and render_func and os.environ.get('UNILAB_WEB_MODE') != '1':
+                            line = stdout_lines[idx]
+                            filename = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")[0].strip()
+                            p = self.workspace_path / filename
+                            if not p.exists(): p = self.cwd / filename
+                            render_out = render_func(str(p))
+                            stdout_lines[idx] = render_out if render_out else ""
+                        else:
+                            stdout_lines[idx] = ""
+
+                return ExecutionResult(
+                    success=success,
+                    stdout="\n".join(l for l in stdout_lines if l or l == ""),
+                    stderr=err.getvalue(),
+                    return_code=0 if success else 1,
+                    duration_s=duration,
+                    variables_snapshot=self._get_variables(),
+                    plots=plots,
+                    extra={"plot_data_b64": plot_data_b64}
+                )
+            except Exception as e:
+                return ExecutionResult(
+                    success=False,
+                    stdout='',
+                    stderr=f"Transpilation Error: {str(e)}",
+                    return_code=1,
+                    duration_s=time.time() - start_ts,
+                    variables_snapshot={},
+                    plots=[]
+                )
+        finally:
+            os.chdir(old_cwd)
 
     async def _get_help(self, topic: Optional[str]) -> ExecutionResult:
         start_ts = time.time()
@@ -336,6 +440,44 @@ class TranspilerEngine(BaseEngine):
 
     async def fetch_variables(self) -> Dict[str, Any]:
         return self._get_variables()
+
+    def complete(self, text: str, line: str) -> list[str]:
+        """Provides autocomplete suggestions for symbols and paths."""
+        stripped_line = line.lstrip()
+        
+        # Keywords and Builtins from UniLab.py logic
+        KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
+        BUILTINS = ['disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin']
+        
+        # Context-aware triggers for path completion
+        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ')
+        is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
+        
+        if is_path_context:
+            import glob
+            # Handle path completion relative to current CWD
+            search_pattern = text + '*'
+            options = glob.glob(search_pattern)
+            # Filter and add trailing slash to directories
+            results = []
+            for f in options:
+                p = pathlib.Path(f)
+                results.append(f + '/' if p.is_dir() else f)
+            return sorted(results)
+        else:
+            # Symbol completion
+            vars_snapshot = self._get_variables()
+            workspace_vars = list(vars_snapshot.keys())
+            
+            # M-file completions from search paths
+            m_files = set()
+            for path in self.search_paths:
+                if path.exists():
+                    for p in path.glob('*.m'):
+                        m_files.add(p.stem)
+            
+            all_symbols = KEYWORDS + BUILTINS + workspace_vars + list(m_files)
+            return sorted([w for w in all_symbols if w.startswith(text)])
 
     def _get_variables(self):
         vars_snap = {}

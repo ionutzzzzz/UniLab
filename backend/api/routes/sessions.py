@@ -109,3 +109,19 @@ async def delete_session(
         raise HTTPException(status_code=404, detail="Session not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{session_id}/complete")
+async def autocomplete(
+    session_id: str,
+    text: str = "",
+    line: str = "",
+    core: UniLabCore = Depends(get_core)
+):
+    """Get autocomplete suggestions for a session."""
+    try:
+        suggestions = await core.complete(session_id, text, line)
+        return {"suggestions": suggestions}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
