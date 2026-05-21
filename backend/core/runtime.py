@@ -742,7 +742,13 @@ def unilab_call(obj, *args, **kwargs):
         else:
             processed.append(arg)
             
-    res = obj[tuple(processed)]
+    try:
+        res = obj[tuple(processed)]
+    except (IndexError, ValueError, TypeError):
+        # Handle indexing into empty arrays gracefully if possible
+        if isinstance(obj, np.ndarray) and obj.size == 0:
+            return np.array([])
+        raise
     
     # If the result is an array but we indexed with multiple values, 
     # try to keep it 2D if the original was 2D and we sliced.
@@ -1099,7 +1105,7 @@ def unilab_set(obj, val, *args):
     return obj
 
 def unilab_matrix_concat(*rows):
-    if not rows: return np.array([])
+    if not rows: return np.empty((0, 0))
 
     # If it's a single string, return it (MATLAB char array)
     if len(rows) == 1 and isinstance(rows[0], str):
@@ -2339,8 +2345,15 @@ def subplot(*args, **kwargs):
     _unilab_refresh_graph()
     return res
 
-def hold(state='on'):
+def hold(*args):
     global _unilab_hold
+    args_list = list(args)
+    if args_list and hasattr(args_list[0], 'plot'):
+        # First arg is likely an axes object, ignore it for now as UniLab 
+        # uses a global hold state for the current figure.
+        args_list.pop(0)
+    
+    state = args_list[0] if args_list else 'on'
     val = str(state).lower()
     _unilab_hold = (val == 'on' or val == '1' or state is True)
 
@@ -2361,7 +2374,19 @@ def grid(*args, **kwargs):
         if hasattr(target, 'figure'): target.figure.canvas.draw()
     _unilab_refresh_graph()
 
-def axis(state): plt.axis(state); _unilab_refresh_graph()
+def axis(*args):
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'axis'):
+        target = args_list.pop(0)
+    
+    if args_list:
+        res = target.axis(args_list[0])
+    else:
+        res = target.axis()
+        
+    _unilab_refresh_graph()
+    return res
 
 def legend(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
