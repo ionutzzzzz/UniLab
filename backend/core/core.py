@@ -38,11 +38,11 @@ UniLab_GRAMMAR = r"""
     single_assignment: postfix_expr EQUAL expression
     lhs_list: LBRACKET (IDENTIFIER (COMMA? IDENTIFIER)*)? RBRACKET
     
-    if_stmt: IF expression block (ELSEIF expression block)* [ELSE block] END
-    for_stmt: FOR IDENTIFIER EQUAL expression block END
-    while_stmt: WHILE expression block END
-    switch_stmt: SWITCH expression case_clause* [otherwise_clause] END
-    case_clause: CASE expression block
+    if_stmt: IF expression separator+ block (ELSEIF expression separator+ block)* [ELSE separator* block] END
+    for_stmt: FOR IDENTIFIER EQUAL expression separator+ block END
+    while_stmt: WHILE expression separator+ block END
+    switch_stmt: SWITCH expression separator+ case_clause* [otherwise_clause] END
+    case_clause: CASE expression separator+ block
     otherwise_clause: OTHERWISE block
     
     try_stmt: TRY block CATCH [IDENTIFIER] block END
@@ -112,7 +112,7 @@ UniLab_GRAMMAR = r"""
     
     command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
-    IDENTIFIER: /(?!function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export)[a-zA-Z_][a-zA-Z0-9_]*/
+    IDENTIFIER: /(?!(?:function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export)\b)[a-zA-Z_][a-zA-Z0-9_]*/
     NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
     STRING: /'(?:[^'\n]|'')*'/
     
@@ -440,8 +440,8 @@ class UniLabToPython(Transformer):
         return "\n".join(self.block(items))
 
     def if_stmt(self, items):
-        cond = items[1]
-        block = items[2]
+        items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
+        cond, block = items[1], items[2]
         lines = [f"if unilab_to_bool({cond}):"]
         lines.extend(self._indent(block))
         i = 3
@@ -460,19 +460,22 @@ class UniLabToPython(Transformer):
         return lines
 
     def for_stmt(self, items):
-        var, expr, block = str(items[1]), items[3], items[4]
+        var, expr = str(items[1]), items[3]
+        block = next(i for i in items[4:] if isinstance(i, list))
         self.variables.add(var)
         lines = [f"for {var} in unilab_iter({expr}):"]
         lines.extend(self._indent(block))
         return lines
 
     def while_stmt(self, items):
-        cond, block = items[1], items[2]
+        cond = items[1]
+        block = next(i for i in items[2:] if isinstance(i, list))
         lines = [f"while unilab_to_bool({cond}):"]
         lines.extend(self._indent(block))
         return lines
 
     def switch_stmt(self, items):
+        items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
         expr = items[1]
         self._switch_depth += 1
         var_name = f"_sw_{self._switch_depth}"
@@ -492,6 +495,7 @@ class UniLabToPython(Transformer):
         return lines
 
     def case_clause(self, items):
+        items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
         expr, block = items[1], items[2]
         return [f"elif _sw_tmp == {expr}:"] + self._indent(block)
 
@@ -540,7 +544,7 @@ class UniLabToPython(Transformer):
     def break_stmt(self, items): return "break"
     def continue_stmt(self, items): return "continue"
 
-    def func_params(self, items): return [str(i) for i in items if str(i) != ","]
+    def func_params(self, items): return [self._escape_name(str(i)) for i in items if str(i) != ","]
     def call_args(self, items): return [str(i) for i in items if str(i) != ","]
     
     def matrix(self, items):

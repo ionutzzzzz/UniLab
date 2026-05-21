@@ -298,12 +298,18 @@ def unilab_step(sys, T=None):
     elif T is not None and isinstance(T, list) and len(T) == 0:
         T = None
     elif T is not None:
+        if isinstance(T, (int, float, np.integer, np.floating)):
+            T = np.linspace(0, T, 1000)
         T = _unilab_vec(T)
     t, y = signal.step(sys, T=T)
     return t, y
 
 def unilab_impulse(sys, T=None): 
-    t, y = signal.impulse(sys, T=_unilab_vec(T) if T is not None else None)
+    if T is not None:
+        if isinstance(T, (int, float, np.integer, np.floating)):
+            T = np.linspace(0, T, 1000)
+        T = _unilab_vec(T)
+    t, y = signal.impulse(sys, T=T)
     return t, y
 
 def unilab_lsim(sys, U, T): 
@@ -1592,11 +1598,14 @@ def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def rand(*args):
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.rand(*args[0])
-    return np.random.rand(*args)
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): 
+        args = [int(a) for a in args[0]]
+        return np.random.rand(*args)
+    args = [int(a) for a in args]
+    return np.random.rand(*args) if args else np.random.rand()
 
 def randn(*args):
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): return np.random.randn(*args[0])
+    args = [int(a) for a in args]
     return np.random.randn(*args) if args else np.random.randn()
 
 def randi(imax, *args):
