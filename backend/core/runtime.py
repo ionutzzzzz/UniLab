@@ -13,6 +13,9 @@ from backend.core.simulation.engine import unilab_simulate as simulate
 # ContextVar for thread-safe session workspace path
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
 
+# Store for 3D plot data (fig_num -> {type, x, y, z})
+_unilab_3d_data_store = {}
+
 def uibutton(label, callback):
     """Adds a custom button to the current simulation window."""
     from backend.core.simulation.engine import _current_sim_window
@@ -308,6 +311,25 @@ def unilab_lsim(sys, U, T):
 
 def unilab_bode(sys, w=None): 
     w, mag, phase = signal.bode(sys, w=_unilab_vec(w) if w is not None else None)
+    
+    # Plotting for Bode
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
+
+    fig, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    
+    ax_mag.semilogx(w, mag, linewidth=3)
+    ax_mag.set_ylabel('Magnitude (dB)')
+    ax_mag.grid(True, which='both', linestyle='--', alpha=0.5)
+    ax_mag.set_title('Bode Plot')
+    
+    ax_phase.semilogx(w, phase, linewidth=3)
+    ax_phase.set_ylabel('Phase (deg)')
+    ax_phase.set_xlabel('Frequency (rad/s)')
+    ax_phase.grid(True, which='both', linestyle='--', alpha=0.5)
+    
+    _unilab_refresh_graph()
     return w, mag, phase
 
 def unilab_freqfreqz(b, a, worN=None):
@@ -1226,7 +1248,25 @@ def svd(x):
 
 def linspace(start, stop, n=100): return np.atleast_2d(np.linspace(start, stop, int(n)))
 def logspace(start, stop, n=50): return np.atleast_2d(np.logspace(start, stop, int(n)))
-def meshgrid(x, y=None): return np.meshgrid(x, y if y is not None else x)
+def meshgrid(*args):
+    """
+    MATLAB-compatible meshgrid.
+    Example:
+        [X, Y] = meshgrid(x, y)
+        [X, Y, Z] = meshgrid(x, y, z)
+    """
+    if not args:
+        return []
+    
+    # Flatten vectors (1xN or Nx1) to 1D for numpy.meshgrid
+    processed_args = [_unilab_vec(arg) for arg in args]
+    
+    if len(processed_args) == 1:
+        # meshgrid(x) -> meshgrid(x, x)
+        x = processed_args[0]
+        return np.meshgrid(x, x)
+    
+    return np.meshgrid(*processed_args)
 def randperm(n): return np.random.permutation(int(n)) + 1
 def _is_symbolic(x):
     return hasattr(x, '__module__') and 'sympy' in x.__module__
@@ -1429,29 +1469,51 @@ def sprintf(fmt, *args):
     except:
         return str(fmt)
 
-# High-impact styling with a Pastel Aesthetic (Module Level)
+# High-impact styling with a Dark Professional Aesthetic (Module Level)
 plt.rcParams.update({
-    'axes.prop_cycle': plt.cycler(color=['#A8D8EA', '#AA96DA', '#FCBAD3', '#FFFFD2', '#FF8080', '#BAE1FF']),
+    'axes.prop_cycle': plt.cycler(color=['#4fc3f7', '#81c784', '#ffb74d', '#f06292', '#ba68c8', '#a1887f']),
     'axes.linewidth': 1.5, 
-    'axes.edgecolor': '#555555',
-    'grid.color': '#DDDDDD',
+    'axes.edgecolor': '#444444',
+    'axes.facecolor': '#121212',
+    'axes.labelcolor': '#e0e0e0',
+    'axes.labelweight': 'bold',
+    'axes.titleweight': 'bold',
+    'figure.facecolor': '#121212',
+    'grid.color': '#333333',
     'grid.linestyle': '--',
     'grid.linewidth': 0.8,
     'lines.linewidth': 4.0,
     'font.size': 20,
     'font.weight': 'bold',
-    'figure.facecolor': 'white',
-    'axes.facecolor': '#FAFAFA',
-    'axes.labelweight': 'bold',
-    'axes.titleweight': 'bold',
+    'text.color': '#e0e0e0',
+    'xtick.color': '#b0b0b0',
+    'ytick.color': '#b0b0b0',
     'xtick.labelsize': 16,
     'ytick.labelsize': 16,
     'legend.fontsize': 16,
+    'legend.facecolor': '#1e1e1e',
+    'legend.edgecolor': '#444444',
+    'savefig.facecolor': '#121212',
+    'savefig.edgecolor': '#121212',
     'figure.dpi': 120
 })
 
+# Figure versioning and plot counter for unique snapshots
+_unilab_plot_counter = 0
+_unilab_fig_versions = {}
+
+def _unilab_update_fig_version(fig_num=None):
+    """Increments the version counter for a figure, indicating a new plot instance."""
+    global _unilab_fig_versions
+    if fig_num is None:
+        try: fig_num = plt.gcf().number
+        except: fig_num = 1
+    _unilab_fig_versions[fig_num] = _unilab_fig_versions.get(fig_num, 0) + 1
+    return _unilab_fig_versions[fig_num]
+
 def _unilab_refresh_graph():
     """Triggers a graph refresh by saving to a file and printing a marker."""
+    global _unilab_plot_counter
     try:
         import json
         fig = plt.gcf()
@@ -1467,16 +1529,21 @@ def _unilab_refresh_graph():
             "xmax": float(ax.get_xlim()[1]),
             "ymin": float(ax.get_ylim()[0]),
             "ymax": float(ax.get_ylim()[1]),
+            "is_3d": ax.name == '3d'
         }
         
-        # Use a unique filename for each plot refresh
-        plot_id = int(time.time() * 1000) % 1000000
+        # Use a truly unique counter for each plot refresh to avoid collisions
+        _unilab_plot_counter += 1
+        plot_id = _unilab_plot_counter
         
         # Determine where to save based on session isolation (Context-safe)
         ws_path = unilab_workspace_ctx.get()
         prefix = pathlib.Path(ws_path).name.split('_')[-1][:6] + "_" if ws_path else ""
-        filename = f"graph_{prefix}{plot_id}.png"
-        meta_filename = f"graph_{prefix}{plot_id}.json"
+        
+        # Add "3d" marker to filename if this is a 3D plot
+        plot_type_marker = "3d_" if ax.name == '3d' else ""
+        filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.png"
+        meta_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.json"
         
         save_path = pathlib.Path(ws_path) / filename if ws_path else pathlib.Path(filename)
         save_meta_path = pathlib.Path(ws_path) / meta_filename if ws_path else pathlib.Path(meta_filename)
@@ -1484,20 +1551,73 @@ def _unilab_refresh_graph():
         with open(str(save_meta_path), "w") as f:
             json.dump(meta, f)
 
-        # Prepare for saving
+        # Rendering Fixes for Headless/Web
         fig.set_size_inches(12, 8)
+        fig.set_facecolor('#121212')
+        fig.patch.set_facecolor('#121212')
+        fig.patch.set_alpha(1.0)
         
-        # tight_layout often fails on 3D or with Agg in certain ways, so we use it carefully
-        if ax.name != '3d':
-            try: fig.tight_layout()
+        # Ensure legend is also dark if it exists
+        for leg in fig.legends:
+            leg.get_frame().set_facecolor('#1e1e1e')
+            leg.get_frame().set_edgecolor('#444444')
+            for text in leg.get_texts():
+                text.set_color('#e0e0e0')
+        
+        for ax_item in fig.axes:
+            ax_item.set_facecolor('#121212')
+            ax_item.patch.set_facecolor('#121212')
+            
+        # Ensure the layout is tight so labels are not cut off
+        # tight_layout can sometimes fail with 3D or very complex plots
+        try:
+            if ax.name != '3d':
+                fig.tight_layout()
+        except Exception:
+            pass
+            
+        # Handle 3D pane colors for dark mode and save 3D data
+        if ax.name == '3d':
+            try:
+                ax.xaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
+                ax.yaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
+                ax.zaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
+                ax.xaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
+                ax.yaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
+                ax.zaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
             except: pass
-        
-        # Critical: Force a draw before saving in headless mode
-        fig.canvas.draw()
-        plt.savefig(str(save_path), format='png', bbox_inches='tight', dpi=120)
-        
+
+            fig_num = fig.number
+            three_d_data = _unilab_3d_data_store.pop(fig_num, None)
+            if three_d_data:
+                try:
+                    data3d_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.3d.json"
+                    data3d_path = pathlib.Path(ws_path) / data3d_filename if ws_path else pathlib.Path(data3d_filename)
+                    with open(str(data3d_path), 'w') as f:
+                        json.dump(three_d_data, f)
+                except Exception:
+                    pass
+
+        # Force artists to be rendered
+        plt.draw()
+
+        # Save with tight clipping to avoid cutting off labels/axes
+        # We use a small padding to ensure edges are clean
+        # We explicitly set facecolor and edgecolor to the dark theme to avoid white borders
+        fig.savefig(
+            str(save_path),
+            format='png',
+            dpi=120,
+            facecolor='#121212',
+            edgecolor='#121212',
+            transparent=False,
+            bbox_inches='tight',
+            pad_inches=0.1
+        )
+
         fig_num = fig.number
-        print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}")
+        fig_ver = _unilab_fig_versions.get(fig_num, 1)
+        print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}")
     except Exception as e:
         print(f"Error saving graph: {e}")
 
@@ -1509,6 +1629,7 @@ def hold(state='on'):
 
 def clf():
     plt.clf()
+    _unilab_update_fig_version()
     _unilab_refresh_graph()
 
 def text(*args, **kwargs):
@@ -1560,8 +1681,12 @@ def plot(*args, **kwargs):
             continue
         i += 1
 
+    # Flatten vectors for Matplotlib compatibility
+    args_list = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args_list]
+
     if target_ax == plt and not _unilab_hold:
         plt.clf()
+        _unilab_update_fig_version()
         
     res = target_ax.plot(*args_list, **kwargs)
     
@@ -1782,13 +1907,54 @@ def _parse_matlab_style_args(args):
             kwargs[key_map.get(key, key)] = val
             i += 2
         else:
-            pos_args.append(args[i])
+            arg = args[i]
+            # Automatically flatten vectors (1xN or Nx1) for Matplotlib compatibility
+            if isinstance(arg, np.ndarray) and (arg.shape[0] == 1 or arg.shape[1] == 1):
+                arg = _unilab_vec(arg)
+            pos_args.append(arg)
             i += 1
     return pos_args, kwargs
+
+def stem(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
+    res = plt.stem(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
+def stairs(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
+    res = plt.stairs(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
+def area(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
+    # area(y) or area(x, y)
+    if len(p_args) == 1:
+        y = p_args[0]
+        x = np.arange(len(y))
+        res = plt.fill_between(x, y, **kwargs)
+    elif len(p_args) >= 2:
+        x, y = p_args[0], p_args[1]
+        res = plt.fill_between(x, y, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def scatter(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
+    
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     
     # Matplotlib scatter is filled by default. Remove MATLAB flag.
     p_args = [a for a in p_args if not (isinstance(a, str) and a == 'filled')]
@@ -1802,11 +1968,17 @@ def scatter(*args, **kwargs):
 def bar(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     res = plt.bar(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def hist(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def title(*args, **kwargs):
@@ -1882,6 +2054,9 @@ def legend(*args, **kwargs):
 def contourf(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     # MATLAB often passes levels as a 1xN matrix, Matplotlib wants 1D
     if len(p_args) >= 4 and isinstance(p_args[3], np.ndarray):
         p_args[3] = p_args[3].flatten()
@@ -1927,18 +2102,25 @@ def colormap(*args):
             target_ax.figure.canvas.draw()
 
 def _scatter_plot(x, y, t=None):
-    plt.clf()
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     plt.scatter(x, y, s=100, alpha=0.6)
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
 
 def _hist_plot(data, bins=10, t=None):
-    plt.clf()
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     plt.hist(data, bins=bins, alpha=0.7, edgecolor='white')
     if t: plt.title(t, fontweight='bold', fontsize=22)
     _unilab_refresh_graph()
 
 def heatmap(M):
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     plt.imshow(M, interpolation='nearest')
     plt.colorbar()
     _unilab_refresh_graph()
@@ -1950,6 +2132,10 @@ def imagesc(*args, **kwargs):
     if args_list and hasattr(args_list[0], 'imshow'):
         target = args_list.pop(0)
     
+    if target == plt and not _unilab_hold:
+        plt.clf()
+        _unilab_update_fig_version()
+
     # Heuristic for transpose if needed
     if len(args_list) > 0 and isinstance(args_list[0], np.ndarray):
         M = args_list[0]
@@ -1999,21 +2185,39 @@ def colormap(*args):
 
 def plot3(*args, **kwargs):
     """Plot lines and points in 3D."""
+    if not _unilab_hold: plt.clf()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
-    
+
     # Ensure 3D axes
     if not fig.axes or fig.gca().name != '3d':
         ax = fig.add_subplot(111, projection='3d')
     else:
         ax = fig.gca()
-        
+
+    # Flatten vectors for Matplotlib compatibility
+    args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
+
     res = ax.plot(*args, **kwargs)
+
+    try:
+        _unilab_3d_data_store[fig.number] = {
+            'type': 'scatter3d',
+            'x': np.asarray(args[0]).tolist() if len(args) > 0 else [],
+            'y': np.asarray(args[1]).tolist() if len(args) > 1 else [],
+            'z': np.asarray(args[2]).tolist() if len(args) > 2 else [],
+        }
+    except Exception:
+        pass
+
     _unilab_refresh_graph()
     return res
 
 def surf(*args, **kwargs):
     """Create a 3D surface plot."""
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
     
@@ -2023,19 +2227,47 @@ def surf(*args, **kwargs):
     else:
         ax = fig.gca()
     
+    # Flatten vectors
+    args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
+    
+    X_out, Y_out, Z_out = None, None, None
     if len(args) == 1:
         Z = np.asarray(args[0])
         rows, cols = Z.shape
         X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+        X_out, Y_out, Z_out = X, Y, Z
+        if 'cmap' not in kwargs: kwargs['cmap'] = 'viridis'
+        res = ax.plot_surface(X, Y, Z, **kwargs)
+    elif len(args) == 3:
+        X, Y, Z = args
+        # MATLAB supports surf(x, y, Z) where x and y are vectors
+        if X.ndim == 1 and Y.ndim == 1:
+            X, Y = np.meshgrid(X, Y)
+        X_out, Y_out, Z_out = X, Y, Z
+        if 'cmap' not in kwargs: kwargs['cmap'] = 'viridis'
         res = ax.plot_surface(X, Y, Z, **kwargs)
     else:
         res = ax.plot_surface(*args, **kwargs)
-        
+
+    try:
+        if X_out is not None and Y_out is not None and Z_out is not None:
+            _unilab_3d_data_store[fig.number] = {
+                'type': 'surface',
+                'x': np.asarray(X_out).tolist(),
+                'y': np.asarray(Y_out).tolist(),
+                'z': np.asarray(Z_out).tolist(),
+            }
+    except Exception:
+        pass
+
     _unilab_refresh_graph()
     return res
 
 def mesh(*args, **kwargs):
     """Create a 3D wireframe mesh plot."""
+    if not _unilab_hold: 
+        plt.clf()
+        _unilab_update_fig_version()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
     
@@ -2045,14 +2277,36 @@ def mesh(*args, **kwargs):
     else:
         ax = fig.gca()
     
+    # Flatten vectors
+    args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
+
+    X_out, Y_out, Z_out = None, None, None
     if len(args) == 1:
         Z = np.asarray(args[0])
         rows, cols = Z.shape
         X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+        X_out, Y_out, Z_out = X, Y, Z
+        res = ax.plot_wireframe(X, Y, Z, **kwargs)
+    elif len(args) == 3:
+        X, Y, Z = args
+        if X.ndim == 1 and Y.ndim == 1:
+            X, Y = np.meshgrid(X, Y)
+        X_out, Y_out, Z_out = X, Y, Z
         res = ax.plot_wireframe(X, Y, Z, **kwargs)
     else:
         res = ax.plot_wireframe(*args, **kwargs)
-        
+
+    try:
+        if X_out is not None and Y_out is not None and Z_out is not None:
+            _unilab_3d_data_store[fig.number] = {
+                'type': 'wireframe',
+                'x': np.asarray(X_out).tolist(),
+                'y': np.asarray(Y_out).tolist(),
+                'z': np.asarray(Z_out).tolist(),
+            }
+    except Exception:
+        pass
+
     _unilab_refresh_graph()
     return res
 

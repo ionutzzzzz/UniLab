@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import io
+import json
 import time
 import re
 import pickle
@@ -340,25 +341,35 @@ class TranspilerEngine(BaseEngine):
 
                 plots = []
                 plot_data_b64 = []
+                plot_3d_data = []
 
                 if plot_indices:
                     render_func = self.globals.get('render_image_terminal')
 
-                    # Deduplicate: only keep the last update for each unique figure
+                    # Deduplicate: only keep the last update for each unique (figure, version)
                     fig_to_last_marker = {}
                     for idx in plot_indices:
                         line = stdout_lines[idx]
                         parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
                         filename = parts[0].strip()
-                        fig_num = parts[1].strip() if len(parts) > 1 else "default"
-                        fig_to_last_marker[fig_num] = (idx, filename)
+
+                        fig_info = parts[1].split("::VER::") if len(parts) > 1 else ["default"]
+                        fig_num = fig_info[0].strip()
+                        fig_ver = fig_info[1].strip() if len(fig_info) > 1 else "1"
+
+                        # Key by both figure number and version
+                        fig_to_last_marker[(fig_num, fig_ver)] = (idx, filename)
 
                     final_render_indices = {v[0] for v in fig_to_last_marker.values()}
 
                     import base64
-                    # We only want to base64 the FINAL versions of each unique figure
-                    for fig_num, (idx, filename) in fig_to_last_marker.items():
+                    # Sort markers by their original index to maintain chronological order
+                    sorted_markers = sorted(fig_to_last_marker.items(), key=lambda x: x[1][0])
+
+                    for (fig_num, fig_ver), (idx, filename) in sorted_markers:
                         plots.append(filename)
+                        data_3d_entry = None
+
                         if os.environ.get('UNILAB_WEB_MODE') == '1':
                             # Try workspace then CWD
                             p = self.workspace_path / filename
@@ -370,6 +381,21 @@ class TranspilerEngine(BaseEngine):
                                     plot_data_b64.append(f"data:image/png;base64,{b64}")
                                 except Exception as e:
                                     print(f"Base64 conversion error for {filename}: {e}")
+
+                        # Check for 3D data sidecar
+                        if filename:
+                            data3d_filename = os.path.splitext(filename)[0] + '.3d.json'
+                            data3d_path = self.workspace_path / data3d_filename
+                            if not data3d_path.exists(): data3d_path = self.cwd / data3d_filename
+
+                            if data3d_path.exists():
+                                try:
+                                    with open(str(data3d_path), 'r') as f:
+                                        data_3d_entry = json.load(f)
+                                except Exception as e:
+                                    print(f"Error loading 3D data sidecar {data3d_filename}: {e}")
+
+                        plot_3d_data.append(data_3d_entry)
 
                     # Clean up stdout markers
                     for idx in plot_indices:
@@ -391,7 +417,7 @@ class TranspilerEngine(BaseEngine):
                     duration_s=duration,
                     variables_snapshot=self._get_variables(),
                     plots=plots,
-                    extra={"plot_data_b64": plot_data_b64}
+                    extra={"plot_data_b64": plot_data_b64, "plot_3d_data": plot_3d_data}
                 )
             except Exception as e:
                 return ExecutionResult(
