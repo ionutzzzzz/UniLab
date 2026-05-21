@@ -53,7 +53,7 @@ grid on; hold off;
 disp('--- 3. Unsupervised Fault Detection (K-Means) ---');
 % Try to discover states automatically
 k = 3;
-[idx, centroids] = kmeans(X, k);
+[centroids, idx] = kmeans(X, k);
 
 figure;
 plot_matrix(confusion_matrix(y_true, idx, 3));

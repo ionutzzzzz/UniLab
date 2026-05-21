@@ -564,20 +564,58 @@ class TranspilerEngine(BaseEngine):
     def _get_variables(self):
         vars_snap = {}
         for k, v in self.globals.items():
-            if k.startswith('_') or k in dir(runtime) or k == 'np':
+            if k.startswith('_') or k in dir(runtime) or k == 'np' or k == 'ans' and v is None:
                 continue
             
+            # Determine Class (MATLAB style)
             dtype = type(v).__name__
-            shape = getattr(v, 'shape', None)
+            if hasattr(v, 'dtype'):
+                cls = v.dtype.name
+            else:
+                cls = dtype
+                
+            # MATLAB-ify class names
+            if cls == 'float64': cls = 'double'
+            elif cls == 'int64': cls = 'int'
+            elif cls == 'str': cls = 'char'
+            elif cls == 'bool': cls = 'logical'
+            
+            # Determine Size
+            if hasattr(v, 'shape'):
+                shape = v.shape
+                if not shape: # Scalar array
+                    size_str = "1x1"
+                    shape_list = [1, 1]
+                else:
+                    size_str = 'x'.join(map(str, shape))
+                    shape_list = list(shape)
+            elif hasattr(v, '__len__') and not isinstance(v, (str, dict)):
+                size_str = f"1x{len(v)}"
+                shape_list = [1, len(v)]
+            else:
+                size_str = "1x1"
+                shape_list = [1, 1]
+                
+            # Determine Bytes
+            try:
+                if hasattr(v, 'nbytes'):
+                    bytes_count = int(v.nbytes)
+                else:
+                    bytes_count = sys.getsizeof(v)
+            except:
+                bytes_count = 0
+
             preview = str(v)
             if isinstance(v, np.ndarray) and v.size > 50:
                 preview = str(v.flatten()[:50]) + "..."
             
             vars_snap[k] = {
                 'name': k,
-                'dtype': dtype,
-                'shape': shape,
-                'preview': preview
+                'dtype': cls,
+                'shape': shape_list,
+                'preview': preview,
+                'size': size_str,
+                'bytes': bytes_count
             }
         return vars_snap
 

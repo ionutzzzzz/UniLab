@@ -699,12 +699,88 @@
             }
         }
 
+        function renderWhosTable(variables) {
+            if (!variables || Object.keys(variables).length === 0) {
+                appendOutput('No variables in workspace.', 'system-msg');
+                return;
+            }
+
+            const container = document.createElement('div');
+            container.style.margin = '15px 0';
+            container.style.overflowX = 'auto';
+            
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            table.style.fontSize = '13px';
+            table.style.color = '#e0e0e0';
+            table.style.backgroundColor = '#121212';
+            table.style.borderRadius = '8px';
+            table.style.overflow = 'hidden';
+            table.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+
+            const thead = document.createElement('thead');
+            thead.style.backgroundColor = '#1e1e1e';
+            thead.style.color = '#64b5f6';
+            thead.style.textAlign = 'left';
+            
+            const headerRow = document.createElement('tr');
+            ['Name', 'Size', 'Bytes', 'Class', 'Value'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                th.style.padding = '12px 15px';
+                th.style.borderBottom = '1px solid #333';
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            Object.values(variables).sort((a, b) => a.name.localeCompare(b.name)).forEach(varInfo => {
+                const row = document.createElement('tr');
+                row.style.borderBottom = '1px solid #222';
+                
+                const cells = [
+                    varInfo.name,
+                    varInfo.size || '1x1',
+                    varInfo.bytes || 0,
+                    varInfo.dtype || 'unknown',
+                    varInfo.preview || ''
+                ];
+
+                cells.forEach((text, i) => {
+                    const td = document.createElement('td');
+                    td.textContent = text;
+                    td.style.padding = '10px 15px';
+                    if (i === 0) td.style.color = '#4fc3f7'; // Name
+                    if (i === 3) td.style.color = '#81c784'; // Class
+                    if (i === 4) {
+                        td.style.fontStyle = 'italic';
+                        td.style.opacity = '0.7';
+                        td.style.maxWidth = '300px';
+                        td.style.whiteSpace = 'nowrap';
+                        td.style.overflow = 'hidden';
+                        td.style.textOverflow = 'ellipsis';
+                        td.title = text; // Tooltip for full value
+                    }
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            container.appendChild(table);
+            outputEl.appendChild(container);
+            containerEl.scrollTop = containerEl.scrollHeight;
+        }
+
         async function executeCommand(command) {
             if (!sessionId) return;
             suggestionsEl.style.display = 'none';
             setExecuting(true);
             appendOutput(command, 'input-line');
             
+            const isWhosCommand = command.trim().toLowerCase().replace(/;/g, '') === 'whos';
+
             try {
                 const response = await fetch(`/api/v1/sessions/${sessionId}/execute`, {
                     method: 'POST',
@@ -723,45 +799,55 @@
                 // Process output
                 let out = result.stdout || "";
                 
-                // Hide the ASCII plot marker text if images were generated
-                if ((result.plots && result.plots.length > 0) || (result.extra && result.extra.plot_data_b64)) {
-                    out = out.replace(/\[ Pastel Colored Plot \]/g, '');
-                    appendOutput(out, 'stdout');
-                    
-                    // Create a grid container for multiple plots
-                    const hasMultiplePlots = (result.plots && result.plots.length > 1) || 
-                                           (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 1);
-                    
-                    let target = outputEl;
-                    if (hasMultiplePlots) {
-                        target = document.createElement('div');
-                        target.className = 'plot-grid';
-                        outputEl.appendChild(target);
+                // If it's a whos command, we handle it specially with a nice table
+                if (isWhosCommand && result.success) {
+                    // Suppress the raw ASCII table if it exists in stdout
+                    if (out.includes('Name') && out.includes('Size') && out.includes('Bytes')) {
+                        // Keep only parts that aren't the ASCII table if there's other output
+                        // But usually whos just prints the table.
                     }
-
-                    // Priority 1: Base64 data from execution result (Fastest, bypasses 500 errors)
-                    if (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 0) {
-                        // If backend provided filenames in result.plots, use them to preserve 3D markers
-                        if (result.plots && result.plots.length > 0) {
-                            for (let i = 0; i < result.extra.plot_data_b64.length; i++) {
-                                const data = result.extra.plot_data_b64[i];
-                                const pid = result.plots[i] || `embedded_${i}`;
-                                const data3d = (result.extra.plot_3d_data || [])[i] || null;
-                                appendPlot(sessionId, pid, data, data3d, target);
-                            }
-                        } else {
-                            result.extra.plot_data_b64.forEach((data, i) => {
-                                const data3d = (result.extra.plot_3d_data || [])[i] || null;
-                                appendPlot(sessionId, `embedded_${i}`, data, data3d, target);
-                            });
-                        }
-                    }
-                    // Priority 2: Traditional download (Fallback)
-                    else if (result.plots && result.plots.length > 0) {
-                        result.plots.forEach(plotId => appendPlot(sessionId, plotId, null, null, target));
-                    }
+                    renderWhosTable(result.variables_snapshot);
                 } else {
-                    if (out) appendOutput(out, 'stdout');
+                    // Hide the ASCII plot marker text if images were generated
+                    if ((result.plots && result.plots.length > 0) || (result.extra && result.extra.plot_data_b64)) {
+                        out = out.replace(/\[ Pastel Colored Plot \]/g, '');
+                        appendOutput(out, 'stdout');
+                        
+                        // Create a grid container for multiple plots
+                        const hasMultiplePlots = (result.plots && result.plots.length > 1) || 
+                                               (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 1);
+                        
+                        let target = outputEl;
+                        if (hasMultiplePlots) {
+                            target = document.createElement('div');
+                            target.className = 'plot-grid';
+                            outputEl.appendChild(target);
+                        }
+
+                        // Priority 1: Base64 data from execution result (Fastest, bypasses 500 errors)
+                        if (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 0) {
+                            // If backend provided filenames in result.plots, use them to preserve 3D markers
+                            if (result.plots && result.plots.length > 0) {
+                                for (let i = 0; i < result.extra.plot_data_b64.length; i++) {
+                                    const data = result.extra.plot_data_b64[i];
+                                    const pid = result.plots[i] || `embedded_${i}`;
+                                    const data3d = (result.extra.plot_3d_data || [])[i] || null;
+                                    appendPlot(sessionId, pid, data, data3d, target);
+                                }
+                            } else {
+                                result.extra.plot_data_b64.forEach((data, i) => {
+                                    const data3d = (result.extra.plot_3d_data || [])[i] || null;
+                                    appendPlot(sessionId, `embedded_${i}`, data, data3d, target);
+                                });
+                            }
+                        }
+                        // Priority 2: Traditional download (Fallback)
+                        else if (result.plots && result.plots.length > 0) {
+                            result.plots.forEach(plotId => appendPlot(sessionId, plotId, null, null, target));
+                        }
+                    } else {
+                        if (out) appendOutput(out, 'stdout');
+                    }
                 }
                 
                 if (result.stderr) appendOutput(result.stderr, 'stderr');

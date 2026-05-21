@@ -58,7 +58,7 @@ figure;
 plot(x_path, y_path, 'k--', 'LineWidth', 1); hold on;
 % Draw arm at one point
 q_ex = theta_hist(50, :);
-j1 = [L1 * cos(q_ex(1)), L1 * sin(q_ex(1))];
+j1 = [L1 * (cos(q_ex(1))), L1 * (sin(q_ex(1)))];
 plot([0, j1(1), x_path(50)], [0, j1(2), y_path(50)], 'bo-', 'LineWidth', 3);
 title('Robotic Arm Circular Trajectory Planning');
 xlabel('X (m)'); ylabel('Y (m)');
@@ -83,8 +83,8 @@ end
 
 function robot_draw(ax, s)
     L1 = 1.0; L2 = 0.8;
-    j1 = [L1 * cos(s.q(1)), L1 * sin(s.q(1))];
-    tip = [j1(1) + L2 * cos(s.q(1) + s.q(2)), j1(2) + L2 * sin(s.q(1) + s.q(2))];
+    j1 = [L1 * (cos(s.q(1))), L1 * (sin(s.q(1)))];
+    tip = [((j1(1)) + L2 * (cos(s.q(1) + s.q(2)))), ((j1(2)) + L2 * (sin(s.q(1) + s.q(2))))];
     
     plot(ax, s.h(:, 1), s.h(:, 2), 'g:', 'LineWidth', 1); hold(ax, 'on');
     plot(ax, [0, j1(1), tip(1)], [0, j1(2), tip(2)], 'b-o', 'LineWidth', 4, 'MarkerSize', 10);

@@ -36,7 +36,7 @@ function [centroids, idx] = kmeans(X, K, max_iters, init_method)
         % Assignment step
         for i = 1:m
             distances = sum((X(i, :) - centroids).^2, 2);
-            [~, min_idx] = min(distances);
+            min_idx = argmin(distances);
             idx(i) = min_idx;
         end
         
@@ -44,7 +44,7 @@ function [centroids, idx] = kmeans(X, K, max_iters, init_method)
         centroids_new = zeros(K, n);
         for k = 1:K
             X_k = X(idx == k, :);
-            if ~isempty(X_k)
+            if isempty(X_k) == 0
                 centroids_new(k, :) = mean(X_k, 1);
             else
                 % Re-initialize empty cluster

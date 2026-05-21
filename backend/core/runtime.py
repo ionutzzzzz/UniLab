@@ -551,6 +551,10 @@ def whos():
 
     if not variables:
         return
+
+    # Suppress ASCII output in web mode to allow rich HTML rendering
+    if os.environ.get('UNILAB_WEB_MODE') == '1':
+        return
         
     print(f"\n{'Name':<18} {'Size':<15} {'Bytes':<12} {'Class':<15}")
     print("-" * 60)
@@ -1515,7 +1519,9 @@ def sort(x, axis=None):
 def unique(x): return np.unique(x)
 def inv(x): return np.linalg.inv(x)
 def det(x): return np.linalg.det(x)
-def eig(x): return np.linalg.eig(x)
+def eig(x):
+    eigenvalues, eigenvectors = np.linalg.eig(x)
+    return eigenvectors, np.diag(eigenvalues)
 def svd(x):
     U, S, Vh = np.linalg.svd(x)
     return U, np.diag(S), Vh.T
