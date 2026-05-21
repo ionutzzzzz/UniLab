@@ -94,43 +94,77 @@
             margin: 8px 0;
         }
 
+        .plot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(48%, 1fr));
+            gap: 30px;
+            width: 96%;
+            margin: 30px 20px;
+            align-items: start;
+        }
+
+        @media (max-width: 1100px) {
+            .plot-grid {
+                grid-template-columns: 1fr;
+                width: 92%;
+                margin: 20px 10px;
+            }
+        }
+
         .plot-container {
-            margin: 25px 0;
             border: 1px solid #333;
-            display: inline-block;
+            display: block;
             background: #121212;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
-            transition: transform 0.2s;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            transition: transform 0.2s, border-color 0.2s;
             position: relative;
+            overflow: hidden;
+            margin: 25px 20px;
+            max-width: 850px;
         }
         
         .plot-container:hover {
-            transform: scale(1.02);
+            transform: translateY(-8px);
+            border-color: var(--prompt-color);
         }
 
         .plot-container img {
-            max-width: 100%;
-            max-height: 75vh;
+            width: 100%;
             height: auto;
             display: block;
+            border-radius: 6px;
         }
 
         .plot-container-3d {
-            margin: 25px 0;
             border: 1px solid #333;
             background: #121212;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
             position: relative;
-            display: inline-block;
+            display: block;
+            transition: transform 0.2s, border-color 0.2s;
+            margin: 25px 20px;
+            max-width: 850px;
+        }
+
+        .plot-container-3d:hover {
+            transform: translateY(-8px);
+            border-color: var(--prompt-color);
+        }
+
+        /* Ensure plots fill their grid cells when in multi-plot mode */
+        .plot-grid .plot-container,
+        .plot-grid .plot-container-3d,
+        .plot-grid .plot-container-3d-interactive {
+            margin: 0;
+            max-width: 100%;
         }
 
         .plot-container-3d img {
-            max-width: 100%;
-            max-height: 75vh;
+            width: 100%;
             height: auto;
             display: block;
             border-radius: 6px;
@@ -280,13 +314,15 @@
         }
 
         .plot-container-3d-interactive {
-            margin: 25px 0;
             border: 1px solid #333;
             background: #121212;
-            border-radius: 8px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
-            display: inline-block;
-            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            display: block;
+            padding: 15px;
+            transition: border-color 0.2s;
+            margin: 25px 20px;
+            max-width: 850px;
         }
 
         .plot-3d-canvas {
@@ -352,7 +388,7 @@
 
         // --- 3D Plots: Display rendered matplotlib images ---
 
-        function appendPlot3D(session_id, plotId, b64Data = null) {
+        function appendPlot3D(session_id, plotId, b64Data = null, target = outputEl) {
             // For 3D plots, display the actual rendered image in a styled container
             // We show the matplotlib-rendered 3D plot as-is
             const container = document.createElement('div');
@@ -392,11 +428,6 @@
             }
             
             img.alt = "UniLab Pro 3D Figure";
-            img.style.maxWidth = '100%';
-            img.style.maxHeight = '75vh';
-            img.style.height = 'auto';
-            img.style.display = 'block';
-            img.style.borderRadius = '8px';
             
             img.onload = () => {
                 containerEl.scrollTop = containerEl.scrollHeight;
@@ -407,13 +438,13 @@
             
             container.appendChild(img);
 
-            outputEl.appendChild(container);
+            target.appendChild(container);
             containerEl.scrollTop = containerEl.scrollHeight;
         }
 
         // --- 3D Plots: Interactive rendering with Plotly.js ---
 
-        function appendPlot3DInteractive(data3d, b64Fallback = null, plotId = '') {
+        function appendPlot3DInteractive(data3d, b64Fallback = null, plotId = '', target = outputEl) {
             const container = document.createElement('div');
             container.className = 'plot-container-3d-interactive';
 
@@ -490,7 +521,7 @@
                 }
             }
 
-            outputEl.appendChild(container);
+            target.appendChild(container);
             containerEl.scrollTop = containerEl.scrollHeight;
         }
 
@@ -533,7 +564,7 @@
             }
         }
 
-        function appendPlot(session_id, plotId, b64Data = null, data3d = null) {
+        function appendPlot(session_id, plotId, b64Data = null, data3d = null, target = outputEl) {
             // Check if this is a 3D plot by examining the data or filename
             // Priority 1: Check for explicit "3d_" marker in filename (from backend)
             const is3DPlot = plotId.includes('3d_') ||
@@ -545,11 +576,11 @@
 
             if (is3DPlot && data3d) {
                 // Render 3D plot interactively with Plotly.js
-                appendPlot3DInteractive(data3d, b64Data, plotId);
+                appendPlot3DInteractive(data3d, b64Data, plotId, target);
                 return;
             } else if (is3DPlot) {
                 // Fallback: Render 3D plot as static image
-                appendPlot3D(session_id, plotId, b64Data);
+                appendPlot3D(session_id, plotId, b64Data, target);
                 return;
             }
 
@@ -576,7 +607,7 @@
             };
 
             container.appendChild(img);
-            outputEl.appendChild(container);
+            target.appendChild(container);
             containerEl.scrollTop = containerEl.scrollHeight;
         }
 
@@ -697,6 +728,17 @@
                     out = out.replace(/\[ Pastel Colored Plot \]/g, '');
                     appendOutput(out, 'stdout');
                     
+                    // Create a grid container for multiple plots
+                    const hasMultiplePlots = (result.plots && result.plots.length > 1) || 
+                                           (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 1);
+                    
+                    let target = outputEl;
+                    if (hasMultiplePlots) {
+                        target = document.createElement('div');
+                        target.className = 'plot-grid';
+                        outputEl.appendChild(target);
+                    }
+
                     // Priority 1: Base64 data from execution result (Fastest, bypasses 500 errors)
                     if (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 0) {
                         // If backend provided filenames in result.plots, use them to preserve 3D markers
@@ -705,18 +747,18 @@
                                 const data = result.extra.plot_data_b64[i];
                                 const pid = result.plots[i] || `embedded_${i}`;
                                 const data3d = (result.extra.plot_3d_data || [])[i] || null;
-                                appendPlot(sessionId, pid, data, data3d);
+                                appendPlot(sessionId, pid, data, data3d, target);
                             }
                         } else {
                             result.extra.plot_data_b64.forEach((data, i) => {
                                 const data3d = (result.extra.plot_3d_data || [])[i] || null;
-                                appendPlot(sessionId, `embedded_${i}`, data, data3d);
+                                appendPlot(sessionId, `embedded_${i}`, data, data3d, target);
                             });
                         }
                     }
                     // Priority 2: Traditional download (Fallback)
                     else if (result.plots && result.plots.length > 0) {
-                        result.plots.forEach(plotId => appendPlot(sessionId, plotId));
+                        result.plots.forEach(plotId => appendPlot(sessionId, plotId, null, null, target));
                     }
                 } else {
                     if (out) appendOutput(out, 'stdout');

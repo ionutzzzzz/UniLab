@@ -1,7 +1,7 @@
 function [t, y] = ode45_custom(f, t_span, y0, tol)
     % ODE45_CUSTOM Solve ODE dy/dt = f(t, y)
     
-    num_steps = 100;
+    num_steps = 2000;
     t = linspace(t_span(1), t_span(2), num_steps + 1);
     h = t(2) - t(1);
     

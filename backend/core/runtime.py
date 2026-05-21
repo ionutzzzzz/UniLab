@@ -321,7 +321,7 @@ def unilab_bode(sys, w=None):
     
     # Plotting for Bode
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
 
     fig, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -881,6 +881,51 @@ def unilab_eq(a, b):
         return sympy.Eq(a, b)
     return a == b
 
+def isequal(a, b):
+    """MATLAB-compatible isequal function."""
+    if type(a) != type(b):
+        # Special case for different numeric types that might be equivalent
+        if isinstance(a, (int, float, np.number)) and isinstance(b, (int, float, np.number)):
+            return a == b
+        return False
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        return np.array_equal(a, b)
+    return a == b
+
+def ischar(x):
+    """MATLAB-compatible ischar function."""
+    return isinstance(x, (str, bytes))
+
+def iscell(x):
+    """MATLAB-compatible iscell function."""
+    return isinstance(x, (list, tuple)) or (isinstance(x, np.ndarray) and x.dtype == object)
+
+def isnumeric(x):
+    """MATLAB-compatible isnumeric function."""
+    return isinstance(x, (int, float, complex, np.number, np.ndarray))
+
+def lower(s):
+    """MATLAB-compatible lower function."""
+    if isinstance(s, str):
+        return s.lower()
+    if isinstance(s, (list, tuple)):
+        return [lower(x) for x in s]
+    if isinstance(s, np.ndarray) and s.dtype == object:
+        vlower = np.vectorize(lower)
+        return vlower(s)
+    return s
+
+def upper(s):
+    """MATLAB-compatible upper function."""
+    if isinstance(s, str):
+        return s.upper()
+    if isinstance(s, (list, tuple)):
+        return [upper(x) for x in s]
+    if isinstance(s, np.ndarray) and s.dtype == object:
+        vupper = np.vectorize(upper)
+        return vupper(s)
+    return s
+
 def unilab_ne(a, b):
     if _is_symbolic(a) or _is_symbolic(b):
         import sympy
@@ -949,6 +994,14 @@ def quiver(*args, **kwargs):
 def specgram(*args, **kwargs):
     # Ensure NFFT and other potential float args from UniLab are converted to int for matplotlib
     args = list(args)
+    if len(args) > 0:
+        x = args[0]
+        if isinstance(x, np.ndarray):
+            if x.ndim > 1 and (x.shape[0] == 1 or x.shape[1] == 1):
+                args[0] = x.flatten()
+        elif isinstance(x, list):
+            args[0] = np.array(x).flatten()
+
     if len(args) > 1 and isinstance(args[1], (float, np.floating)):
         args[1] = int(args[1])
     res = plt.specgram(*args, **kwargs)
@@ -1079,16 +1132,22 @@ def unilab_matrix_concat(*rows):
             if isinstance(r, (list, np.ndarray)):
                 if isinstance(r, list) and builtins.any(isinstance(item, np.ndarray) for item in r):
                     # Handle mixed row [X, 1, 2]
-                    p_row = np.hstack([np.atleast_2d(item) for item in r])
+                    # Filter out empty arrays that would cause hstack to have 0 columns if other parts have more
+                    parts = [np.atleast_2d(item) for item in r]
+                    if len(parts) > 1:
+                        # If we have multiple parts, ignore those that are completely empty (0x0 or similar)
+                        # but only if at least one part is NOT empty.
+                        non_empty_parts = [p for p in parts if p.size > 0]
+                        if non_empty_parts: parts = non_empty_parts
+                    p_row = np.hstack(parts)
                     processed_rows.append(p_row)
                 elif isinstance(r, list) and builtins.all(isinstance(item, (str, np.str_)) for item in r):
-                    # Try numeric coercion for string lists (transpiler stringifies number tokens)
+                    # Try numeric coercion for string lists
                     try:
                         numeric = [float(item) for item in r]
                         vals = [int(v) if v == int(v) else v for v in numeric]
                         processed_rows.append(np.atleast_2d(vals))
                     except (ValueError, TypeError):
-                        # Keep as-is if not all numeric
                         processed_rows.append(np.atleast_2d(r))
                 else:
                     processed_rows.append(np.atleast_2d(r))
@@ -1096,6 +1155,14 @@ def unilab_matrix_concat(*rows):
                 processed_rows.append(np.atleast_2d(list(r)))
             else:
                 processed_rows.append(np.atleast_2d([r]))
+
+        # Filter out rows that are entirely empty IF there are non-empty rows
+        if len(processed_rows) > 1:
+            non_empty_rows = [row for row in processed_rows if row.size > 0]
+            if non_empty_rows:
+                # If non-empty rows have different column counts, this might still fail,
+                # but it fixes the [ []; 2.0 ] case.
+                processed_rows = non_empty_rows
 
         return np.vstack(processed_rows)
     except:
@@ -1510,6 +1577,20 @@ def tan(x):
         return sympy.tan(x)
     return np.tan(x)
 
+def tanh(x):
+    """Hyperbolic tangent."""
+    if _is_symbolic(x):
+        import sympy
+        return sympy.tanh(x)
+    return np.tanh(x)
+
+def relu(x):
+    """Rectified Linear Unit."""
+    if _is_symbolic(x):
+        import sympy
+        return sympy.Max(0, x)
+    return np.maximum(0, x)
+
 def exp(x):
     """Exponential."""
     if _is_symbolic(x):
@@ -1750,9 +1831,27 @@ def _unilab_refresh_graph():
         # Rendering Fixes for Headless/Web
         num_axes = len(fig.axes)
         if num_axes > 1:
-            fig.set_size_inches(12, 6 * num_axes)
+            # Try to determine the grid from the axes positions
+            rows, cols = 1, 1
+            try:
+                for ax_item in fig.axes:
+                    if hasattr(ax_item, 'get_subplotspec'):
+                        spec = ax_item.get_subplotspec()
+                        if spec:
+                            gs = spec.get_gridspec()
+                            rows = max(rows, gs.nrows)
+                            cols = max(cols, gs.ncols)
+            except: 
+                # Fallback to older heuristic if GridSpec fails
+                rows = (num_axes // 2 + num_axes % 2)
+                cols = 2 if num_axes >= 2 else 1
+            
+            # Divide the grid of the full width and place pictures on specific positions
+            # Use 9 inches per column and 7 inches per row for very generous spacing
+            fig.set_size_inches(max(14, 9 * cols), max(10, 7 * rows))
         else:
-            fig.set_size_inches(12, 8)
+            # Make single plots smaller and more compact
+            fig.set_size_inches(8, 5)
 
         fig.set_facecolor('#121212')
         fig.patch.set_facecolor('#121212')
@@ -1770,17 +1869,18 @@ def _unilab_refresh_graph():
             ax_item.patch.set_facecolor('#121212')
 
         # Ensure the layout is tight so labels are not cut off
-        # tight_layout can sometimes fail with 3D or very complex plots
         try:
             has_3d = any(getattr(a, 'name', '') == '3d' for a in fig.axes)
             if not has_3d:
-                # Use a larger pad and h_pad to avoid overlapping titles/labels
-                fig.tight_layout(pad=3.0, h_pad=3.0, w_pad=2.0)
+                # Use constrained_layout if available or tight_layout with adequate padding
+                fig.tight_layout(pad=3.0)
             else:
-                # For mixed plots or 3D, subplots_adjust is safer
-                fig.subplots_adjust(hspace=0.4, wspace=0.3)
+                # For 3D plots, tight_layout can be finicky, use subplots_adjust
+                fig.subplots_adjust(hspace=0.4, wspace=0.4, left=0.1, right=0.9, top=0.9, bottom=0.1)
         except Exception:
-            pass
+            try:
+                fig.subplots_adjust(hspace=0.5, wspace=0.4)
+            except: pass
         # Handle 3D pane colors for dark mode and save 3D data
         if ax.name == '3d':
             try:
@@ -1890,7 +1990,7 @@ def plot(*args, **kwargs):
     args_list = [_unilab_vec(a) for a in args_list]
 
     if target_ax == plt and not _unilab_hold:
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
         
     res = target_ax.plot(*args_list, **kwargs)
@@ -2124,7 +2224,7 @@ def stem(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     res = plt.stem(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
@@ -2132,7 +2232,7 @@ def stairs(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     res = plt.stairs(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
@@ -2140,7 +2240,7 @@ def area(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     # area(y) or area(x, y)
     if len(p_args) == 1:
@@ -2158,7 +2258,7 @@ def scatter(*args, **kwargs):
     kwargs.update(p_kwargs)
     
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     
     # Matplotlib scatter is filled by default. Remove MATLAB flag.
@@ -2174,7 +2274,7 @@ def bar(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     res = plt.bar(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
@@ -2182,7 +2282,7 @@ def hist(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
@@ -2235,16 +2335,30 @@ def figure(*args, **kwargs):
 def subplot(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    return plt.subplot(*p_args, **kwargs)
+    res = plt.subplot(*p_args, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def hold(state='on'):
     global _unilab_hold
     val = str(state).lower()
     _unilab_hold = (val == 'on' or val == '1' or state is True)
 
-def grid(state='on'):
+def grid(*args, **kwargs):
+    args_list = list(args)
+    target = plt
+    if args_list and hasattr(args_list[0], 'grid'):
+        target = args_list.pop(0)
+    
+    state = args_list[0] if args_list else 'on'
     val = str(state).lower()
-    plt.grid(val == 'on' or val == '1' or state is True)
+    visible = val == 'on' or val == '1' or state is True
+    
+    if target == plt:
+        plt.grid(visible, **kwargs)
+    else:
+        target.grid(visible, **kwargs)
+        if hasattr(target, 'figure'): target.figure.canvas.draw()
     _unilab_refresh_graph()
 
 def axis(state): plt.axis(state); _unilab_refresh_graph()
@@ -2264,7 +2378,7 @@ def contourf(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     # MATLAB often passes levels as a 1xN matrix, Matplotlib wants 1D
     if len(p_args) >= 4 and isinstance(p_args[3], np.ndarray):
@@ -2312,7 +2426,7 @@ def colormap(*args):
 
 def _scatter_plot(x, y, t=None):
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     plt.scatter(x, y, s=100, alpha=0.6)
     if t: plt.title(t, fontweight='bold', fontsize=22)
@@ -2320,7 +2434,7 @@ def _scatter_plot(x, y, t=None):
 
 def _hist_plot(data, bins=10, t=None):
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     plt.hist(data, bins=bins, alpha=0.7, edgecolor='white')
     if t: plt.title(t, fontweight='bold', fontsize=22)
@@ -2328,7 +2442,7 @@ def _hist_plot(data, bins=10, t=None):
 
 def heatmap(M):
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     plt.imshow(M, interpolation='nearest')
     plt.colorbar()
@@ -2342,7 +2456,7 @@ def imagesc(*args, **kwargs):
         target = args_list.pop(0)
     
     if target == plt and not _unilab_hold:
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
 
     # Heuristic for transpose if needed
@@ -2394,7 +2508,7 @@ def colormap(*args):
 
 def plot3(*args, **kwargs):
     """Plot lines and points in 3D."""
-    if not _unilab_hold: plt.clf()
+    if not _unilab_hold: plt.cla()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
 
@@ -2446,7 +2560,7 @@ def colorbar(*args, **kwargs):
 def surf(*args, **kwargs):
     """Create a 3D surface plot."""
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
@@ -2503,7 +2617,7 @@ def surf(*args, **kwargs):
 def mesh(*args, **kwargs):
     """Create a 3D wireframe mesh plot."""
     if not _unilab_hold: 
-        plt.clf()
+        plt.cla()
         _unilab_update_fig_version()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()

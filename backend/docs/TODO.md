@@ -11,17 +11,20 @@
 ## 🎯 Phase 1: Core Stability & Quality (v0.2.0)
 
 ### Language & Transpiler Improvements
-- [ ] Fix array/scalar ambiguity in boolean contexts (numpy arrays in if/while conditions)
+- [x] Fix array/scalar ambiguity in boolean contexts (numpy arrays in if/while conditions)
 - [ ] Add string literal syntax support (currently only single quotes work)
 - [ ] Implement proper cell array indexing with `{}` operator
 - [ ] Add support for struct/record types
 - [ ] Fix precision loss in floating-point operations
 - [ ] Add support for multi-line comments `/* ... */`
 - [ ] Improve error messages with line number tracking in source code
+- [x] Implement basic type checking functions (`ischar`, `iscell`, `isnumeric`, `isequal`)
 
 ### Standard Library Expansion
 - [ ] Complete missing math library functions (~20 needed for numeric analysis)
 - [ ] Add comprehensive stats library (distributions, hypothesis tests, ANOVA)
+- [ ] Implement remaining string processing functions (`strsplit`, `contains`, `replace`, etc.)
+- [x] Added `strcmp`, `strcmpi`, `lower`, `upper`, `isequal`, `ischar`, `iscell`, `isnumeric`
 - [ ] Implement signal processing package (filters, spectral analysis, wavelets)
 - [ ] Add linear algebra utilities (QR, SVD refinements, pseudoinverse)
 - [ ] Create optimization package (constrained solvers, quadratic programming)

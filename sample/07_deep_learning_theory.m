@@ -26,23 +26,30 @@ y_train = reshape(y_norm(train_idx), 160, 1);
 X_val = reshape(X_norm(val_idx), 40, 1); 
 y_val = reshape(y_norm(val_idx), 40, 1);
 
-% Manual Neural Network (1 -> 24 -> 16 -> 1)
-% Using a slightly larger network for better curve fitting
-W1 = randn(1, 24) * 0.1; b1 = zeros(1, 24);
-W2 = randn(24, 16) * 0.1; b2 = zeros(1, 16);
-W3 = randn(16, 1) * 0.1; b3 = zeros(1, 1);
-lr = 0.05;
-epochs = 8000;
+% Manual Neural Network (1 -> 64 -> 64 -> 1)
+% Xavier Initialization
+W1 = randn(1, 64) * sqrt(1/1); b1 = zeros(1, 64);
+W2 = randn(64, 64) * sqrt(1/64); b2 = zeros(1, 64);
+W3 = randn(64, 1) * sqrt(1/64); b3 = zeros(1, 1);
 
+% RMSprop parameters
+lr = 0.002;
+beta = 0.9;
+eps = 1e-8;
+mW1 = zeros(size(W1)); mb1 = zeros(size(b1));
+mW2 = zeros(size(W2)); mb2 = zeros(size(b2));
+mW3 = zeros(size(W3)); mb3 = zeros(size(b3));
+
+epochs = 25000;
 train_loss_hist = zeros(epochs, 1);
 val_loss_hist = zeros(epochs, 1);
 
 for epoch = 1:epochs
     % Forward Pass (Train)
     z1 = X_train * W1 + b1;
-    a1 = 1 ./ (1 + exp(-z1)); % Sigmoid
+    a1 = tanh(z1); 
     z2 = a1 * W2 + b2;
-    a2 = 1 ./ (1 + exp(-z2));
+    a2 = tanh(z2);
     z3 = a2 * W3 + b3;
     a3 = z3; % Linear output for regression
     
@@ -52,8 +59,8 @@ for epoch = 1:epochs
     train_loss_hist(epoch) = train_loss;
     
     % Forward Pass (Validation)
-    vz1 = X_val * W1 + b1; va1 = 1 ./ (1 + exp(-vz1));
-    vz2 = va1 * W2 + b2; va2 = 1 ./ (1 + exp(-vz2));
+    vz1 = X_val * W1 + b1; va1 = tanh(vz1);
+    vz2 = va1 * W2 + b2; va2 = tanh(vz2);
     vz3 = va2 * W3 + b3; va3 = vz3;
     val_loss = mean((va3 - y_val).^2);
     val_loss_hist(epoch) = val_loss;
@@ -64,34 +71,52 @@ for epoch = 1:epochs
     d_b3 = sum(d_z3, 1);
     
     d_a2 = d_z3 * W3';
-    d_z2 = d_a2 .* (a2 .* (1 - a2));
+    d_z2 = d_a2 .* (1 - a2.^2);
     d_W2 = a1' * d_z2;
     d_b2 = sum(d_z2, 1);
     
     d_a1 = d_z2 * W2';
-    d_z1 = d_a1 .* (a1 .* (1 - a1));
+    d_z1 = d_a1 .* (1 - a1.^2);
     d_W1 = X_train' * d_z1;
     d_b1 = sum(d_z1, 1);
     
-    % Update
-    W3 = W3 - lr * d_W3; b3 = b3 - lr * d_b3;
-    W2 = W2 - lr * d_W2; b2 = b2 - lr * d_b2;
-    W1 = W1 - lr * d_W1; b1 = b1 - lr * d_b1;
+    % Update (RMSprop)
+    mW3 = beta * mW3 + (1-beta) * d_W3.^2;
+    mb3 = beta * mb3 + (1-beta) * d_b3.^2;
+    W3 = W3 - lr * d_W3 ./ (sqrt(mW3) + eps);
+    b3 = b3 - lr * d_b3 ./ (sqrt(mb3) + eps);
     
-    if mod(epoch, 2000) == 0
+    mW2 = beta * mW2 + (1-beta) * d_W2.^2;
+    mb2 = beta * mb2 + (1-beta) * d_b2.^2;
+    W2 = W2 - lr * d_W2 ./ (sqrt(mW2) + eps);
+    b2 = b2 - lr * d_b2 ./ (sqrt(mb2) + eps);
+    
+    mW1 = beta * mW1 + (1-beta) * d_W1.^2;
+    mb1 = beta * mb1 + (1-beta) * d_b1.^2;
+    W1 = W1 - lr * d_W1 ./ (sqrt(mW1) + eps);
+    b1 = b1 - lr * d_b1 ./ (sqrt(mb1) + eps);
+    
+    if mod(epoch, 5000) == 0
         disp(['Epoch ', num2str(epoch), ': Train Loss = ', num2str(train_loss), ', Val Loss = ', num2str(val_loss)]);
     end
 end
 
 % Final Prediction
-z1_f = X_norm * W1 + b1; a1_f = 1 ./ (1 + exp(-z1_f));
-z2_f = a1_f * W2 + b2; a2_f = 1 ./ (1 + exp(-z2_f));
+z1_f = X_norm * W1 + b1; a1_f = tanh(z1_f);
+z2_f = a1_f * W2 + b2; a2_f = tanh(z2_f);
+y_pred_norm = a2_f * W3 + b3;
+y_pred = y_pred_norm * (y_max - y_min) + y_min;
+
+% Final Prediction
+z1_f = X_norm * W1 + b1; a1_f = tanh(z1_f);
+z2_f = a1_f * W2 + b2; a2_f = tanh(z2_f);
 y_pred_norm = a2_f * W3 + b3;
 y_pred = y_pred_norm * (y_max - y_min) + y_min;
 
 % Plotting Results
 disp(' ');
 disp('--- 2. Visualization ---');
+figure;
 subplot(2, 1, 1);
 plot(X, y, 'b', 'LineWidth', 2); hold on;
 plot(X, y_pred, 'r--', 'LineWidth', 2);
