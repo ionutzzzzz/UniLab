@@ -5,6 +5,7 @@ import io
 import time
 import pathlib
 import builtins
+import inspect
 import scipy.signal as signal
 from contextvars import ContextVar
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
@@ -475,7 +476,116 @@ def clc():
 
 def whos():
     """Lists variables in the current workspace."""
-    pass
+    # Find the user's workspace frame by going back until we are out of runtime.py
+    frame = inspect.currentframe().f_back
+    while frame and ('runtime.py' in frame.f_code.co_filename or 'inspect.py' in frame.f_code.co_filename):
+        frame = frame.f_back
+    
+    if not frame:
+        # Fallback to f_back if we can't find anything else
+        frame = inspect.currentframe().f_back
+    
+    caller_globals = frame.f_globals
+    
+    variables = {}
+    
+    # Names we definitely want to hide (internal UniLab architecture and pre-populated constants)
+    internal_names = {
+        'np', 'plt', 'signal', 'unilab_workspace_ctx', '_unilab_3d_data_store',
+        'unilab_simulate', 'simulate', 'scipy_fft', 'scipy_ifft', 'scipy_fftshift', 
+        'scipy_ifftshift', 'builtins', 'inspect', 'io', 'os', 'pathlib', 'time',
+        'UnilabEnd', 'unilab_end', 'UnilabHandle', 'UnilabCVPartition', 'ContextVar',
+        'pi', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 
+        'true', 'false', 'unilab_set', 'unilab_get', 'addpath', 'abs', 'stats', 'ml'
+    }
+    
+    # Also hide anything that is defined in the runtime module itself
+    runtime_names = set(dir(inspect.getmodule(whos)))
+    for name, val in caller_globals.items():
+        # Skip double-underscore internals
+        if name.startswith('__'):
+            continue
+            
+        # Skip names explicitly marked as internal or in runtime
+        if name in internal_names or name in runtime_names:
+            continue
+            
+        # Hide ans if it's None
+        if name == 'ans' and val is None:
+            continue
+            
+        # Skip modules and built-ins
+        if inspect.ismodule(val) or inspect.isbuiltin(val):
+            continue
+            
+        # Skip python functions unless they are wrapped handles or user-defined
+        if inspect.isfunction(val):
+            if name.startswith('unilab_'):
+                continue
+            # If it's a function from runtime, skip it
+            try:
+                mod = inspect.getmodule(val)
+                if mod and 'runtime' in mod.__name__:
+                    continue
+            except:
+                pass
+        
+        # Skip certain types that are part of the environment
+        if isinstance(val, type) and (val.__module__ == 'builtins' or 'runtime' in val.__module__):
+            continue
+
+        variables[name] = val
+    
+    # Also check if 'ans' exists in caller_globals
+    if 'ans' in caller_globals and caller_globals['ans'] is not None:
+        variables['ans'] = caller_globals['ans']
+
+    if not variables:
+        return
+        
+    print(f"\n{'Name':<18} {'Size':<15} {'Bytes':<12} {'Class':<15}")
+    print("-" * 60)
+    
+    for name in sorted(variables.keys()):
+        val = variables[name]
+        
+        # Get size
+        if hasattr(val, 'shape'):
+            # Handle numpy arrays and similar
+            shape = val.shape
+            if not shape: # Scalar array
+                size = "1x1"
+            else:
+                size = 'x'.join(map(str, shape))
+        elif hasattr(val, '__len__') and not isinstance(val, (str, dict)):
+            size = f"1x{len(val)}"
+        else:
+            size = "1x1"
+            
+        # Get bytes
+        try:
+            if hasattr(val, 'nbytes'):
+                bytes_count = val.nbytes
+            else:
+                import sys
+                bytes_count = sys.getsizeof(val)
+        except:
+            bytes_count = 0
+            
+        # Get class
+        if hasattr(val, 'dtype'):
+            cls = val.dtype.name
+        else:
+            cls = type(val).__name__
+            
+        # MATLAB-ify class names
+        if cls == 'float64': cls = 'double'
+        if cls == 'int64': cls = 'int'
+        if cls == 'str': cls = 'char'
+        if cls == 'bool': cls = 'logical'
+            
+        print(f"{name:<18} {size:<15} {bytes_count:<12} {cls:<15}")
+    print("")
 
 def _should_suppress_output(val):
     if val is None: return True
@@ -564,13 +674,15 @@ def unilab_call(obj, *args):
             if name == 'sum' or obj == builtins.sum: return sum(*args)
             if name == 'any' or obj == builtins.any: return any(*args)
             if name == 'all' or obj == builtins.all: return all(*args)
+            if name == 'real' or obj == builtins.real: return real(*args)
+            if name == 'imag' or obj == builtins.imag: return imag(*args)
         except: pass
 
         return obj(*args)
     
     if len(args) == 0: return obj
     
-    # Handle array/list indexing
+    # Handle array/list/string indexing
     if len(args) == 1:
         idx = args[0]
         if isinstance(obj, np.ndarray):
@@ -591,13 +703,21 @@ def unilab_call(obj, *args):
                     return flat.reshape(-1, 1)
                 res = flat[np.asarray(idx).astype(int) - 1] if not isinstance(idx, slice) else flat[idx]
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
-                if isinstance(res, np.ndarray) and res.ndim == 1: return res.reshape(1, -1)
+                if isinstance(res, np.ndarray) and res.ndim == 1: 
+                    # Try to maintain orientation if original was column vector
+                    if obj.ndim == 2 and obj.shape[1] == 1:
+                        return res.reshape(-1, 1)
+                    return res.reshape(1, -1)
                 return res
-        if isinstance(obj, (list, tuple)):
+        if isinstance(obj, (list, tuple, str)):
             if isinstance(idx, UnilabEnd):
                 return obj[len(obj) + idx.offset - 1]
             if isinstance(idx, (int, np.integer, float, np.floating)): return obj[int(idx)-1]
             if isinstance(idx, slice): return obj[idx]
+            if isinstance(idx, (list, np.ndarray)):
+                indices = (np.asarray(idx).astype(int) - 1).tolist()
+                res = [obj[i] for i in indices]
+                return "".join(res) if isinstance(obj, str) else res
             
     processed = []
     for i, arg in enumerate(args):
@@ -797,6 +917,38 @@ def unilab_get(obj, attr):
         # This matches MATLAB's behavior for some objects
         return None
 
+def contour(*args, **kwargs):
+    if len(args) > 0 and isinstance(args[0], str): return # skip figure name
+    res = plt.contour(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
+def histogram(*args, **kwargs):
+    res = plt.hist(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
+def log10(x): return np.log10(x)
+
+def quiver(*args, **kwargs):
+    fig = plt.gcf()
+    if len(args) == 4 and fig.axes and fig.gca().name == '3d':
+        # Force a new 2D subplot if we are currently in 3D but only have 4 args
+        plt.clf()
+        _unilab_update_fig_version()
+    res = plt.quiver(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
+def specgram(*args, **kwargs):
+    # Ensure NFFT and other potential float args from UniLab are converted to int for matplotlib
+    args = list(args)
+    if len(args) > 1 and isinstance(args[1], (float, np.floating)):
+        args[1] = int(args[1])
+    res = plt.specgram(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
 def unilab_set(obj, val, *args):
     if len(args) == 1 and isinstance(args[0], str):
         # Property set
@@ -872,7 +1024,19 @@ def unilab_set(obj, val, *args):
                     new_shape[idx_pos] = -1
                     processed[idx_pos] = processed[idx_pos].reshape(new_shape)
                     
-        obj[tuple(processed)] = val
+        try:
+            obj[tuple(processed)] = val
+        except ValueError:
+            try:
+                # Common case: assigning a column vector to a row slice or vice versa
+                v_arr = np.asarray(val)
+                target_shape = np.empty(obj.shape)[tuple(processed)].shape
+                if v_arr.size == np.prod(target_shape):
+                    obj[tuple(processed)] = v_arr.reshape(target_shape)
+                else:
+                    obj[tuple(processed)] = v_arr
+            except:
+                obj[tuple(processed)] = val
     return obj
 
 def unilab_matrix_concat(*rows):
@@ -964,6 +1128,9 @@ def factorial(n):
     from math import factorial as f
     if isinstance(n, (np.ndarray, list)): return np.array([f(int(i)) for i in n])
     return f(int(n))
+
+def real(x): return np.real(x)
+def imag(x): return np.imag(x)
 
 def mod(x, y): return np.mod(x, y)
 
@@ -1483,7 +1650,7 @@ plt.rcParams.update({
     'grid.linestyle': '--',
     'grid.linewidth': 0.8,
     'lines.linewidth': 4.0,
-    'font.size': 20,
+    'font.size': 16,
     'font.weight': 'bold',
     'text.color': '#e0e0e0',
     'xtick.color': '#b0b0b0',
@@ -1552,30 +1719,39 @@ def _unilab_refresh_graph():
             json.dump(meta, f)
 
         # Rendering Fixes for Headless/Web
-        fig.set_size_inches(12, 8)
+        num_axes = len(fig.axes)
+        if num_axes > 1:
+            fig.set_size_inches(12, 6 * num_axes)
+        else:
+            fig.set_size_inches(12, 8)
+
         fig.set_facecolor('#121212')
         fig.patch.set_facecolor('#121212')
         fig.patch.set_alpha(1.0)
-        
+
         # Ensure legend is also dark if it exists
         for leg in fig.legends:
             leg.get_frame().set_facecolor('#1e1e1e')
             leg.get_frame().set_edgecolor('#444444')
-            for text in leg.get_texts():
-                text.set_color('#e0e0e0')
-        
+            for text_item in leg.get_texts():
+                text_item.set_color('#e0e0e0')
+
         for ax_item in fig.axes:
             ax_item.set_facecolor('#121212')
             ax_item.patch.set_facecolor('#121212')
-            
+
         # Ensure the layout is tight so labels are not cut off
         # tight_layout can sometimes fail with 3D or very complex plots
         try:
-            if ax.name != '3d':
-                fig.tight_layout()
+            has_3d = any(getattr(a, 'name', '') == '3d' for a in fig.axes)
+            if not has_3d:
+                # Use a larger pad and h_pad to avoid overlapping titles/labels
+                fig.tight_layout(pad=3.0, h_pad=3.0, w_pad=2.0)
+            else:
+                # For mixed plots or 3D, subplots_adjust is safer
+                fig.subplots_adjust(hspace=0.4, wspace=0.3)
         except Exception:
             pass
-            
         # Handle 3D pane colors for dark mode and save 3D data
         if ax.name == '3d':
             try:
@@ -1682,7 +1858,7 @@ def plot(*args, **kwargs):
         i += 1
 
     # Flatten vectors for Matplotlib compatibility
-    args_list = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args_list]
+    args_list = [_unilab_vec(a) for a in args_list]
 
     if target_ax == plt and not _unilab_hold:
         plt.clf()
@@ -2213,6 +2389,27 @@ def plot3(*args, **kwargs):
     _unilab_refresh_graph()
     return res
 
+def colorbar(*args, **kwargs):
+    if not args:
+        # Try to find a mappable in current axes
+        ax = plt.gca()
+        mappable = None
+        # Check for collections (like Poly3DCollection from surf)
+        if hasattr(ax, 'collections') and ax.collections:
+            mappable = ax.collections[-1]
+        # Check for images (like from imshow)
+        elif hasattr(ax, 'images') and ax.images:
+            mappable = ax.images[-1]
+        
+        if mappable:
+            res = plt.colorbar(mappable, **kwargs)
+        else:
+            res = plt.colorbar(**kwargs)
+    else:
+        res = plt.colorbar(*args, **kwargs)
+    _unilab_refresh_graph()
+    return res
+
 def surf(*args, **kwargs):
     """Create a 3D surface plot."""
     if not _unilab_hold: 
@@ -2227,12 +2424,19 @@ def surf(*args, **kwargs):
     else:
         ax = fig.gca()
     
+    # Handle peaks(N) returning (X, Y, Z) tuple
+    if len(args) == 1 and isinstance(args[0], (tuple, list)) and len(args[0]) == 3:
+        args = args[0]
+
     # Flatten vectors
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
     
     X_out, Y_out, Z_out = None, None, None
     if len(args) == 1:
         Z = np.asarray(args[0])
+        if Z.ndim == 1:
+             # Just a line? or reshape?
+             Z = Z.reshape(1, -1)
         rows, cols = Z.shape
         X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
         X_out, Y_out, Z_out = X, Y, Z

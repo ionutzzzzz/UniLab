@@ -476,19 +476,62 @@ class TranspilerEngine(BaseEngine):
         BUILTINS = ['disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin']
         
         # Context-aware triggers for path completion
-        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ')
+        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ')
         is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
         
         if is_path_context:
-            import glob
-            # Handle path completion relative to current CWD
-            search_pattern = text + '*'
-            options = glob.glob(search_pattern)
-            # Filter and add trailing slash to directories
+            # Strip leading/trailing quotes for path search
+            clean_text = text.lstrip("'\"").rstrip("'\"")
+            
+            # Handle path completion relative to session CWD
+            search_path = self.cwd
+            if '/' in clean_text or '\\' in clean_text:
+                dirname = os.path.dirname(clean_text)
+                if dirname:
+                    try:
+                        # Handle both relative and absolute paths
+                        potential_path = pathlib.Path(dirname)
+                        if potential_path.is_absolute():
+                            search_path = potential_path.resolve()
+                        else:
+                            search_path = (self.cwd / dirname).resolve()
+                        text_prefix = os.path.basename(clean_text)
+                    except Exception:
+                        return []
+                else:
+                    text_prefix = clean_text
+            else:
+                text_prefix = clean_text
+
+            if not search_path.exists() or not search_path.is_dir():
+                return []
+
             results = []
-            for f in options:
-                p = pathlib.Path(f)
-                results.append(f + '/' if p.is_dir() else f)
+            try:
+                for f in search_path.iterdir():
+                    if f.name.startswith(text_prefix):
+                        rel_name = f.name
+                        if f.is_dir():
+                            rel_name += '/'
+                        
+                        # Reconstruct the completion string
+                        if '/' in clean_text or '\\' in clean_text:
+                            dirname = os.path.dirname(clean_text)
+                            sep = '/' if '/' in clean_text else '\\'
+                            completion = dirname + sep + rel_name
+                        else:
+                            completion = rel_name
+                            
+                        # If the original text had a quote, keep it if it was only at the start
+                        if text.startswith("'") and not text.endswith("'"):
+                            results.append("'" + completion)
+                        elif text.startswith('"') and not text.endswith('"'):
+                            results.append('"' + completion)
+                        else:
+                            results.append(completion)
+            except Exception:
+                pass
+                
             return sorted(results)
         else:
             # Symbol completion
