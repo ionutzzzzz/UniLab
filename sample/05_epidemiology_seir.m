@@ -1,6 +1,9 @@
 % 05_epidemiology_seir.m
 % UniLab Epidemiology: Disease Modeling (SEIR Model)
 
+clear all;
+clc;
+
 disp('🦠 UniLab Epidemiology Lab');
 disp('===========================');
 

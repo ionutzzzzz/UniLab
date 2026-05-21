@@ -1,6 +1,9 @@
 % 07_deep_learning_theory.m
 % UniLab Deep Learning: Function Approximation and Theory
 
+clear all;
+clc;
+
 disp('🧠 UniLab Deep Learning: Function Approximation');
 disp('==============================================');
 

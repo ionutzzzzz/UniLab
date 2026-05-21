@@ -1,6 +1,9 @@
 % 09_financial_risk_var.m
 % UniLab Financial Engineering: Risk Analysis & Portfolio VaR
 
+clear all;
+clc;
+
 disp('💰 UniLab Financial Risk Management');
 disp('===================================');
 

@@ -5,11 +5,16 @@ function terminal_plot(y, x, h, w, type)
     if nargin < 4 || isempty(w), w = 60; end
     if nargin < 5 || isempty(type), type = 'line'; end
     
-    try
-        % Use the high-performance Python ASCII renderer
-        result = unilab_ascii_plot(y, x, h, w, type);
-        disp(result);
-    catch err
-        disp(['Error in terminal_plot: ', err.message]);
+    if is_web()
+        terminal_plot_hd(y, x, h, w, type);
+    else
+        try
+            % Use the high-performance Python ASCII renderer
+            result = unilab_ascii_plot(y, x, h, w, type);
+            disp(result);
+        catch err
+            % Fallback to HD plot if ASCII fails (will show as marker in terminal)
+            terminal_plot_hd(y, x, h, w, type);
+        end
     end
 end

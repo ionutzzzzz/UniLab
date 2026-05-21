@@ -1,6 +1,9 @@
 % 04_neuroscience_spiking.m
 % UniLab Neuroscience: Neuron Dynamics & Hodgkin-Huxley Model
 
+clear all;
+clc;
+
 disp('🧠 UniLab Computational Neuroscience');
 disp('=====================================');
 

@@ -203,8 +203,8 @@ class TranspilerEngine(BaseEngine):
                 except Exception as e:
                     return ExecutionResult(False, "", str(e), 1, 0.0, self._get_variables(), [])
 
-            # 2. Handle 'ls', 'pwd', 'dir', 'mkdir', 'rm', 'cp', 'mv'
-            if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv') or stripped_code.startswith('!'):
+            # 2. Handle 'ls', 'pwd', 'dir', 'mkdir', 'rm', 'cp', 'mv', 'cat'
+            if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'cat') or stripped_code.startswith('!'):
                 try:
                     exec_cmd = stripped_code[1:] if stripped_code.startswith('!') else stripped_code
                     proc = subprocess.run(shlex.split(exec_cmd), capture_output=True, text=True, timeout=timeout)
@@ -284,7 +284,10 @@ class TranspilerEngine(BaseEngine):
                     if not callable(val) or isinstance(val, np.ndarray):
                         is_var = True
                 
-                if is_func and not is_var:
+                # Command-like functions should be executed, not helped
+                is_command = stripped_code.lower() in ('whos', 'clc', 'list_libraries')
+                
+                if is_func and not is_var and not is_command:
                     return await self._get_help(stripped_code)
 
             start_ts = time.time()
@@ -354,8 +357,10 @@ class TranspilerEngine(BaseEngine):
                 if plot_indices:
                     render_func = self.globals.get('render_image_terminal')
 
-                    # Deduplicate: only keep the last update for each unique (figure, version)
-                    fig_to_last_marker = {}
+                    # Deduplicate: only keep the last update for each figure number in this execution.
+                    # This prevents intermediate plots (e.g. from plot(), then title(), then xlabel())
+                    # from being displayed as separate images.
+                    plot_markers = {}
                     for idx in plot_indices:
                         line = stdout_lines[idx]
                         parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
@@ -365,16 +370,16 @@ class TranspilerEngine(BaseEngine):
                         fig_num = fig_info[0].strip()
                         fig_ver = fig_info[1].strip() if len(fig_info) > 1 else "1"
 
-                        # Key by both figure number and version
-                        fig_to_last_marker[(fig_num, fig_ver)] = (idx, filename)
+                        # Key by fig_num to only keep the final state of each figure
+                        plot_markers[fig_num] = (idx, filename)
 
-                    final_render_indices = {v[0] for v in fig_to_last_marker.values()}
+                    final_render_indices = {v[0] for v in plot_markers.values()}
 
                     import base64
                     # Sort markers by their original index to maintain chronological order
-                    sorted_markers = sorted(fig_to_last_marker.items(), key=lambda x: x[1][0])
+                    sorted_markers = sorted(plot_markers.items(), key=lambda x: x[1][0])
 
-                    for (fig_num, fig_ver), (idx, filename) in sorted_markers:
+                    for fig_num, (idx, filename) in sorted_markers:
                         plots.append(filename)
                         data_3d_entry = None
 
@@ -484,7 +489,7 @@ class TranspilerEngine(BaseEngine):
         BUILTINS = ['disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin']
         
         # Context-aware triggers for path completion
-        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ')
+        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ', 'cat ')
         is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
         
         if is_path_context:

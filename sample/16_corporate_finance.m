@@ -1,6 +1,9 @@
 % 16_corporate_finance.m
 % Demonstrates corporate finance ratio analysis and margin evaluations
 
+clear all;
+clc;
+
 disp('💼 UniLab Corporate Finance');
 disp('===========================');
 

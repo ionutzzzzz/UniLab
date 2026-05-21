@@ -1,6 +1,9 @@
 % 02_computational_chemistry.m
 % UniLab Computational Chemistry: Reaction Kinetics & Thermodynamics
 
+clear all;
+clc;
+
 disp('🧪 UniLab Computational Chemistry Lab');
 disp('======================================');
 

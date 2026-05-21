@@ -1,6 +1,9 @@
 % 19_fluid_dynamics_pipe_flow.m
 % Demonstrates internal pipe flow and aerodynamics
 
+clear all;
+clc;
+
 disp('🚰 UniLab Fluid Dynamics');
 disp('========================');
 

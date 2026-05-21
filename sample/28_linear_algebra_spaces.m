@@ -1,6 +1,9 @@
 % 28_linear_algebra_spaces.m
 % Demonstrates advanced matrix operations and vector spaces
 
+clear all;
+clc;
+
 disp('🧮 UniLab Linear Algebra');
 disp('=========================');
 

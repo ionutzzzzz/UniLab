@@ -1,6 +1,9 @@
 % 14_pure_mathematics.m
 % Demonstrates advanced mathematical functions including hyperbolic geometry and combinatorics
 
+clear all;
+clc;
+
 disp('📐 UniLab Pure Mathematics Lab');
 disp('================================');
 

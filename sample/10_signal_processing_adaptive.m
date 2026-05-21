@@ -1,6 +1,9 @@
 % 10_signal_processing_adaptive.m
 % UniLab Signal Processing: Adaptive Filters & Spectral Analysis
 
+clear all;
+clc;
+
 disp('📡 UniLab Signal Processing Studio');
 disp('===================================');
 

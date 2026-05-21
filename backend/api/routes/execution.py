@@ -26,7 +26,13 @@ async def execute_code(
 ):
     """Execute code in a session."""
     try:
-        result = await core.run_code(session_id, req.code, timeout=req.timeout)
+        # Special handling for 'whos' to match CLI behavior
+        code = req.code.strip()
+        if code.lower() in ('whos', 'whos;'):
+            if not code.endswith(';'):
+                code += ';'
+        
+        result = await core.run_code(session_id, code, timeout=req.timeout)
         
         # Convert VariableInfo dicts to the schema
         variables_snapshot = {}

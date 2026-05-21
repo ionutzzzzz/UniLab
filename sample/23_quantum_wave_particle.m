@@ -1,6 +1,9 @@
 % 23_quantum_wave_particle.m
 % Demonstrates the wave-particle duality and energy levels
 
+clear all;
+clc;
+
 disp('⚛️ UniLab Advanced Quantum Mechanics');
 disp('=====================================');
 

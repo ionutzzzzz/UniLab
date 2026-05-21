@@ -1,6 +1,9 @@
 % 27_signal_pulses.m
 % Demonstrates foundational signals used in DSP and systems theory
 
+clear all;
+clc;
+
 disp('📡 UniLab Signal Pulses');
 disp('=======================');
 

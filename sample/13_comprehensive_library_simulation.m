@@ -2,6 +2,9 @@
 % UniLab Comprehensive Library Simulation
 % Demonstrates functions across Math, ML, Stats, Control, Signal, and Viz libraries.
 
+clear all;
+clc;
+
 disp('🌟 UniLab Comprehensive Library Simulation 🌟');
 disp('===============================================');
 

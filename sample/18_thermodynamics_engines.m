@@ -1,6 +1,9 @@
 % 18_thermodynamics_engines.m
 % Demonstrates Ideal Gas expansions and Carnot Engine efficiency
 
+clear all;
+clc;
+
 disp('🔥 UniLab Thermodynamics');
 disp('========================');
 

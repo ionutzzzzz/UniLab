@@ -1,6 +1,9 @@
 % 15_physics_mechanics.m
 % Demonstrates classical mechanics, kinematics, and energy conservation
 
+clear all;
+clc;
+
 disp('⚙️ UniLab Mechanics Lab');
 disp('=======================');
 

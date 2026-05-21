@@ -1,6 +1,9 @@
 % 20_chemical_solutions_ph.m
 % Demonstrates chemical concentrations and pH calculations
 
+clear all;
+clc;
+
 disp('⚗️ UniLab Chemistry Solutions');
 disp('=============================');
 

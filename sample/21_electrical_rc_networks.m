@@ -1,6 +1,9 @@
 % 21_electrical_rc_networks.m
 % Demonstrates electrical circuit equivalent calculations and power
 
+clear all;
+clc;
+
 disp('⚡ UniLab Electrical Networks');
 disp('=============================');
 

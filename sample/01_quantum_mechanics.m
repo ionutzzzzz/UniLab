@@ -1,6 +1,9 @@
 % 01_quantum_mechanics.m
 % UniLab Quantum Physics: 1D Schrodinger Equation & Wavefunction Evolution
 
+clear all;
+clc;
+
 disp('⚛️ UniLab Quantum Mechanics Suite');
 disp('===================================');
 

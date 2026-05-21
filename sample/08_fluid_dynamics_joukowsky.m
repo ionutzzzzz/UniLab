@@ -1,6 +1,9 @@
 % 08_fluid_dynamics_joukowsky.m
 % UniLab Fluid Dynamics: Airfoil Flow & Joukowsky Transform
 
+clear all;
+clc;
+
 disp('🌊 UniLab Fluid Dynamics Laboratory');
 disp('====================================');
 

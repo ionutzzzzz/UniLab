@@ -1,6 +1,9 @@
 % 25_ml_metrics_and_losses.m
 % Demonstrates advanced Machine Learning loss functions and distance metrics
 
+clear all;
+clc;
+
 disp('🤖 UniLab ML Metrics & Losses');
 disp('=============================');
 

@@ -1,6 +1,9 @@
 % 24_materials_elasticity.m
 % Demonstrates solid mechanics and material property relationships
 
+clear all;
+clc;
+
 disp('💎 UniLab Materials Elasticity');
 disp('==============================');
 

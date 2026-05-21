@@ -220,7 +220,9 @@ class UniLabToPython(Transformer):
     def var(self, items):
         name = str(items[0])
         name = self._escape_name(name)
-        if name == "nargin": return "nargin"
+        if name in ("nargin", "ans", "pi", "inf", "Inf", "nan", "NaN", "eps", "i", "j", "realmax", "realmin", "true", "false"): 
+            return name
+        
         self.variables.add(name)
         self.called_functions.add(name)
         return f"unilab_call({name})"

@@ -1,6 +1,9 @@
 % 22_astronomy_cosmology.m
 % Demonstrates extreme astrophysics, relativity, and cosmological expansion
 
+clear all;
+clc;
+
 disp('🌌 UniLab Astronomy & Cosmology');
 disp('================================');
 

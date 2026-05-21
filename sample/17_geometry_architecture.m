@@ -1,6 +1,9 @@
 % 17_geometry_architecture.m
 % Demonstrates compound area and perimeter calculations for architecture
 
+clear all;
+clc;
+
 disp('🏛️ UniLab Architectural Geometry');
 disp('================================');
 

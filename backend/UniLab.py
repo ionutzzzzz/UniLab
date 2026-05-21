@@ -383,6 +383,20 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                     print(os.getcwd())
                             except OSError as e:
                                 print_error(f"cd failed: {e}")
+                        elif cmd == 'cat':
+                            if len(parts) > 1:
+                                for file_arg in parts[1:]:
+                                    try:
+                                        file_path = pathlib.Path(file_arg)
+                                        if file_path.exists() and file_path.is_file():
+                                            content = file_path.read_text(encoding='utf-8', errors='replace')
+                                            print(content.rstrip())
+                                        else:
+                                            print_error(f"cat: {file_arg}: No such file or directory")
+                                    except Exception as e:
+                                        print_error(f"cat failed: {e}")
+                            else:
+                                print_error("cat: missing file argument")
                         else:
                             os.system(line.strip())
                 

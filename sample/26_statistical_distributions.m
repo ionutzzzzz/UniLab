@@ -1,6 +1,9 @@
 % 26_statistical_distributions.m
 % Demonstrates statistical variance, covariance, and probability densities
 
+clear all;
+clc;
+
 disp('📊 UniLab Statistical Distributions');
 disp('===================================');
 

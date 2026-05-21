@@ -180,6 +180,9 @@ def unilab_series(sys1, sys2):
 def unilab_feedback(sys1, sys2=None, sign=-1):
     if sys2 is None:
         sys2 = signal.TransferFunction([1], [1])
+    elif isinstance(sys2, (int, float, np.number)):
+        sys2 = signal.TransferFunction([sys2], [1])
+        
     s1 = sys1 if isinstance(sys1, signal.TransferFunction) else sys1.to_tf()
     s2 = sys2 if isinstance(sys2, signal.TransferFunction) else sys2.to_tf()
     num = np.convolve(s1.num, s2.den)
@@ -1118,7 +1121,12 @@ def unilab_matrix_concat(*rows):
         # If any item is an array (check this FIRST before string check)
         if builtins.any(isinstance(r, np.ndarray) for r in items):
             try:
-                processed = [np.atleast_2d(r) for r in items]
+                processed = []
+                for r in items:
+                    if isinstance(r, np.ndarray) and r.ndim == 1:
+                        processed.append(r.reshape(-1, 1))
+                    else:
+                        processed.append(np.atleast_2d(r))
                 # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
                 return np.hstack(processed)
             except:
@@ -1589,6 +1597,20 @@ def tanh(x):
         import sympy
         return sympy.tanh(x)
     return np.tanh(x)
+
+def atan(x):
+    """Arctangent of argument in radians."""
+    if _is_symbolic(x):
+        import sympy
+        return sympy.atan(x)
+    return np.arctan(x)
+
+def atan2(y, x):
+    """Two-argument arctangent function. Returns angle in radians between -pi and pi."""
+    if _is_symbolic(y) or _is_symbolic(x):
+        import sympy
+        return sympy.atan2(y, x)
+    return np.arctan2(y, x)
 
 def relu(x):
     """Rectified Linear Unit."""
@@ -2151,7 +2173,11 @@ def unilab_ascii_heatmap(M, height=15, width=40):
     except Exception as e:
         return f"Error generating ASCII heatmap: {e}"
 
-def _terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
+def is_web():
+    """Returns True if running in web mode."""
+    return os.environ.get('UNILAB_WEB_MODE') == '1'
+
+def terminal_plot_hd(y, x=None, height=None, width=None, type='line', **kwargs):
     """HD Terminal Plotting with High-Contrast Styling."""
     grid_state = kwargs.pop('grid', True)
     
@@ -2161,6 +2187,10 @@ def _terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
         else:
             x = np.arange(1)
             y = [y]
+    
+    # Ensure x and y are 1D for Matplotlib
+    x = _unilab_vec(x)
+    y = _unilab_vec(y)
             
     plt.figure(figsize=(10, 6))
     if type == 'line':
@@ -2185,7 +2215,7 @@ def _terminal_plot(y, x=None, height=None, width=None, type='line', **kwargs):
     _unilab_refresh_graph()
     plt.close()
 
-def _terminal_heatmap(M):
+def terminal_heatmap_hd(M):
     """HD Heatmap optimized for terminal grids."""
     plt.figure(figsize=(10, 6))
     plt.imshow(M, cmap='magma', interpolation='nearest')

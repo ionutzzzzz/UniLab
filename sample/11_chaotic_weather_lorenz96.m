@@ -1,6 +1,9 @@
 % 11_chaotic_weather_lorenz96.m
 % UniLab Atmospheric Science: Lorenz 96 Chaotic Weather Model
 
+clear all;
+clc;
+
 disp('🌪️ UniLab Atmospheric Science Lab');
 disp('==================================');
 

@@ -1,6 +1,9 @@
 % 03_orbital_mechanics.m
 % UniLab Aerospace Engineering: Orbital Mechanics & N-Body Systems
 
+clear all;
+clc;
+
 disp('🚀 UniLab Aerospace & Orbital Mechanics');
 disp('=======================================');
 

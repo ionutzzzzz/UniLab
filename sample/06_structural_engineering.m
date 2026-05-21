@@ -1,6 +1,9 @@
 % 06_structural_engineering.m
 % UniLab Structural Engineering: Finite Element Truss Analysis
 
+clear all;
+clc;
+
 disp('🏗️ UniLab Structural Engineering Studio');
 disp('=======================================');
 
