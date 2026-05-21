@@ -9,12 +9,16 @@ function terminal_plot(y, x, h, w, type)
         terminal_plot_hd(y, x, h, w, type);
     else
         try
-            % Use the high-performance Python ASCII renderer
+            % Use the high-performance Python ASCII renderer for immediate terminal feedback
             result = unilab_ascii_plot(y, x, h, w, type);
-            disp(result);
+            if ~isempty(result)
+                disp(result);
+            end
         catch err
-            % Fallback to HD plot if ASCII fails (will show as marker in terminal)
-            terminal_plot_hd(y, x, h, w, type);
+            % Ignore ASCII failures if we have HD fallback
         end
+        
+        % Always call HD plot to ensure graph.png is updated and labels can be attached
+        terminal_plot_hd(y, x, h, w, type);
     end
 end

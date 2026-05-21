@@ -75,9 +75,9 @@ UniLab_GRAMMAR = r"""
                | addition COLON addition COLON addition -> range3
 
     ?addition.5: multiplication (ADD_OP multiplication)*
-    ?multiplication.5: power (MUL_OP power)*
-    ?power: unary (POW_OP unary)*
-    ?unary: UNARY_OP unary | postfix_expr
+    ?multiplication.5: unary (MUL_OP unary)*
+    ?unary: UNARY_OP unary | power
+    ?power: postfix_expr (POW_OP unary)*
     
     ?postfix_expr: atom
                  | function_call

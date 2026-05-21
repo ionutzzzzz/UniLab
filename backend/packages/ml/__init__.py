@@ -504,8 +504,27 @@ class NeuralNet:
 
 def accuracy_score(y_true, y_pred): return np.mean(np.asarray(y_true).flatten() == np.asarray(y_pred).flatten())
 def mean_squared_error(y_true, y_pred): return np.mean((np.asarray(y_true)-np.asarray(y_pred))**2)
-def confusion_matrix(y_true, y_pred):
+def confusion_matrix(y_true, y_pred, num_classes=None):
     y_t, y_p = np.asarray(y_true).flatten(), np.asarray(y_pred).flatten()
+    if num_classes is not None:
+        num_classes = int(num_classes)
+        # Use fixed size matrix
+        cm = np.zeros((num_classes, num_classes), dtype=int)
+        for i in range(len(y_t)):
+            try:
+                # MATLAB indices are 1-based, k-means might be 1-based too in UniLab
+                # but if they are 0-based, we handle it.
+                r = int(y_t[i])
+                c = int(y_p[i])
+                # Heuristic: if any index is 0, assume 0-based, else assume 1-based
+                # Actually, better to just check bounds.
+                if 1 <= r <= num_classes and 1 <= c <= num_classes:
+                    cm[r-1, c-1] += 1
+                elif 0 <= r < num_classes and 0 <= c < num_classes:
+                    cm[r, c] += 1
+            except: continue
+        return cm
+        
     cl = np.unique(np.concatenate([y_t, y_p]))
     cm = np.zeros((len(cl), len(cl)), dtype=int)
     for i, c1 in enumerate(cl):

@@ -1493,14 +1493,23 @@ def prod(x, axis=None):
 
 
 def mean(x, axis=None):
+    x_arr = np.asarray(x)
+    if axis is None:
+        # MATLAB-like behavior: mean along first non-singleton dimension
+        if x_arr.ndim <= 1:
+            return np.mean(x_arr)
+        for i, d in enumerate(x_arr.shape):
+            if d > 1:
+                res = np.mean(x_arr, axis=i)
+                # Keep orientation if it was a column vector or matrix
+                if x_arr.ndim == 2 and i == 0:
+                    return res.reshape(1, -1)
+                return res
+        return np.mean(x_arr)
 
-    if axis is not None:
-
-        if isinstance(axis, (int, float)):
-
-            axis = int(axis) - 1
-
-    return np.mean(x, axis=axis)
+    if isinstance(axis, (int, float)):
+        axis = int(axis) - 1
+    return np.mean(x_arr, axis=axis)
 
 
 def min(*args, axis=None):
@@ -1923,22 +1932,11 @@ def _unilab_refresh_graph():
                 ax.zaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
                 ax.xaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
                 ax.yaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
-                ax.zaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
             except: pass
-
-            fig_num = fig.number
-            three_d_data = _unilab_3d_data_store.pop(fig_num, None)
-            if three_d_data:
-                try:
-                    data3d_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.3d.json"
-                    data3d_path = pathlib.Path(ws_path) / data3d_filename if ws_path else pathlib.Path(data3d_filename)
-                    with open(str(data3d_path), 'w') as f:
-                        json.dump(three_d_data, f)
-                except Exception:
-                    pass
 
         # Force artists to be rendered
         plt.draw()
+
 
         # Save with tight clipping to avoid cutting off labels/axes
         # We use a small padding to ensure edges are clean
@@ -2034,6 +2032,98 @@ def plot(*args, **kwargs):
     elif hasattr(target_ax, 'figure'):
         target_ax.figure.canvas.draw()
         
+    return res
+
+def fill(*args, **kwargs):
+    """
+    Fill areas between curves.
+    Example:
+        fill(x, y, 'r');
+        fill(ax, x, y, 'r');
+    """
+    args_list = list(args)
+    target_ax = plt
+    if args_list and hasattr(args_list[0], 'fill'):
+        target_ax = args_list.pop(0)
+    
+    # MATLAB-style Name-Value pair extraction
+    matlab_names = {'Alpha': 'alpha', 'FaceAlpha': 'alpha', 'FaceColor': 'facecolor', 'EdgeColor': 'edgecolor'}
+    i = 0
+    while i < len(args_list) - 1:
+        name = args_list[i]
+        if isinstance(name, str) and name in matlab_names:
+            kwargs[matlab_names[name]] = args_list[i+1]
+            args_list.pop(i); args_list.pop(i)
+            continue
+        i += 1
+
+    # Flatten vectors
+    args_list = [_unilab_vec(a) for a in args_list]
+    
+    if target_ax == plt and not _unilab_hold:
+        plt.cla()
+        _unilab_update_fig_version()
+
+    res = target_ax.fill(*args_list, **kwargs)
+    
+    if target_ax == plt:
+        _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'):
+        target_ax.figure.canvas.draw()
+    return res
+
+def xlim(*args):
+    args_list = list(args)
+    target_ax = plt
+    if args_list and hasattr(args_list[0], 'set_xlim'):
+        target_ax = args_list.pop(0)
+    
+    if not args_list:
+        return target_ax.get_xlim() if hasattr(target_ax, 'get_xlim') else plt.xlim()
+    
+    val = args_list[0]
+    if isinstance(val, (list, np.ndarray)):
+        val_arr = np.asarray(val).flatten()
+        if len(val_arr) == 2:
+            res = target_ax.set_xlim(val_arr[0], val_arr[1]) if hasattr(target_ax, 'set_xlim') else plt.xlim(val_arr[0], val_arr[1])
+        else:
+            res = target_ax.set_xlim(val_arr) if hasattr(target_ax, 'set_xlim') else plt.xlim(val_arr)
+    elif len(args_list) == 2:
+        res = target_ax.set_xlim(args_list[0], args_list[1]) if hasattr(target_ax, 'set_xlim') else plt.xlim(args_list[0], args_list[1])
+    else:
+        res = target_ax.set_xlim(val) if hasattr(target_ax, 'set_xlim') else plt.xlim(val)
+        
+    if target_ax == plt:
+        _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'):
+        target_ax.figure.canvas.draw()
+    return res
+
+def ylim(*args):
+    args_list = list(args)
+    target_ax = plt
+    if args_list and hasattr(args_list[0], 'set_ylim'):
+        target_ax = args_list.pop(0)
+    
+    if not args_list:
+        return target_ax.get_ylim() if hasattr(target_ax, 'get_ylim') else plt.ylim()
+    
+    val = args_list[0]
+    if isinstance(val, (list, np.ndarray)):
+        val_arr = np.asarray(val).flatten()
+        if len(val_arr) == 2:
+            res = target_ax.set_ylim(val_arr[0], val_arr[1]) if hasattr(target_ax, 'set_ylim') else plt.ylim(val_arr[0], val_arr[1])
+        else:
+            res = target_ax.set_ylim(val_arr) if hasattr(target_ax, 'set_ylim') else plt.ylim(val_arr)
+    elif len(args_list) == 2:
+        res = target_ax.set_ylim(args_list[0], args_list[1]) if hasattr(target_ax, 'set_ylim') else plt.ylim(args_list[0], args_list[1])
+    else:
+        res = target_ax.set_ylim(val) if hasattr(target_ax, 'set_ylim') else plt.ylim(val)
+        
+    if target_ax == plt:
+        _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'):
+        target_ax.figure.canvas.draw()
     return res
 
 def unilab_ascii_plot(y, x=None, height=20, width=60, plot_type='line'):
@@ -2198,7 +2288,13 @@ def terminal_plot_hd(y, x=None, height=None, width=None, type='line', **kwargs):
     x = _unilab_vec(x)
     y = _unilab_vec(y)
             
-    plt.figure(figsize=(10, 6))
+    if not _unilab_hold:
+        plt.clf()
+        # Ensure we have a figure with the right size if it's the first plot
+        if not plt.get_fignums():
+            plt.figure(figsize=(10, 6))
+        _unilab_update_fig_version()
+
     if type == 'line':
         plt.plot(x, y, linewidth=5.0)
     elif type == 'area':
@@ -2219,7 +2315,6 @@ def terminal_plot_hd(y, x=None, height=None, width=None, type='line', **kwargs):
     
     plt.grid(grid_state == 'on' or grid_state == True or grid_state == 1, linestyle='--', alpha=0.6, linewidth=1.5)
     _unilab_refresh_graph()
-    plt.close()
 
 def terminal_heatmap_hd(M):
     """HD Heatmap optimized for terminal grids."""
@@ -2795,12 +2890,12 @@ def render_image_terminal(img_path, width=None):
                 # Calculate luminance for character selection
                 luma = 0.299*r + 0.587*g + 0.114*b
                 
-                # If it's very close to white, treat as background
-                if luma > 252:
+                # If it's very dark (theme background), treat as empty
+                if luma < 25:
                     row += " "
                     continue
                     
-                idx = int((255 - luma) * (ramp_len - 1) / 255)
+                idx = int(luma * (ramp_len - 1) / 255)
                 idx = max(0, min(idx, ramp_len - 1))
                 char = ramp[idx]
                 

@@ -1624,6 +1624,13 @@ class SimulatorEngine:
             elif model == 'pca': 
                 X_data = kwargs.pop('X', None)
                 sw = PCASimulator(X_data, **kwargs)
+            elif model == 'kmeans':
+                if ml:
+                    k_val = kwargs.get('k', 3)
+                    kmeans_model = ml.KMeans(k=k_val)
+                    sw = KMeansSimulator(kmeans_model, **kwargs)
+                else:
+                    raise ImportError("ML package not available for KMeans simulation")
             elif model == 'regression': sw = RegressionSimulator(kwargs.get('model'), **kwargs)
             elif model == 'svm': sw = SVMSimulator(**kwargs)
             elif model == 'knn': sw = KNNSimulator(**kwargs)
