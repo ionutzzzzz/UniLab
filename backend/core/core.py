@@ -103,7 +103,8 @@ UniLab_GRAMMAR = r"""
     ?qualified_name: IDENTIFIER (DOT IDENTIFIER)*
     
     call_args: arg_item (COMMA arg_item)*
-    ?arg_item: expression | COLON -> colon_arg
+    ?arg_item: keyword_arg | expression | COLON -> colon_arg
+    keyword_arg: IDENTIFIER EQUAL expression
     
     matrix: LBRACKET (row | SEMI | NEWLINE)* RBRACKET
     row: expression (COMMA? expression)*
@@ -114,7 +115,7 @@ UniLab_GRAMMAR = r"""
 
     IDENTIFIER: /(?!(?:function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export)\b)[a-zA-Z_][a-zA-Z0-9_]*/
     NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
-    STRING: /'(?:[^'\n]|'')*'/
+    STRING: /'(?:[^']|'')*'/
     
     ADD_OP: "+" | "-" | ".+" | ".-"
     MUL_OP: "*" | "/" | "\\" | ".*" | "./" | ".\\"
@@ -417,12 +418,15 @@ class UniLabToPython(Transformer):
         return s
 
     def lhs_list(self, items):
-        names = [str(i) for i in items if str(i) not in ["[", "]", ","]]
+        names = [self._escape_name(str(i)) for i in items if str(i) not in ["[", "]", ","]]
         for n in names: self.variables.add(n)
         return names
 
     def function_ret(self, items):
-        return items[0]
+        ret = items[0]
+        if isinstance(ret, list):
+            return ret
+        return self._escape_name(str(ret))
 
     def block(self, items):
         res = []
@@ -546,6 +550,7 @@ class UniLabToPython(Transformer):
 
     def func_params(self, items): return [self._escape_name(str(i)) for i in items if str(i) != ","]
     def call_args(self, items): return [str(i) for i in items if str(i) != ","]
+    def keyword_arg(self, items): return f"{str(items[0])}={str(items[2])}"
     
     def matrix(self, items):
         rows = []

@@ -662,10 +662,10 @@ def unilab_handle(func):
     if isinstance(func, UnilabHandle): return func
     return UnilabHandle(func)
 
-def unilab_call(obj, *args):
+def unilab_call(obj, *args, **kwargs):
     if callable(obj):
         # Avoid auto-calling handles if no args given
-        if len(args) == 0 and isinstance(obj, UnilabHandle):
+        if len(args) == 0 and len(kwargs) == 0 and isinstance(obj, UnilabHandle):
             return obj
             
         # Handle built-in functions that might be passed (e.g. Python's abs vs UniLab's abs)
@@ -673,20 +673,20 @@ def unilab_call(obj, *args):
         # Check by name and identity to be absolutely sure
         try:
             name = getattr(obj, '__name__', None)
-            if name == 'abs' or obj == builtins.abs: return unilab_abs(*args)
-            if name == 'round' or obj == builtins.round: return round(*args)
-            if name == 'min' or obj == builtins.min: return min(*args)
-            if name == 'max' or obj == builtins.max: return max(*args)
-            if name == 'sum' or obj == builtins.sum: return sum(*args)
-            if name == 'any' or obj == builtins.any: return any(*args)
-            if name == 'all' or obj == builtins.all: return all(*args)
-            if name == 'real' or obj == builtins.real: return real(*args)
-            if name == 'imag' or obj == builtins.imag: return imag(*args)
+            if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
+            if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
+            if name == 'min' or obj == builtins.min: return min(*args, **kwargs)
+            if name == 'max' or obj == builtins.max: return max(*args, **kwargs)
+            if name == 'sum' or obj == builtins.sum: return sum(*args, **kwargs)
+            if name == 'any' or obj == builtins.any: return any(*args, **kwargs)
+            if name == 'all' or obj == builtins.all: return all(*args, **kwargs)
+            if name == 'real' or obj == builtins.real: return real(*args, **kwargs)
+            if name == 'imag' or obj == builtins.imag: return imag(*args, **kwargs)
         except: pass
 
-        return obj(*args)
+        return obj(*args, **kwargs)
     
-    if len(args) == 0: return obj
+    if len(args) == 0 and len(kwargs) == 0: return obj
     
     # Handle array/list/string indexing
     if len(args) == 1:
@@ -1384,6 +1384,26 @@ def sum(x, axis=None):
             axis = int(axis) - 1
 
     return np.sum(x, axis=axis)
+
+
+
+def prod(x, axis=None):
+
+
+
+    if axis is not None:
+
+
+
+        if isinstance(axis, (int, float)):
+
+
+
+            axis = int(axis) - 1
+
+
+
+    return np.prod(x, axis=axis, dtype=np.float64)
 
 
 
@@ -2232,8 +2252,12 @@ def axis(state): plt.axis(state); _unilab_refresh_graph()
 def legend(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if len(p_args) > 2:
+    
+    # If all positional arguments are strings, they are labels for the current plot.
+    # Matplotlib's legend expects a list of labels in this case.
+    if p_args and all(isinstance(a, str) for a in p_args):
         p_args = [p_args]
+        
     plt.legend(*p_args, **kwargs); _unilab_refresh_graph()
 
 def contourf(*args, **kwargs):

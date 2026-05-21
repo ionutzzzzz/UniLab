@@ -66,6 +66,14 @@ class TranspilerEngine(BaseEngine):
 
         self.search_paths = [self.cwd, self.workspace_path]
         
+        # Add libraries to search path
+        backend_dir = pathlib.Path(__file__).resolve().parents[2]
+        libs_dir = backend_dir / "libraries"
+        if libs_dir.exists():
+            for lib_subdir in libs_dir.iterdir():
+                if lib_subdir.is_dir() and not lib_subdir.name.startswith("__"):
+                    self.search_paths.append(lib_subdir)
+        
         # Use our new AutoloadDict
         self.globals = AutoloadDict(self)
         self.globals.update({

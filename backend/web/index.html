@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniLab Professional Web Terminal</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #e0e0e0;
+            --input-color: #4fc3f7;
+            --stdout-color: #ce9178;
+            --stderr-color: #ff5252;
+            --success-color: #81c784;
+            --prompt-color: #64b5f6;
+            --border-color: #111;
+            --loading-color: #444;
+            --header-bg: #030303;
+            --accent-color: #007acc;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #terminal-header {
+            background-color: var(--header-bg);
+            padding: 10px 25px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+            z-index: 10;
+        }
+
+        #terminal-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 30px;
+            display: flex;
+            flex-direction: column;
+            cursor: text;
+        }
+
+        #output {
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.3;
+            font-size: 14px;
+        }
+
+        .line {
+            margin-bottom: 3px;
+        }
+
+        .input-line {
+            color: var(--input-color);
+            font-weight: 600;
+            margin-top: 12px;
+            border-left: 4px solid var(--prompt-color);
+            padding-left: 12px;
+        }
+
+        .stdout {
+            color: var(--text-color);
+        }
+
+        .stderr {
+            color: var(--stderr-color);
+            background: rgba(255, 82, 82, 0.05);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        .success {
+            color: var(--success-color);
+        }
+
+        .system-msg {
+            color: var(--prompt-color);
+            font-style: italic;
+            opacity: 0.8;
+            margin: 8px 0;
+        }
+
+        .plot-container {
+            margin: 25px 0;
+            border: 1px solid #333;
+            display: inline-block;
+            background: #121212;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            transition: transform 0.2s;
+            position: relative;
+        }
+        
+        .plot-container:hover {
+            transform: scale(1.02);
+        }
+
+        .plot-container img {
+            max-width: 100%;
+            max-height: 75vh;
+            height: auto;
+            display: block;
+        }
+
+        .plot-container-3d {
+            margin: 25px 0;
+            border: 1px solid #333;
+            background: #121212;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            position: relative;
+            display: inline-block;
+        }
+
+        .plot-container-3d img {
+            max-width: 100%;
+            max-height: 75vh;
+            height: auto;
+            display: block;
+            border-radius: 6px;
+        }
+
+        .plot-3d-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #64b5f6;
+            border: 1px solid #444;
+            z-index: 100;
+            max-width: 250px;
+        }
+
+        .plot-3d-controls button {
+            background: #0d47a1;
+            color: #64b5f6;
+            border: 1px solid #0d47a1;
+            padding: 4px 8px;
+            margin: 0 4px 0 0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+
+        .plot-3d-controls button:hover {
+            background: #1565c0;
+        }
+
+        #input-area {
+            display: flex;
+            align-items: center;
+            padding: 18px 25px;
+            background-color: var(--header-bg);
+            border-top: 1px solid var(--border-color);
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+        }
+
+        #prompt {
+            color: var(--prompt-color);
+            margin-right: 15px;
+            font-weight: bold;
+            user-select: none;
+            font-size: 18px;
+        }
+
+        #command-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--input-color);
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
+        }
+
+        #command-input:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(100, 181, 246, 0.2);
+            border-top: 2px solid var(--prompt-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 20px;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Autocomplete Suggestions */
+        #suggestions {
+            position: absolute;
+            bottom: 70px;
+            left: 60px;
+            background: #252526;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .suggestion-item {
+            padding: 6px 15px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .suggestion-item:hover, .suggestion-item.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3c3c3c;
+            border-radius: 5px;
+            border: 2px solid var(--bg-color);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f4f4f;
+        }
+
+        #status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff5252;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 5px rgba(255, 82, 82, 0.5);
+        }
+        #status-dot.online { 
+            background: #81c784; 
+            box-shadow: 0 0 8px rgba(129, 199, 132, 0.6);
+        }
+
+        .badge {
+            background: #333;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 10px;
+            font-size: 11px;
+        }
+
+        .plot-container-3d-interactive {
+            margin: 25px 0;
+            border: 1px solid #333;
+            background: #121212;
+            border-radius: 8px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            display: inline-block;
+            padding: 12px;
+        }
+
+        .plot-3d-canvas {
+            width: 700px;
+            height: 500px;
+            border-radius: 6px;
+            background: #0a0a0a;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal-header">
+        <div style="display: flex; align-items: center;">
+            <span id="status-dot"></span> 
+            <strong>UniLab Pro</strong> 
+            <span class="badge">Web Terminal v1.1</span>
+        </div>
+        <div id="session-info">Connecting to kernel...</div>
+    </div>
+    <div id="terminal-container" onclick="document.getElementById('command-input').focus()">
+        <div id="output">
+            <div class="line system-msg">Initializing UniLab Pro environment...</div>
+        </div>
+        <div id="suggestions"></div>
+    </div>
+    <div id="input-area">
+        <div id="prompt">>></div>
+        <input type="text" id="command-input" spellcheck="false" autofocus autocomplete="off" placeholder="Initializing...">
+        <div id="spinner" class="spinner"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.2.1/ansi_up.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+
+    <script>
+        // --- Initialization ---
+        let ansiUp;
+        const outputEl = document.getElementById('output');
+        const inputEl = document.getElementById('command-input');
+        const containerEl = document.getElementById('terminal-container');
+        const spinnerEl = document.getElementById('spinner');
+        const sessionInfoEl = document.getElementById('session-info');
+        const statusDot = document.getElementById('status-dot');
+        const suggestionsEl = document.getElementById('suggestions');
+
+        let sessionId = null;
+        let history = [];
+        let historyIndex = -1;
+        let isExecuting = false;
+        
+        let currentSuggestions = [];
+        let selectedSuggestionIdx = -1;
+
+        function initAnsi() {
+            try {
+                ansiUp = new (window.AnsiUp || AnsiUp)();
+                ansiUp.use_classes = false;
+            } catch (e) {
+                console.error("AnsiUp failed", e);
+                ansiUp = { ansi_to_html: (t) => t.replace(/\x1B\[[0-9;]*m/g, '') }; 
+            }
+        }
+
+        // --- 3D Plots: Display rendered matplotlib images ---
+
+        function appendPlot3D(session_id, plotId, b64Data = null) {
+            // For 3D plots, display the actual rendered image in a styled container
+            // We show the matplotlib-rendered 3D plot as-is
+            const container = document.createElement('div');
+            container.className = 'plot-container-3d';
+            
+            const img = document.createElement('img');
+            
+            if (b64Data) {
+                img.src = b64Data;
+                console.log("Rendering 3D plot from embedded base64 data");
+            } else {
+                const cleanPlotId = plotId.split('/').pop();
+                const url = `/api/v1/sessions/${session_id}/files/${cleanPlotId}/download`;
+
+                // Fetch the image as a blob first to ensure it's downloadable and to avoid CORS/img flicker issues
+                const loader = document.createElement('div');
+                loader.style.width = '36px';
+                loader.style.height = '36px';
+                loader.style.border = '4px solid rgba(255,255,255,0.08)';
+                loader.style.borderTop = '4px solid #64b5f6';
+                loader.style.borderRadius = '50%';
+                loader.style.animation = 'spin 0.8s linear infinite';
+                loader.style.margin = '20px auto';
+                container.appendChild(loader);
+
+                fetch(url).then(r => {
+                    if (!r.ok) throw new Error('Failed to download image');
+                    return r.blob();
+                }).then(blob => {
+                    const objectUrl = URL.createObjectURL(blob);
+                    img.src = objectUrl;
+                }).catch(err => {
+                    appendOutput(`[Error fetching 3D figure ${plotId}: ${err.message}]`, 'stderr');
+                }).finally(() => {
+                    if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+                });
+            }
+            
+            img.alt = "UniLab Pro 3D Figure";
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '75vh';
+            img.style.height = 'auto';
+            img.style.display = 'block';
+            img.style.borderRadius = '8px';
+            
+            img.onload = () => {
+                containerEl.scrollTop = containerEl.scrollHeight;
+            };
+            img.onerror = () => {
+                if (!b64Data) appendOutput(`[Error rendering 3D figure ${plotId}]`, 'stderr');
+            };
+            
+            container.appendChild(img);
+
+            outputEl.appendChild(container);
+            containerEl.scrollTop = containerEl.scrollHeight;
+        }
+
+        // --- 3D Plots: Interactive rendering with Plotly.js ---
+
+        function appendPlot3DInteractive(data3d, b64Fallback = null, plotId = '') {
+            const container = document.createElement('div');
+            container.className = 'plot-container-3d-interactive';
+
+            const plotDiv = document.createElement('div');
+            // plotDiv.className = 'plot-3d-canvas';
+            container.appendChild(plotDiv);
+
+            try {
+                let trace;
+
+                if (data3d.type === 'surface') {
+                    trace = {
+                        type: 'surface',
+                        x: data3d.x,
+                        y: data3d.y,
+                        z: data3d.z,
+                        colorscale: 'Viridis',
+                    };
+                } else if (data3d.type === 'wireframe') {
+                    trace = {
+                        type: 'surface',
+                        x: data3d.x,
+                        y: data3d.y,
+                        z: data3d.z,
+                        colorscale: [[0, '#4fc3f7'], [1, '#4fc3f7']],
+                        showscale: false,
+                        opacity: 0.9,
+                    };
+                } else if (data3d.type === 'scatter3d') {
+                    trace = {
+                        type: 'scatter3d',
+                        x: data3d.x,
+                        y: data3d.y,
+                        z: data3d.z,
+                        mode: 'lines',
+                        line: { color: '#4fc3f7', width: 4 }
+                    };
+                } else {
+                    throw new Error('Unknown 3D plot type: ' + data3d.type);
+                }
+
+                const layout = {
+                    paper_bgcolor: '#121212',
+                    plot_bgcolor: '#121212',
+                    scene: {
+                        bgcolor: '#0a0a0a',
+                        xaxis: { gridcolor: '#333', backgroundcolor: '#0a0a0a', color: '#e0e0e0' },
+                        yaxis: { gridcolor: '#333', backgroundcolor: '#0a0a0a', color: '#e0e0e0' },
+                        zaxis: { gridcolor: '#333', backgroundcolor: '#0a0a0a', color: '#e0e0e0' },
+                    },
+                    margin: { l: 0, r: 0, t: 0, b: 0 },
+                    font: { color: '#e0e0e0' }
+                };
+
+                Plotly.newPlot(plotDiv, [trace], layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['sendDataToCloud']
+                });
+
+            } catch (err) {
+                console.error('Error rendering 3D plot:', err);
+                if (b64Fallback) {
+                    plotDiv.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.src = b64Fallback;
+                    img.alt = "3D Plot (fallback)";
+                    img.style.width = '100%';
+                    img.style.borderRadius = '6px';
+                    plotDiv.appendChild(img);
+                } else {
+                    plotDiv.innerHTML = '<div style="color: #ff5252; padding: 20px;">Error rendering 3D plot</div>';
+                }
+            }
+
+            outputEl.appendChild(container);
+            containerEl.scrollTop = containerEl.scrollHeight;
+        }
+
+        // --- Helpers ---
+
+        function setExecuting(state) {
+            isExecuting = state;
+            inputEl.disabled = state;
+            spinnerEl.style.display = state ? 'block' : 'none';
+            if (!state) {
+                inputEl.focus();
+                inputEl.placeholder = "Enter UniLab code...";
+            }
+        }
+
+        function appendHTML(html, className = '') {
+            const div = document.createElement('div');
+            div.className = 'line ' + className;
+            div.innerHTML = html;
+            outputEl.appendChild(div);
+            containerEl.scrollTop = containerEl.scrollHeight;
+        }
+
+        function appendOutput(text, className = '') {
+            if (!text) return;
+            
+            if (text.includes('::CLEAR_TERMINAL::')) {
+                outputEl.innerHTML = '';
+                return;
+            }
+
+            // High-quality rendering: prioritize images over ASCII approximations
+            // The backend already returns plots in result.plots.
+            // We just need to parse the ANSI for standard text.
+            try {
+                const html = ansiUp.ansi_to_html(text);
+                appendHTML(html, className);
+            } catch (e) {
+                appendHTML(text.replace(/</g, '&lt;'), className);
+            }
+        }
+
+        function appendPlot(session_id, plotId, b64Data = null, data3d = null) {
+            // Check if this is a 3D plot by examining the data or filename
+            // Priority 1: Check for explicit "3d_" marker in filename (from backend)
+            const is3DPlot = plotId.includes('3d_') ||
+                             plotId.includes('3d') ||
+                             plotId.includes('surf') ||
+                             plotId.includes('mesh') ||
+                             plotId.includes('scatter3') ||
+                             (b64Data && b64Data.includes('3D'));
+
+            if (is3DPlot && data3d) {
+                // Render 3D plot interactively with Plotly.js
+                appendPlot3DInteractive(data3d, b64Data, plotId);
+                return;
+            } else if (is3DPlot) {
+                // Fallback: Render 3D plot as static image
+                appendPlot3D(session_id, plotId, b64Data);
+                return;
+            }
+
+            // Standard 2D image rendering
+            const container = document.createElement('div');
+            container.className = 'plot-container';
+            const img = document.createElement('img');
+
+            if (b64Data) {
+                img.src = b64Data;
+                console.log("Rendering plot from embedded base64 data");
+            } else {
+                const cleanPlotId = plotId.split('/').pop();
+                img.src = `/api/v1/sessions/${session_id}/files/${cleanPlotId}/download`;
+            }
+
+            img.alt = "UniLab Pro Graphical Figure";
+
+            img.onload = () => {
+                containerEl.scrollTop = containerEl.scrollHeight;
+            };
+            img.onerror = () => {
+                if (!b64Data) appendOutput(`[Error rendering figure ${plotId}]`, 'stderr');
+            };
+
+            container.appendChild(img);
+            outputEl.appendChild(container);
+            containerEl.scrollTop = containerEl.scrollHeight;
+        }
+
+        async function fetchCompletions(prefix) {
+            if (!sessionId) return [];
+            try {
+                const url = `/api/v1/sessions/${sessionId}/complete?text=${encodeURIComponent(prefix)}&line=${encodeURIComponent(inputEl.value)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.suggestions || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function showSuggestions(suggestions) {
+            currentSuggestions = suggestions;
+            selectedSuggestionIdx = -1;
+            suggestionsEl.innerHTML = '';
+            
+            if (suggestions.length === 0) {
+                suggestionsEl.style.display = 'none';
+                return;
+            }
+
+            suggestions.forEach((s, i) => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.textContent = s;
+                item.onclick = () => applySuggestion(s);
+                suggestionsEl.appendChild(item);
+            });
+
+            suggestionsEl.style.display = 'block';
+            
+            // Adjust position based on input
+            const rect = inputEl.getBoundingClientRect();
+            suggestionsEl.style.left = (rect.left + 30) + 'px';
+            suggestionsEl.style.bottom = (window.innerHeight - rect.top + 10) + 'px';
+        }
+
+        function updateSuggestionHighlight() {
+            const items = suggestionsEl.querySelectorAll('.suggestion-item');
+            items.forEach((item, i) => {
+                if (i === selectedSuggestionIdx) {
+                    item.classList.add('active');
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        function applySuggestion(s) {
+            const words = inputEl.value.split(/[\s,;()]/);
+            const lastWord = words[words.length - 1];
+            inputEl.value = inputEl.value.substring(0, inputEl.value.length - lastWord.length) + s;
+            suggestionsEl.style.display = 'none';
+            inputEl.focus();
+        }
+
+        async function initSession() {
+            initAnsi();
+            try {
+                const response = await fetch('/api/v1/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'pro_user', engine: 'transpiler' })
+                });
+                
+                if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+                
+                const data = await response.json();
+                sessionId = data.session_id;
+                
+                outputEl.innerHTML = ''; 
+                statusDot.classList.add('online');
+                sessionInfoEl.textContent = `Session: ${sessionId.substring(0,8)}`;
+                
+                appendOutput('🧪 UniLab Pro Environment Ready', 'success');
+                appendOutput('Starting from sample folder. Type "ls" to browse examples.', 'system-msg');
+                appendOutput('Use TAB for autocomplete.', 'system-msg');
+                setExecuting(false);
+            } catch (err) {
+                appendOutput('CRITICAL: Connection to UniLab Pro kernel failed.', 'stderr');
+                appendOutput('Error: ' + err.message, 'stderr');
+                inputEl.disabled = true;
+                inputEl.placeholder = "Offline";
+            }
+        }
+
+        async function executeCommand(command) {
+            if (!sessionId) return;
+            suggestionsEl.style.display = 'none';
+            setExecuting(true);
+            appendOutput(command, 'input-line');
+            
+            try {
+                const response = await fetch(`/api/v1/sessions/${sessionId}/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: command, timeout: 60.0 })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    appendOutput(`API Error ${response.status}: ${error.detail || response.statusText}`, 'stderr');
+                    return;
+                }
+
+                const result = await response.json();
+                
+                // Process output
+                let out = result.stdout || "";
+                
+                // Hide the ASCII plot marker text if images were generated
+                if ((result.plots && result.plots.length > 0) || (result.extra && result.extra.plot_data_b64)) {
+                    out = out.replace(/\[ Pastel Colored Plot \]/g, '');
+                    appendOutput(out, 'stdout');
+                    
+                    // Priority 1: Base64 data from execution result (Fastest, bypasses 500 errors)
+                    if (result.extra && result.extra.plot_data_b64 && result.extra.plot_data_b64.length > 0) {
+                        // If backend provided filenames in result.plots, use them to preserve 3D markers
+                        if (result.plots && result.plots.length > 0) {
+                            for (let i = 0; i < result.extra.plot_data_b64.length; i++) {
+                                const data = result.extra.plot_data_b64[i];
+                                const pid = result.plots[i] || `embedded_${i}`;
+                                const data3d = (result.extra.plot_3d_data || [])[i] || null;
+                                appendPlot(sessionId, pid, data, data3d);
+                            }
+                        } else {
+                            result.extra.plot_data_b64.forEach((data, i) => {
+                                const data3d = (result.extra.plot_3d_data || [])[i] || null;
+                                appendPlot(sessionId, `embedded_${i}`, data, data3d);
+                            });
+                        }
+                    }
+                    // Priority 2: Traditional download (Fallback)
+                    else if (result.plots && result.plots.length > 0) {
+                        result.plots.forEach(plotId => appendPlot(sessionId, plotId));
+                    }
+                } else {
+                    if (out) appendOutput(out, 'stdout');
+                }
+                
+                if (result.stderr) appendOutput(result.stderr, 'stderr');
+
+            } catch (err) {
+                appendOutput('Network communication error.', 'stderr');
+            } finally {
+                setExecuting(false);
+            }
+        }
+
+        // --- Event Listeners ---
+
+        inputEl.addEventListener('keydown', async (e) => {
+            if (isExecuting) return;
+
+            if (e.key === 'Enter') {
+                if (suggestionsEl.style.display === 'block' && selectedSuggestionIdx !== -1) {
+                    applySuggestion(currentSuggestions[selectedSuggestionIdx]);
+                    e.preventDefault();
+                    return;
+                }
+                const command = inputEl.value.trim();
+                if (command) {
+                    inputEl.value = '';
+                    history.push(command);
+                    historyIndex = history.length;
+                    await executeCommand(command);
+                }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                if (suggestionsEl.style.display === 'block' && currentSuggestions.length > 0) {
+                    selectedSuggestionIdx = (selectedSuggestionIdx + 1) % currentSuggestions.length;
+                    updateSuggestionHighlight();
+                    return;
+                }
+                const words = inputEl.value.split(/[\s,;()]/);
+                const lastWord = words[words.length - 1];
+                if (lastWord.length >= 1) {
+                    const suggestions = await fetchCompletions(lastWord);
+                    if (suggestions.length === 1) {
+                        applySuggestion(suggestions[0]);
+                    } else if (suggestions.length > 1) {
+                        showSuggestions(suggestions);
+                        selectedSuggestionIdx = 0;
+                        updateSuggestionHighlight();
+                    }
+                }
+            } else if (e.key === 'ArrowUp') {
+                if (suggestionsEl.style.display === 'block' && currentSuggestions.length > 0) {
+                    selectedSuggestionIdx = (selectedSuggestionIdx - 1 + currentSuggestions.length) % currentSuggestions.length;
+                    updateSuggestionHighlight();
+                    e.preventDefault();
+                } else if (historyIndex > 0) {
+                    historyIndex--;
+                    inputEl.value = history[historyIndex];
+                    setTimeout(() => inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
+                    e.preventDefault();
+                }
+            } else if (e.key === 'ArrowDown') {
+                if (suggestionsEl.style.display === 'block' && currentSuggestions.length > 0) {
+                    selectedSuggestionIdx = (selectedSuggestionIdx + 1) % currentSuggestions.length;
+                    updateSuggestionHighlight();
+                    e.preventDefault();
+                } else if (historyIndex < history.length - 1) {
+                    historyIndex++;
+                    inputEl.value = history[historyIndex];
+                    e.preventDefault();
+                } else if (historyIndex === history.length - 1) {
+                    historyIndex = history.length;
+                    inputEl.value = '';
+                    e.preventDefault();
+                }
+            } else if (e.key === 'Escape') {
+                suggestionsEl.style.display = 'none';
+            } else {
+                // Hide suggestions on other key presses that might change the input
+                if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
+                    suggestionsEl.style.display = 'none';
+                }
+            }
+        });
+
+        // Start
+        initSession();
+    </script>
+</body>
+</html>

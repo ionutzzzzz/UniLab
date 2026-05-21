@@ -53,7 +53,7 @@ BUILTINS = [
     'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 
     'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 
     'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
-    'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 
+    'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'sum', 'prod', 'syms', 'factorial', 
     'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j',
     'realmax', 'realmin'
 ]
