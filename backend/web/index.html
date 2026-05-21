@@ -553,6 +553,9 @@
                 return;
             }
 
+            // Transform literal \n escape sequences into actual newlines
+            text = text.replace(/\\n/g, '\n');
+
             // High-quality rendering: prioritize images over ASCII approximations
             // The backend already returns plots in result.plots.
             // We just need to parse the ANSI for standard text.

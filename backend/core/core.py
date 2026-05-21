@@ -220,7 +220,7 @@ class UniLabToPython(Transformer):
     def var(self, items):
         name = str(items[0])
         name = self._escape_name(name)
-        if name in ("nargin", "ans", "pi", "inf", "Inf", "nan", "NaN", "eps", "i", "j", "realmax", "realmin", "true", "false"): 
+        if name in ("nargin", "nargout", "varargin", "varargout", "ans", "pi", "inf", "Inf", "nan", "NaN", "eps", "i", "j", "realmax", "realmin", "true", "false", "error", "clc", "whos", "fprintf"): 
             return name
         
         self.variables.add(name)
@@ -530,12 +530,39 @@ class UniLabToPython(Transformer):
         if isinstance(params, str): params = []
         block = items[-2]
         raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
-        param_list_with_defaults = [f"{p}=None" for p in raw_params]
-        lines = [f"def {name}({', '.join(param_list_with_defaults)}):"]
-        inner = [f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params)}] if x is not None)"]
+        
+        has_varargin = "varargin" in raw_params
+        if has_varargin:
+            idx = raw_params.index("varargin")
+            py_params = raw_params[:idx]
+            py_params.append("*varargin_args")
+        else:
+            py_params = [f"{p}=None" for p in raw_params]
+
+        lines = [f"def {name}({', '.join(py_params)}):"]
+        
+        inner = [
+            f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params if not has_varargin else raw_params[:idx])}] if x is not None)" if not has_varargin else f"nargin = {len(raw_params)-1} + len(varargin_args)",
+            f"nargout = unilab_get_nargout()"
+        ]
+        if has_varargin:
+            inner.append(f"varargin = unilab_cell_concat([list(varargin_args)])")
+
         inner.extend(block)
+        has_varargout = False
+        if isinstance(ret, list) and "varargout" in ret:
+            has_varargout = True
+        elif isinstance(ret, str) and ret == "varargout":
+            has_varargout = True
+
         if ret:
-            if isinstance(ret, list): inner.append(f"return ({', '.join(ret)})")
+            if has_varargout:
+                # If varargout is the only return or part of it
+                if isinstance(ret, list):
+                    inner.append(f"return unilab_process_varargout(({', '.join(ret)}))")
+                else:
+                    inner.append(f"return unilab_process_varargout(varargout)")
+            elif isinstance(ret, list): inner.append(f"return ({', '.join(ret)})")
             elif isinstance(ret, dict) and ret.get("type") == "assignment":
                 # Handle 'y = ' from function_ret
                 ret_name = ret["lhs"]

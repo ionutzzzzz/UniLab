@@ -1,0 +1,5 @@
+function v = vis_viva_equation(mu, r, a)
+    % VIS_VIVA_EQUATION Orbital speed at distance r
+    % v^2 = mu * (2/r - 1/a)
+    v = sqrt(mu * (2/r - 1/a));
+end

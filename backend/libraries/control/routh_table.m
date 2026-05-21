@@ -40,7 +40,12 @@ function RT = routh_table(coeff)
 
     first_col = RT(:,1);
     first_col_clean = first_col(abs(first_col) > 1e-10);
-    sign_changes = sum(diff(sign(first_col_clean)) ~= 0);
+    fprintf('DEBUG: first_col_clean = ');
+    disp(first_col_clean);
+    temp_diff = diff(sign(first_col_clean)) ~= 0;
+    sign_changes = sum(temp_diff);
+    fprintf('DEBUG: sign_changes = ');
+    disp(sign_changes);
 
     if sign_changes == 0
         fprintf('The system is Stable (0 sign changes).\n');

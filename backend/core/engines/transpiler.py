@@ -41,10 +41,10 @@ class AutoloadDict(dict):
                             code = m_file.read_text(encoding="utf-8")
                             # We use a synchronous version of transpile here
                             python_code, _, _ = self.engine.transpiler.transpile(code)
-                            # Execute in this dict
-                            exec(python_code, self)
-                            if key in self:
-                                return super().__getitem__(key)
+                            # Execute in the engine's globals to ensure all builtins/constants are available
+                            exec(python_code, self.engine.globals)
+                            if key in self.engine.globals:
+                                return self.engine.globals[key]
                         except Exception as e:
                             print(f"Autoloader error for {key}: {e}")
             finally:
@@ -424,8 +424,8 @@ class TranspilerEngine(BaseEngine):
 
                 return ExecutionResult(
                     success=success,
-                    stdout="\n".join(l for l in stdout_lines if l or l == ""),
-                    stderr=err.getvalue(),
+                    stdout="\n".join(l for l in stdout_lines if l or l == "").replace("\\n", "\n"),
+                    stderr=err.getvalue().replace("\\n", "\n"),
                     return_code=0 if success else 1,
                     duration_s=duration,
                     variables_snapshot=self._get_variables(),
@@ -486,7 +486,7 @@ class TranspilerEngine(BaseEngine):
         
         # Keywords and Builtins from UniLab.py logic
         KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
-        BUILTINS = ['disp', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 'fill', 'xlim', 'ylim']
+        BUILTINS = ['disp', 'error', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 'fill', 'xlim', 'ylim']
         
         # Context-aware triggers for path completion
         path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ', 'cat ')

@@ -703,6 +703,11 @@ def unilab_call(obj, *args, **kwargs):
             if isinstance(idx, np.ndarray) and idx.dtype == bool:
                 res = obj[idx.flatten() if obj.ndim == 1 else idx]
                 if res.size == 1: return res.item()
+                if res.ndim == 1:
+                    if obj.ndim == 2 and obj.shape[1] == 1:
+                        return res.reshape(-1, 1)
+                    if obj.ndim == 2 and obj.shape[0] == 1:
+                        return res.reshape(1, -1)
                 return res
             
             if isinstance(idx, UnilabEnd):
@@ -1192,6 +1197,61 @@ def unilab_nargin_sum(gen):
     import builtins
     return builtins.sum(gen)
 
+def unilab_get_nargout():
+    """
+    Dynamically determines the number of expected output arguments.
+    Inspects the calling frame to see if it's an assignment like [a, b] = func().
+    """
+    import inspect
+    import re
+    
+    # We need to go back at least 2 frames: 
+    # frame 0: unilab_get_nargout
+    # frame 1: the function calling unilab_get_nargout (e.g., deal)
+    # frame 2: the user code calling the function
+    frame = inspect.currentframe().f_back.f_back
+    if not frame:
+        return 1
+        
+    # Get the line of code that made the call
+    try:
+        call_line = inspect.getframeinfo(frame).code_context[0].strip()
+        
+        # Match [a, b, ...] = func(...)
+        multi_match = re.match(r'^\[([^\]]+)\]\s*=', call_line)
+        if multi_match:
+            lhs = multi_match.group(1)
+            # Count elements separated by commas
+            return len([x for x in lhs.split(',') if x.strip()])
+            
+        # Match a = func(...)
+        single_match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=', call_line)
+        if single_match:
+            return 1
+    except:
+        pass
+        
+    return 1
+
+def unilab_process_varargout(outputs):
+    """
+    Processes the varargout from a function.
+    If outputs is a tuple/list and the last element is the varargout cell array,
+    it unpacks it.
+    """
+    if isinstance(outputs, (list, tuple)):
+        # Check if the last element is a potential varargout (cell array/list)
+        # This is a bit simplified, but handle the case where varargout is the only return
+        if len(outputs) > 0 and isinstance(outputs[-1], (list, np.ndarray)):
+            # Unpack varargout content into the main outputs
+            res = list(outputs[:-1])
+            res.extend(list(outputs[-1]))
+            return tuple(res)
+    elif isinstance(outputs, (list, np.ndarray)):
+        # varargout was the only return
+        return tuple(outputs)
+    return outputs
+
 def unilab_cell_concat(*rows):
     if not rows: return np.empty((0, 0), dtype=object)
     try:
@@ -1239,10 +1299,17 @@ def isvector(x):
         return True
     return False
 
-def find(condition):
+def find(condition, k=None, direction='first'):
     if isinstance(condition, np.ndarray):
-        return np.where(condition)[0] + 1
-    return np.array([1]) if condition else np.array([])
+        indices = np.where(condition.flatten())[0] + 1
+        if k is not None:
+            k = int(k)
+            if direction == 'first':
+                indices = indices[:k]
+            else:
+                indices = indices[-k:]
+        return indices
+    return np.array([])
 
 def norm(x, ord=None):
     return np.linalg.norm(x, ord=ord)
@@ -1399,17 +1466,23 @@ def unilab_ilaplace(F, s=None, t=None):
     return res
 
 def fprintf(*args):
+    """
+    MATLAB-compatible fprintf function.
+    Supports file handles (1 for stdout, 2 for stderr) and standard formatting.
+    """
     if not args: return
     fmt = args[0]
-    
-    # Handle file handles (1 for stdout, 2 for stderr)
     import sys
+    
     if isinstance(fmt, (int, float)):
         handle = int(fmt)
         if len(args) < 2: return
         fmt = args[1]
         args = args[2:]
-        output = fmt % args if args else fmt
+        try:
+            output = fmt % args if args else str(fmt)
+        except:
+            output = str(fmt)
         if handle == 2:
             sys.stderr.write(output)
             sys.stderr.flush()
@@ -1418,14 +1491,20 @@ def fprintf(*args):
             sys.stdout.flush()
     else:
         args = args[1:]
-        # Use Python's % operator for MATLAB-style formatting
-        # but handle common MATLAB formatters if needed
         try:
-            output = fmt % args if args else fmt
+            output = fmt % args if args else str(fmt)
         except:
             output = str(fmt)
         sys.stdout.write(output)
         sys.stdout.flush()
+
+def clc():
+    """Clear Command Window."""
+    import os
+    if os.environ.get('UNILAB_WEB_MODE') == '1':
+        print('::CLEAR_TERMINAL::')
+    else:
+        os.system('cls' if os.name == 'nt' else 'clear')
 
 def length(x):
     if hasattr(x, '__len__'):
@@ -1669,20 +1748,6 @@ def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
 def var(x, axis=None): return np.var(x, ddof=1, axis=axis)
 def std(x, axis=None): return np.std(x, ddof=1, axis=axis)
 
-def fprintf(fmt, *args):
-    import sys
-    if not args:
-        sys.stdout.write(str(fmt))
-    else:
-        if isinstance(fmt, (int, float)):
-             fmt = args[0]
-             args = args[1:]
-        try:
-            sys.stdout.write(fmt % args)
-        except:
-            sys.stdout.write(str(fmt))
-    sys.stdout.flush()
-
 class UnilabCVPartition:
     def __init__(self, n, method='HoldOut', p=0.3):
         self.n = n
@@ -1736,19 +1801,17 @@ def toc():
     print(f"Elapsed time is {elapsed:.6f} seconds.")
     return elapsed
 
-def clc():
-    """Clear Command Window."""
-    import os
-    os.system('cls' if os.name == 'nt' else 'clear')
-
 def rand(*args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): 
-        args = [int(a) for a in args[0]]
+        args = [int(a) for a in np.asarray(args[0]).flatten()]
         return np.random.rand(*args)
     args = [int(a) for a in args]
     return np.random.rand(*args) if args else np.random.rand()
 
 def randn(*args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
+        args = [int(a) for a in np.asarray(args[0]).flatten()]
+        return np.random.randn(*args)
     args = [int(a) for a in args]
     return np.random.randn(*args) if args else np.random.randn()
 
