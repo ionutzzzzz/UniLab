@@ -802,6 +802,17 @@ def unilab_call(obj, *args, **kwargs):
         else:
             processed.append(arg)
             
+    # Handle MATLAB-style orthogonal indexing for multiple array indices
+    array_indices = [j for j, p in enumerate(processed) if isinstance(p, np.ndarray)]
+    if len(array_indices) > 1:
+        # Reshape 1D arrays to broadcast orthogonally (like np.ix_)
+        # e.g., for 2D: first array becomes column vector, second becomes row vector
+        for dim, idx_pos in enumerate(array_indices):
+            if processed[idx_pos].ndim == 1:
+                new_shape = [1] * len(processed)
+                new_shape[idx_pos] = -1
+                processed[idx_pos] = processed[idx_pos].reshape(new_shape)
+
     try:
         res = obj[tuple(processed)]
     except TypeError:
@@ -1710,13 +1721,13 @@ def sort(x, axis=None):
     return np.sort(x, axis=axis), np.argsort(x, axis=axis) + 1
 
 def unique(x): return np.unique(x)
-def inv(x): return np.linalg.inv(x)
-def det(x): return np.linalg.det(x)
+def inv(x): return np.linalg.inv(np.atleast_2d(x))
+def det(x): return np.linalg.det(np.atleast_2d(x))
 def eig(x):
-    eigenvalues, eigenvectors = np.linalg.eig(x)
+    eigenvalues, eigenvectors = np.linalg.eig(np.atleast_2d(x))
     return eigenvectors, np.diag(eigenvalues)
 def svd(x):
-    U, S, Vh = np.linalg.svd(x)
+    U, S, Vh = np.linalg.svd(np.atleast_2d(x))
     return U, np.diag(S), Vh.T
 
 def linspace(start, stop, n=100): return np.atleast_2d(np.linspace(start, stop, int(n)))
