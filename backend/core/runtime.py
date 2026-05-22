@@ -647,15 +647,24 @@ class UnilabEnd:
 unilab_end = UnilabEnd()
 
 def unilab_range(start, stop, step=1):
-    if isinstance(stop, UnilabEnd):
-        # Return a slice that unilab_call/unilab_set will handle
-        return slice(int(start) - 1, None if stop.offset == 0 else stop.offset, int(step))
-    if isinstance(start, UnilabEnd):
-        # Very rare but possible
-        return slice(None, int(stop), int(step))
-    
+    if isinstance(start, UnilabEnd) or isinstance(stop, UnilabEnd):
+        return slice(start, stop, step)
     # Standard numerical range
     return np.atleast_2d(np.arange(start, stop + step, step))
+
+
+def _unilab_resolve_idx(idx, size):
+    if isinstance(idx, UnilabEnd):
+        return size + idx.offset - 1
+    if idx is None: return None
+    return int(idx) - 1
+
+def _unilab_resolve_slice(slc, size):
+    if not isinstance(slc, slice): return slc
+    start = _unilab_resolve_idx(slc.start, size) if slc.start is not None else 0
+    stop = _unilab_resolve_idx(slc.stop, size) + 1 if slc.stop is not None else size
+    step = int(slc.step) if slc.step is not None else 1
+    return slice(start, stop, step)
 
 class UnilabHandle:
     def __init__(self, func):
@@ -668,6 +677,41 @@ class UnilabHandle:
 def unilab_handle(func):
     if isinstance(func, UnilabHandle): return func
     return UnilabHandle(func)
+
+
+def unilab_call_nargout(nargout, obj, *args, **kwargs):
+    if callable(obj):
+        if len(args) == 0 and len(kwargs) == 0 and isinstance(obj, UnilabHandle):
+            return obj
+            
+        import builtins
+        try:
+            name = getattr(obj, '__name__', None)
+            if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
+            if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
+            if name == 'min' or obj == builtins.min: return min(*args, **kwargs)
+            if name == 'max' or obj == builtins.max: return max(*args, **kwargs)
+            if name == 'sum' or obj == builtins.sum: return sum(*args, **kwargs)
+            if name == 'any' or obj == builtins.any: return any(*args, **kwargs)
+            if name == 'all' or obj == builtins.all: return all(*args, **kwargs)
+            if name == 'real' or obj == builtins.real: return real(*args, **kwargs)
+            if name == 'imag' or obj == builtins.imag: return imag(*args, **kwargs)
+        except: pass
+
+        token = _unilab_nargout_ctx.set(nargout)
+        try:
+            res = obj(*args, **kwargs)
+        finally:
+            _unilab_nargout_ctx.reset(token)
+            
+        if isinstance(res, tuple):
+            if nargout <= 1:
+                return res[0] if res else None
+            return res[:nargout]
+        return res
+    return unilab_call(obj, *args, **kwargs)
+
+_unilab_nargout_ctx = ContextVar('unilab_nargout', default=None)
 
 def unilab_call(obj, *args, **kwargs):
     if callable(obj):
@@ -717,9 +761,11 @@ def unilab_call(obj, *args, **kwargs):
             flat = obj.flatten()
             if isinstance(idx, (int, np.integer, float, np.floating)): return flat[int(idx)-1]
             if isinstance(idx, (list, np.ndarray, slice)): 
-                if isinstance(idx, slice) and idx == slice(None):
-                    return flat.reshape(-1, 1)
-                res = flat[np.asarray(idx).astype(int) - 1] if not isinstance(idx, slice) else flat[idx]
+                if isinstance(idx, slice):
+                    if idx == slice(None): return flat.reshape(-1, 1)
+                    res = flat[_unilab_resolve_slice(idx, flat.size)]
+                else:
+                    res = flat[np.asarray(idx).astype(int) - 1]
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
                 if isinstance(res, np.ndarray) and res.ndim == 1: 
                     # Try to maintain orientation if original was column vector
@@ -741,6 +787,8 @@ def unilab_call(obj, *args, **kwargs):
     for i, arg in enumerate(args):
         if isinstance(arg, UnilabEnd):
             processed.append(obj.shape[i] + arg.offset - 1)
+        elif isinstance(arg, slice):
+            processed.append(_unilab_resolve_slice(arg, obj.shape[i]))
         elif isinstance(arg, (int, np.integer, float, np.floating)):
             processed.append(int(arg)-1)
         elif isinstance(arg, (list, np.ndarray)) and not (isinstance(arg, np.ndarray) and arg.dtype == bool):
@@ -756,7 +804,13 @@ def unilab_call(obj, *args, **kwargs):
             
     try:
         res = obj[tuple(processed)]
-    except (IndexError, ValueError, TypeError):
+    except TypeError:
+        if not hasattr(obj, '__getitem__'):
+            # Scalar indexing
+            res = np.atleast_2d(obj)[tuple(processed)]
+        else:
+            raise
+    except (IndexError, ValueError):
         # Handle indexing into empty arrays gracefully if possible
         if isinstance(obj, np.ndarray) and obj.size == 0:
             return np.array([])
@@ -1048,35 +1102,61 @@ def unilab_set(obj, val, *args):
                 idx_adj = len(obj.flatten()) + idx.offset - 1
             elif isinstance(idx, (list, np.ndarray)):
                 idx_adj = np.asarray(idx).astype(int) - 1
+            elif isinstance(idx, slice):
+                idx_adj = _unilab_resolve_slice(idx, obj.size)
             else:
                 idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
             
         if isinstance(obj, np.ndarray):
-            if obj.ndim == 1: 
-                obj[idx_adj] = val
-            elif obj.ndim == 2:
-                if obj.shape[0] == 1: obj[0, idx_adj] = val
-                elif obj.shape[1] == 1: 
-                    # If idx_adj is a flattened boolean mask, it must be used correctly
-                    if isinstance(idx_adj, np.ndarray) and idx_adj.dtype == bool:
-                        obj[idx_adj.reshape(obj.shape[0], obj.shape[1])] = val
-                    else:
-                        obj[idx_adj, 0] = val
-                else: 
-                    if isinstance(idx_adj, np.ndarray) and idx_adj.dtype == bool:
-                        obj[idx_adj.reshape(obj.shape)] = val
-                    else:
-                        if isinstance(idx_adj, (list, np.ndarray, slice)):
-                            obj.flat[idx_adj] = val
+            v = val
+            if isinstance(val, np.ndarray) and val.size == 1:
+                v = val.item()
+                
+            # Handle automatic array expansion
+            try:
+                max_idx = np.max(idx_adj) if isinstance(idx_adj, (list, np.ndarray)) else (idx_adj.stop if isinstance(idx_adj, slice) and idx_adj.stop else idx_adj)
+                if max_idx is not None and max_idx >= obj.size:
+                    # Need to pad
+                    pad_len = max_idx - obj.size + 1
+                    # Pad along the longest dimension to maintain row/col vector shape
+                    if obj.ndim == 2:
+                        if obj.shape[0] == 1:
+                            obj = np.pad(obj, ((0, 0), (0, pad_len)), mode='constant')
                         else:
-                            obj.flat[idx_adj] = val
+                            obj = np.pad(obj, ((0, pad_len), (0, 0)), mode='constant')
+                    else:
+                        obj = np.pad(obj, (0, pad_len), mode='constant')
+            except Exception:
+                pass # Fallback to standard assignment if max_idx extraction fails
+                
+            try:
+                obj.flat[idx_adj] = v
+            except (IndexError, ValueError):
+                if isinstance(idx_adj, (slice, list, np.ndarray)):
+                    v_arr = np.asarray(v)
+                    obj.flat[idx_adj] = v_arr.flatten() if v_arr.size > 1 else v_arr.item()
+                else:
+                    obj.flat[idx_adj] = v
             return obj
-        obj[idx_adj] = val
+        try:
+            obj[idx_adj] = val
+        except TypeError:
+            if not hasattr(obj, '__setitem__'):
+                # Scalar set
+                tmp_obj = np.atleast_2d(obj)
+                if isinstance(idx_adj, (bool, np.bool_, np.ndarray)) and (not isinstance(idx_adj, np.ndarray) or idx_adj.dtype == bool):
+                    tmp_obj[idx_adj] = val
+                else:
+                    tmp_obj.flat[idx_adj] = val
+                return tmp_obj.item() if tmp_obj.size == 1 else tmp_obj
+            raise
     elif len(args) > 1:
         processed = []
         for i, arg in enumerate(args):
             if isinstance(arg, UnilabEnd):
                 processed.append(obj.shape[i] + arg.offset - 1)
+            elif isinstance(arg, slice):
+                processed.append(_unilab_resolve_slice(arg, obj.shape[i]))
             elif isinstance(arg, (int, np.integer, float, np.floating)):
                 processed.append(int(arg)-1)
             elif isinstance(arg, (list, np.ndarray)) and not (isinstance(arg, np.ndarray) and arg.dtype == bool):
@@ -1103,6 +1183,12 @@ def unilab_set(obj, val, *args):
                     
         try:
             obj[tuple(processed)] = val
+        except TypeError:
+            if not hasattr(obj, '__setitem__'):
+                # Promote to array to handle scalar indexing
+                obj = np.atleast_2d(obj)
+                return unilab_set(obj, val, *args)
+            raise
         except ValueError:
             try:
                 # Common case: assigning a column vector to a row slice or vice versa
@@ -1197,40 +1283,10 @@ def unilab_nargin_sum(gen):
     import builtins
     return builtins.sum(gen)
 
-def unilab_get_nargout():
-    """
-    Dynamically determines the number of expected output arguments.
-    Inspects the calling frame to see if it's an assignment like [a, b] = func().
-    """
-    import inspect
-    import re
-    
-    # We need to go back at least 2 frames: 
-    # frame 0: unilab_get_nargout
-    # frame 1: the function calling unilab_get_nargout (e.g., deal)
-    # frame 2: the user code calling the function
-    frame = inspect.currentframe().f_back.f_back
-    if not frame:
-        return 1
-        
-    # Get the line of code that made the call
-    try:
-        call_line = inspect.getframeinfo(frame).code_context[0].strip()
-        
-        # Match [a, b, ...] = func(...)
-        multi_match = re.match(r'^\[([^\]]+)\]\s*=', call_line)
-        if multi_match:
-            lhs = multi_match.group(1)
-            # Count elements separated by commas
-            return len([x for x in lhs.split(',') if x.strip()])
-            
-        # Match a = func(...)
-        single_match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=', call_line)
-        if single_match:
-            return 1
-    except:
-        pass
-        
+def unilab_get_nargout(for_call=True):
+    val = _unilab_nargout_ctx.get()
+    if val is not None:
+        return val
     return 1
 
 def unilab_process_varargout(outputs):
@@ -1241,14 +1297,19 @@ def unilab_process_varargout(outputs):
     """
     if isinstance(outputs, (list, tuple)):
         # Check if the last element is a potential varargout (cell array/list)
-        # This is a bit simplified, but handle the case where varargout is the only return
-        if len(outputs) > 0 and isinstance(outputs[-1], (list, np.ndarray)):
-            # Unpack varargout content into the main outputs
-            res = list(outputs[:-1])
-            res.extend(list(outputs[-1]))
-            return tuple(res)
+        if len(outputs) > 0:
+            last = outputs[-1]
+            if isinstance(last, (list, np.ndarray)):
+                res = list(outputs[:-1])
+                if isinstance(last, np.ndarray):
+                    res.extend(last.flatten().tolist())
+                else:
+                    res.extend(last)
+                return tuple(res)
     elif isinstance(outputs, (list, np.ndarray)):
         # varargout was the only return
+        if isinstance(outputs, np.ndarray):
+            return tuple(outputs.flatten().tolist())
         return tuple(outputs)
     return outputs
 
@@ -1525,7 +1586,11 @@ def size(x, dim=None):
     elif len(s) == 1: s = (1, s[0])
     
     if dim is not None: return s[dim-1] if dim <= len(s) else 1
-    return s
+    
+    n = unilab_get_nargout()
+    if n > 1:
+        return tuple(s)
+    return np.array([s]) if isinstance(s, tuple) else s
 
 def numel(x):
     if isinstance(x, np.ndarray): return x.size
@@ -1592,17 +1657,57 @@ def mean(x, axis=None):
 
 
 def min(*args, axis=None):
-    if len(args) == 1: return np.min(args[0], axis=axis)
+    if len(args) == 1:
+        x_arr = np.asarray(args[0])
+        if axis is None:
+            if x_arr.ndim <= 1: axis = 0
+            else:
+                axis = 0
+                for i, d in enumerate(x_arr.shape):
+                    if d > 1: axis = i; break
+        
+        n = unilab_get_nargout()
+        if n <= 1:
+            res = np.min(x_arr, axis=axis)
+            if x_arr.ndim == 2 and axis == 0: return res.reshape(1, -1)
+            return res
+        res = np.min(x_arr, axis=axis)
+        idx = np.argmin(x_arr, axis=axis) + 1
+        if x_arr.ndim == 2 and axis == 0:
+            return res.reshape(1, -1), idx.reshape(1, -1)
+        return res, idx
     return np.minimum(*args)
+
 def max(*args, axis=None):
-    if len(args) == 1: return np.max(args[0], axis=axis)
+    if len(args) == 1:
+        x_arr = np.asarray(args[0])
+        if axis is None:
+            if x_arr.ndim <= 1: axis = 0
+            else:
+                axis = 0
+                for i, d in enumerate(x_arr.shape):
+                    if d > 1: axis = i; break
+        
+        n = unilab_get_nargout()
+        if n <= 1:
+            res = np.max(x_arr, axis=axis)
+            if x_arr.ndim == 2 and axis == 0: return res.reshape(1, -1)
+            return res
+        res = np.max(x_arr, axis=axis)
+        idx = np.argmax(x_arr, axis=axis) + 1
+        if x_arr.ndim == 2 and axis == 0:
+            return res.reshape(1, -1), idx.reshape(1, -1)
+        return res, idx
     return np.maximum(*args)
 
 def sort(x, axis=None):
     if axis is None:
         if isinstance(x, np.ndarray) and x.ndim == 2: axis = 1 if x.shape[0] == 1 else 0
         else: axis = 0
-    return np.sort(x, axis=axis)
+    n = unilab_get_nargout()
+    if n <= 1:
+        return np.sort(x, axis=axis)
+    return np.sort(x, axis=axis), np.argsort(x, axis=axis) + 1
 
 def unique(x): return np.unique(x)
 def inv(x): return np.linalg.inv(x)
@@ -1734,14 +1839,25 @@ def sqrt(x):
         return sympy.sqrt(x)
     return np.sqrt(x)
 
-def eye(n, m=None): return np.eye(int(n), int(m) if m is not None else int(n))
+def eye(n, m=None):
+    if isinstance(n, (list, tuple, np.ndarray)):
+        sz = np.asarray(n).flatten()
+        if len(sz) >= 2:
+            return np.eye(int(sz[0]), int(sz[1]))
+        n = sz[0]
+    return np.eye(int(n), int(m) if m is not None else int(n))
 def zeros(*args): 
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        return np.zeros(tuple(int(i) for i in args[0]))
+        shape = tuple(int(i) for i in np.asarray(args[0]).flatten())
+        return np.zeros(shape)
+    if not args: return np.zeros((1, 1))
     return np.zeros(tuple(int(i) for i in args))
+
 def ones(*args): 
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        return np.ones(tuple(int(i) for i in args[0]))
+        shape = tuple(int(i) for i in np.asarray(args[0]).flatten())
+        return np.ones(shape)
+    if not args: return np.ones((1, 1))
     return np.ones(tuple(int(i) for i in args))
 def median(x, axis=None): return np.median(x, axis=axis)
 def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
@@ -3077,3 +3193,12 @@ def struct(*args):
         if i+1 < len(args):
             res[args[i]] = args[i+1]
     return res
+
+def error(msg):
+    raise RuntimeError(str(msg))
+
+def warning(msg):
+    print(f"Warning: {msg}")
+
+def unilab_not(x): return np.logical_not(x)
+def unilab_xor(a, b): return np.logical_xor(a, b)

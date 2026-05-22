@@ -10,11 +10,19 @@ os.environ['GTK_MODULES'] = ''
 os.environ['QT_QPA_PLATFORMTHEME'] = ''
 os.environ['QT_STYLE_OVERRIDE'] = 'Fusion'
 
+# Headless environment detection
+IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
+if IS_HEADLESS:
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
 try:
     import matplotlib    # Try to be more flexible with the backend
     if 'matplotlib.backends' not in sys.modules:
         try:
-            matplotlib.use('Qt5Agg')
+            if IS_HEADLESS:
+                matplotlib.use('Agg')
+            else:
+                matplotlib.use('Qt5Agg')
         except:
             try: matplotlib.use('QtAgg')
             except: pass
@@ -1690,8 +1698,9 @@ class SimulatorEngine:
         except Exception as e: print(f"Sim Error: {e}"); import traceback; traceback.print_exc()
 
 def unilab_simulate(model, *args):
-    if os.environ.get('UNILAB_WEB_MODE') == '1':
-        print("\n\x1b[38;2;253;253;150m[ Interactive simulation window skipped in web mode ]\x1b[0m")
+    if os.environ.get('UNILAB_WEB_MODE') == '1' or IS_HEADLESS:
+        msg = "[ Interactive simulation window skipped in web mode ]" if os.environ.get('UNILAB_WEB_MODE') == '1' else "[ Interactive simulation window skipped in headless mode ]"
+        print(f"\n\x1b[38;2;253;253;150m{msg}\x1b[0m")
         return
 
     kwargs = {}

@@ -9,6 +9,16 @@ os.environ['GTK_MODULES'] = ''
 os.environ['QT_QPA_PLATFORMTHEME'] = ''
 os.environ['QT_STYLE_OVERRIDE'] = 'Fusion'
 
+# Headless environment detection
+if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    # Try to use a non-interactive matplotlib backend as well
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+    except:
+        pass
+
 import re
 import faulthandler
 faulthandler.enable()

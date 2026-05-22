@@ -11,7 +11,7 @@ function [X, y] = make_moons(n_samples, noise)
     theta_in = linspace(0, pi(), n_samples_in)';
     
     X_out = [cos(theta_out), sin(theta_out)];
-    X_in = [1 - cos(theta_in), 0.5 - sin(theta_in)];
+    X_in = [(1 - cos(theta_in)), (0.5 - sin(theta_in))];
     
     X = [X_out; X_in];
     y = [zeros(n_samples_out, 1); ones(n_samples_in, 1)];

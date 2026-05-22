@@ -8,6 +8,7 @@ import re
 import pickle
 import importlib.util
 import pathlib
+import linecache
 import numpy as np
 from typing import Any, Dict, Optional
 from contextlib import redirect_stdout, redirect_stderr
@@ -41,15 +42,27 @@ class AutoloadDict(dict):
                             code = m_file.read_text(encoding="utf-8")
                             # We use a synchronous version of transpile here
                             python_code, _, _ = self.engine.transpiler.transpile(code)
+
+                            # Register in linecache to support inspect/nargout
+                            filename = str(m_file)
+                            linecache.cache[filename] = (
+                                len(python_code),
+                                None,
+                                [line + '\n' for line in python_code.splitlines()],
+                                filename
+                            )
+
                             # Execute in the engine's globals to ensure all builtins/constants are available
-                            exec(python_code, self.engine.globals)
+                            exec(compile(python_code, filename, 'exec'), self.engine.globals)
                             if key in self.engine.globals:
                                 return self.engine.globals[key]
                         except Exception as e:
                             print(f"Autoloader error for {key}: {e}")
             finally:
                 self._loading.remove(key)
+
         return super().__getitem__(key)
+
 
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
@@ -324,9 +337,19 @@ class TranspilerEngine(BaseEngine):
                 
                 success = True
                 try:
+                    # Register in linecache to support inspect/nargout
+                    # Use a descriptive pseudo-filename if real one not available
+                    filename = os.environ.get('UNILAB_CURRENT_SCRIPT', '<unilab_script>')
+                    linecache.cache[filename] = (
+                        len(python_code),
+                        None,
+                        [line + '\n' for line in python_code.splitlines()],
+                        filename
+                    )
+
                     # We use a custom globals dict to persist state between runs in the same session
                     with redirect_stdout(out), redirect_stderr(err):
-                        exec(python_code, self.globals)
+                        exec(compile(python_code, filename, 'exec'), self.globals)
                     
                     # If code changed directory, update persistent CWD
                     self.cwd = pathlib.Path(os.getcwd()).resolve()

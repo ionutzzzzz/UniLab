@@ -36,7 +36,7 @@ UniLab_GRAMMAR = r"""
     ?assignment: multi_assignment | single_assignment
     multi_assignment.10: lhs_list EQUAL expression
     single_assignment: postfix_expr EQUAL expression
-    lhs_list: LBRACKET (IDENTIFIER (COMMA? IDENTIFIER)*)? RBRACKET
+    lhs_list: LBRACKET ( (IDENTIFIER | UNARY_OP) (COMMA? (IDENTIFIER | UNARY_OP))* )? RBRACKET
     
     if_stmt: IF expression separator+ block (ELSEIF expression separator+ block)* [ELSE separator* block] END
     for_stmt: FOR IDENTIFIER EQUAL expression separator+ block END
@@ -49,7 +49,7 @@ UniLab_GRAMMAR = r"""
     
     function_def: FUNCTION [function_ret] IDENTIFIER LPAR [func_params] RPAR block END
     function_ret: (IDENTIFIER | lhs_list) EQUAL
-    func_params: IDENTIFIER (COMMA? IDENTIFIER)*
+    func_params: (IDENTIFIER | UNARY_OP) (COMMA? (IDENTIFIER | UNARY_OP))*
     
     block: separator* (stmt_sep separator*)* [stmt_no_sep]
     
@@ -85,7 +85,7 @@ UniLab_GRAMMAR = r"""
                  | postfix_expr QUOTE -> transpose
                  | postfix_expr DOT IDENTIFIER -> attr_access
 
-    function_call.10: postfix_expr LPAR call_args? RPAR
+    function_call.200: postfix_expr LPAR call_args? RPAR
     cell_indexing.10: postfix_expr LBRACE call_args? RBRACE
 
     ?atom: NUMBER                    -> number
@@ -342,6 +342,8 @@ class UniLabToPython(Transformer):
 
     def multi_assignment(self, items):
         lhs, expr = items[0], items[2]
+        if isinstance(expr, str) and expr.startswith("unilab_call("):
+            expr = expr.replace("unilab_call(", f"unilab_call_nargout({len(lhs)}, ", 1)
         # items[0] is from lhs_list, which returns a list of strings
         stmt = f"({', '.join(lhs)}) = {expr}"
         return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
@@ -357,9 +359,14 @@ class UniLabToPython(Transformer):
                   # Check if there are any non-identifiers
                   is_pure_ids = all(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", m) for m in matches)
                   if is_pure_ids:
+                      if isinstance(expr, str) and expr.startswith("unilab_call("):
+                          expr = expr.replace("unilab_call(", f"unilab_call_nargout({len(matches)}, ", 1)
                       stmt = f"({', '.join(matches)}) = {expr}"
                       for n in matches: self.variables.add(n)
-                      return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(matches)}]", "is_multi": True, "names": matches}
+                      return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(matches)}]", "is_multi": True, "names": matches, "nargout": len(matches)}
+
+        if isinstance(expr, str) and expr.startswith("unilab_call("):
+            expr = expr.replace("unilab_call(", "unilab_call_nargout(1, ", 1)
 
         # items[0] is from postfix_expr, which returns a string
         if isinstance(lhs, str) and lhs.startswith('unilab_call(') and lhs.endswith(')') and ',' not in lhs:
@@ -370,21 +377,24 @@ class UniLabToPython(Transformer):
                 match = re.match(r"unilab_call\(([^,]+)(?:,\s*(.*))?\)", str(lhs))
                 if match:
                     obj, args = match.group(1), match.group(2)
-                    stmt = f"unilab_set({obj}, {expr}{', ' + args if args else ''})"
+                    stmt = f"{obj} = unilab_set({obj}, {expr}{', ' + args if args else ''})"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
             
             if "unilab_get" in str(lhs):
                 match = re.match(r"unilab_get\(([^,]+),\s*([^)]+)\)", str(lhs))
                 if match:
                     obj, attr = match.group(1), match.group(2)
-                    stmt = f"unilab_set({obj}, {expr}, {attr})"
+                    stmt = f"{obj} = unilab_set({obj}, {expr}, {attr})"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
 
         self.variables.add(str(lhs))
         return {"type": "assignment", "stmt": f"{lhs} = {expr}", "lhs": str(lhs), "is_multi": False}
 
     def expr_stmt(self, items):
-        return {"type": "expr", "expr": items[0]}
+        expr = items[0]
+        if isinstance(expr, str) and expr.startswith("unilab_call("):
+            expr = expr.replace("unilab_call(", "unilab_call_nargout(0, ", 1)
+        return {"type": "expr", "expr": expr}
 
     def stmt_sep(self, items):
         return self._process_stmt(items[0], str(items[1]) == ";")
@@ -420,7 +430,18 @@ class UniLabToPython(Transformer):
         return s
 
     def lhs_list(self, items):
-        names = [self._escape_name(str(i)) for i in items if str(i) not in ["[", "]", ","]]
+        names = []
+        _ignored_counter = 0
+        for i in items:
+            s = str(i)
+            if s in ("[", "]", ","): continue
+            if s == "~":
+                _ignored_counter += 1
+                import uuid
+                ignored_name = f"_ignored_{uuid.uuid4().hex[:4]}_{_ignored_counter}"
+                names.append(ignored_name)
+            else:
+                names.append(self._escape_name(s))
         for n in names: self.variables.add(n)
         return names
 
@@ -531,6 +552,18 @@ class UniLabToPython(Transformer):
         block = items[-2]
         raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
         
+        # Handle tilde (~) in parameters by converting to dummy names
+        processed_params = []
+        _ignored_counter = 0
+        import uuid
+        for p in raw_params:
+            if p == "~":
+                _ignored_counter += 1
+                processed_params.append(f"_ignored_param_{uuid.uuid4().hex[:4]}_{_ignored_counter}")
+            else:
+                processed_params.append(p)
+        raw_params = processed_params
+
         has_varargin = "varargin" in raw_params
         if has_varargin:
             idx = raw_params.index("varargin")
@@ -549,31 +582,49 @@ class UniLabToPython(Transformer):
             inner.append(f"varargin = unilab_cell_concat([list(varargin_args)])")
 
         inner.extend(block)
+        
         has_varargout = False
         if isinstance(ret, list) and "varargout" in ret:
             has_varargout = True
         elif isinstance(ret, str) and ret == "varargout":
             has_varargout = True
 
+        # Determine the return statement for this function
+        ret_stmt = "return None"
         if ret:
             if has_varargout:
-                # If varargout is the only return or part of it
                 if isinstance(ret, list):
-                    inner.append(f"return unilab_process_varargout(({', '.join(ret)}))")
+                    ret_stmt = f"return unilab_process_varargout(({', '.join(ret)}))"
                 else:
-                    inner.append(f"return unilab_process_varargout(varargout)")
-            elif isinstance(ret, list): inner.append(f"return ({', '.join(ret)})")
+                    ret_stmt = f"return unilab_process_varargout(varargout)"
+            elif isinstance(ret, list): ret_stmt = f"return ({', '.join(ret)})"
             elif isinstance(ret, dict) and ret.get("type") == "assignment":
-                # Handle 'y = ' from function_ret
-                ret_name = ret["lhs"]
-                inner.append(f"return {ret_name}")
+                ret_stmt = f"return {ret['lhs']}"
             else:
-                # If function_ret returned something else
-                inner.append(f"return {ret}")
+                ret_stmt = f"return {ret}"
+        
+        # Replace early return markers in the block while preserving indentation
+        def replace_return_marker(items, r_stmt):
+            res = []
+            for item in items:
+                if isinstance(item, list):
+                    res.append(replace_return_marker(item, r_stmt))
+                elif isinstance(item, str):
+                    if "__UNILAB_RETURN__" in item:
+                        res.append(item.replace("__UNILAB_RETURN__", r_stmt))
+                    else:
+                        res.append(item)
+                else:
+                    res.append(item)
+            return res
+            
+        inner = replace_return_marker(inner, ret_stmt)
+        if ret:
+            inner.append(ret_stmt)
+            
         lines.extend(self._indent(inner))
         return lines
-
-    def return_stmt(self, items): return "return"
+    def return_stmt(self, items): return "__UNILAB_RETURN__"
     def break_stmt(self, items): return "break"
     def continue_stmt(self, items): return "continue"
 
@@ -611,8 +662,20 @@ class UniLabToPython(Transformer):
     def anonymous_func(self, items):
         params = items[2] if len(items) > 3 else []
         expr = items[-1]
-        param_list = [str(p) for p in params if str(p) not in [",", "(", ")"]]
-        return f"unilab_handle(lambda {', '.join(param_list)}: ({expr}))"
+        raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
+        
+        # Handle tilde (~) in anonymous function parameters
+        processed_params = []
+        _ignored_counter = 0
+        import uuid
+        for p in raw_params:
+            if p == "~":
+                _ignored_counter += 1
+                processed_params.append(f"_ignored_anon_{uuid.uuid4().hex[:4]}_{_ignored_counter}")
+            else:
+                processed_params.append(p)
+        
+        return f"unilab_handle(lambda {', '.join(processed_params)}: ({expr}))"
         
     def function_handle(self, items):
         return f"unilab_handle({str(items[1])})"
