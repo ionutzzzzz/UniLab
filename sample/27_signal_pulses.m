@@ -2,6 +2,7 @@
 % Demonstrates foundational signals used in DSP and systems theory
 
 clear all;
+close all;
 clc;
 
 disp('📡 UniLab Signal Pulses');

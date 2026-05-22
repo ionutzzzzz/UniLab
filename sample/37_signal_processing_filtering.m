@@ -2,6 +2,7 @@
 % UniLab Signal Processing: FIR Filter Design & Smoothing
 
 clear all;
+close all;
 clc;
 
 disp('📡 UniLab Filter Design Studio');

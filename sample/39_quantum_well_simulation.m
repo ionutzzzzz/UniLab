@@ -2,6 +2,7 @@
 % UniLab Quantum Physics: Well States & Tunneling
 
 clear all;
+close all;
 clc;
 
 disp('⚛️ UniLab Quantum Well & Tunneling Lab');

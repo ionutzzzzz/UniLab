@@ -2,6 +2,7 @@
 % UniLab Astrophysics: Orbital Transfer & Mission Planning
 
 clear all;
+close all;
 clc;
 
 disp('🌌 UniLab Astrophysics Mission Planner');

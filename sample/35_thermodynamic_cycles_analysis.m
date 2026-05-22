@@ -2,6 +2,7 @@
 % UniLab Thermodynamics: Heat Engine Cycle Comparisons
 
 clear all;
+close all;
 clc;
 
 disp('🔥 UniLab Thermodynamic Cycle Analysis');

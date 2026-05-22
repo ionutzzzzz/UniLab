@@ -2,6 +2,7 @@
 % UniLab Machine Learning: Predictive Maintenance & Cluster Analysis
 
 clear all;
+close all;
 clc;
 
 disp('🏭 UniLab Industrial Machine Intelligence');

@@ -2,6 +2,7 @@
 % UniLab Aerospace Engineering: Orbital Mechanics & N-Body Systems
 
 clear all;
+close all;
 clc;
 
 disp('🚀 UniLab Aerospace & Orbital Mechanics');

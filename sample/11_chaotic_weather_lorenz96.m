@@ -2,6 +2,7 @@
 % UniLab Atmospheric Science: Lorenz 96 Chaotic Weather Model
 
 clear all;
+close all;
 clc;
 
 disp('🌪️ UniLab Atmospheric Science Lab');

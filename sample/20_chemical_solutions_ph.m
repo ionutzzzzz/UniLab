@@ -2,6 +2,7 @@
 % Demonstrates chemical concentrations and pH calculations
 
 clear all;
+close all;
 clc;
 
 disp('⚗️ UniLab Chemistry Solutions');

@@ -2,6 +2,7 @@
 % Demonstrates classical mechanics, kinematics, and energy conservation
 
 clear all;
+close all;
 clc;
 
 disp('⚙️ UniLab Mechanics Lab');

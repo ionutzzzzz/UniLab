@@ -2,6 +2,7 @@
 % UniLab Computational Chemistry: Reaction Kinetics & Thermodynamics
 
 clear all;
+close all;
 clc;
 
 disp('🧪 UniLab Computational Chemistry Lab');

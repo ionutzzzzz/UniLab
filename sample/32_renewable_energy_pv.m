@@ -2,6 +2,7 @@
 % UniLab Renewable Energy: Solar PV Modeling & MPPT Tracking
 
 clear all;
+close all;
 clc;
 
 disp('☀️ UniLab Renewable Energy Systems');

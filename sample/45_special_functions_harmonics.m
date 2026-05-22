@@ -2,6 +2,7 @@
 % UniLab Special Functions: Bessels, Gamma & Error Functions
 
 clear all;
+close all;
 clc;
 
 disp('💠 UniLab Special Functions Study');

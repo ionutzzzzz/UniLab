@@ -2,6 +2,7 @@
 % UniLab Machine Learning: Manifolds, Clustering & LDA
 
 clear all;
+close all;
 clc;
 
 disp('🤖 UniLab Advanced ML Laboratory');

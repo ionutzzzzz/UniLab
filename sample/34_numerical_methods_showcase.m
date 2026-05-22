@@ -2,6 +2,7 @@
 % UniLab Numerical Analysis: Root Finding & Integration Benchmark
 
 clear all;
+close all;
 clc;
 
 disp('🧮 UniLab Numerical Methods Laboratory');

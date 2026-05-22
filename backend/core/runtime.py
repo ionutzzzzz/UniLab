@@ -2066,6 +2066,21 @@ def clf():
     _unilab_update_fig_version()
     _unilab_refresh_graph()
 
+def cla():
+    """Clears the current axes."""
+    plt.cla()
+    _unilab_update_fig_version()
+    _unilab_refresh_graph()
+
+def close(*args):
+    """Closes figures. Supports 'all' or specific figure numbers."""
+    if not args:
+        plt.close()
+    elif args[0] == 'all':
+        plt.close('all')
+    else:
+        plt.close(args[0])
+
 def text(*args, **kwargs):
     args_list = list(args)
     target_ax = plt

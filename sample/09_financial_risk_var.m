@@ -2,6 +2,7 @@
 % UniLab Financial Engineering: Risk Analysis & Portfolio VaR
 
 clear all;
+close all;
 clc;
 
 disp('💰 UniLab Financial Risk Management');

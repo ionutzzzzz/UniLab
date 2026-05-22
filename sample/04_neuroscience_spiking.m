@@ -2,6 +2,7 @@
 % UniLab Neuroscience: Neuron Dynamics & Hodgkin-Huxley Model
 
 clear all;
+close all;
 clc;
 
 disp('🧠 UniLab Computational Neuroscience');

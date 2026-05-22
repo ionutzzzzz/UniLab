@@ -2,6 +2,7 @@
 % UniLab Deep Learning: Function Approximation and Theory
 
 clear all;
+close all;
 clc;
 
 disp('🧠 UniLab Deep Learning: Function Approximation');

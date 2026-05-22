@@ -2,6 +2,7 @@
 % Demonstrates statistical variance, covariance, and probability densities
 
 clear all;
+close all;
 clc;
 
 disp('📊 UniLab Statistical Distributions');

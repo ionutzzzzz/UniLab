@@ -311,6 +311,10 @@ class TranspilerEngine(BaseEngine):
                 for ap in added_paths:
                     self._add_path(ap)
                 
+                # Reload runtime to pick up any recent changes to built-in functions
+                import importlib
+                importlib.reload(runtime)
+                
                 # Re-verify critical runtime functions are in globals
                 for name in dir(runtime):
                     if not name.startswith('_'):

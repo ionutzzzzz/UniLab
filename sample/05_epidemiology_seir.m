@@ -2,6 +2,7 @@
 % UniLab Epidemiology: Disease Modeling (SEIR Model)
 
 clear all;
+close all;
 clc;
 
 disp('🦠 UniLab Epidemiology Lab');

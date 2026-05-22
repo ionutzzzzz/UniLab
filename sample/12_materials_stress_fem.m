@@ -2,6 +2,7 @@
 % UniLab Materials Science: Stress, Strain, and Finite Element Modeling
 
 clear all;
+close all;
 clc;
 
 disp('💎 UniLab Materials Science & FEA');

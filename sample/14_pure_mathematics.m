@@ -2,6 +2,7 @@
 % Demonstrates advanced mathematical functions including hyperbolic geometry and combinatorics
 
 clear all;
+close all;
 clc;
 
 disp('📐 UniLab Pure Mathematics Lab');

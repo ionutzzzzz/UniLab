@@ -2,6 +2,7 @@
 % UniLab Robotics: 2-DOF Planar Arm Kinematics & Path Planning
 
 clear all;
+close all;
 clc;
 
 disp('🤖 UniLab Robotics Laboratory');

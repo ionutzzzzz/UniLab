@@ -2,6 +2,7 @@
 % UniLab Structural Mechanics: Cantilever Beam & Matrix Stability
 
 clear all;
+close all;
 clc;
 
 disp('🏗️ UniLab Structural Mechanics Analysis');

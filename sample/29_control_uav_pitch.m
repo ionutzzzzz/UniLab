@@ -2,6 +2,7 @@
 % UniLab Control Systems: UAV Pitch Control & Stability Analysis
 
 clear all;
+close all;
 clc;
 
 disp('✈️ UniLab Aerospace Control Systems');

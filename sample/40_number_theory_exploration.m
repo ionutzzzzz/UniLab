@@ -2,6 +2,7 @@
 % UniLab Number Theory: Primes, Conjectures & Sequences
 
 clear all;
+close all;
 clc;
 
 disp('🔢 UniLab Number Theory Explorer');

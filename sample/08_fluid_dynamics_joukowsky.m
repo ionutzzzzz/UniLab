@@ -2,6 +2,7 @@
 % UniLab Fluid Dynamics: Airfoil Flow & Joukowsky Transform
 
 clear all;
+close all;
 clc;
 
 disp('🌊 UniLab Fluid Dynamics Laboratory');
