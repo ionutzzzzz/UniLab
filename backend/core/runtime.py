@@ -1554,13 +1554,19 @@ def fprintf(*args):
     fmt = args[0]
     import sys
     
+    # Process arguments to convert 1x1 numpy arrays to scalars for formatting
+    def process_arg(a):
+        if isinstance(a, np.ndarray) and a.size == 1:
+            return a.item()
+        return a
+
     if isinstance(fmt, (int, float)):
         handle = int(fmt)
         if len(args) < 2: return
         fmt = args[1]
-        args = args[2:]
+        args_to_format = tuple(process_arg(a) for a in args[2:])
         try:
-            output = fmt % args if args else str(fmt)
+            output = fmt % args_to_format if args_to_format else str(fmt)
         except:
             output = str(fmt)
         if handle == 2:
@@ -1570,9 +1576,9 @@ def fprintf(*args):
             sys.stdout.write(output)
             sys.stdout.flush()
     else:
-        args = args[1:]
+        args_to_format = tuple(process_arg(a) for a in args[1:])
         try:
-            output = fmt % args if args else str(fmt)
+            output = fmt % args_to_format if args_to_format else str(fmt)
         except:
             output = str(fmt)
         sys.stdout.write(output)

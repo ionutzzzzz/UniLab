@@ -36,5 +36,5 @@ function [W] = lda(X, y, num_components)
     [~, sort_idx] = sort(eigenvalues);
     sort_idx = sort_idx(end:-1:1); % Descending
     
-    W = V(:, sort_idx(1:num_components));
+    W = real(V(:, sort_idx(1:num_components)));
 end
