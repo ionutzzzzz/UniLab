@@ -149,7 +149,12 @@ Inf = np.inf
 nan = np.nan
 NaN = np.nan
 pi = np.pi
-eps = np.finfo(float).eps
+def eps(*args):
+    if not args: return np.finfo(float).eps
+    x = args[0]
+    if isinstance(x, (np.ndarray, list)):
+        return np.spacing(np.asarray(x, dtype=np.float64))
+    return np.spacing(float(x))
 i = 1j
 j = 1j
 realmax = np.finfo(float).max
@@ -1097,11 +1102,11 @@ def unilab_set(obj, val, *args):
         attr = args[0]
         try:
             setattr(obj, attr, val)
-            return val
+            return obj
         except:
             if isinstance(obj, dict):
                 obj[attr] = val
-                return val
+                return obj
     
     if len(args) == 1:
         idx = args[0]
@@ -1125,7 +1130,7 @@ def unilab_set(obj, val, *args):
                 
             # Handle automatic array expansion
             try:
-                max_idx = np.max(idx_adj) if isinstance(idx_adj, (list, np.ndarray)) else (idx_adj.stop if isinstance(idx_adj, slice) and idx_adj.stop else idx_adj)
+                max_idx = builtins.max(idx_adj) if isinstance(idx_adj, (list, np.ndarray)) else (idx_adj.stop if isinstance(idx_adj, slice) and idx_adj.stop else idx_adj)
                 if max_idx is not None and max_idx >= obj.size:
                     # Need to pad
                     pad_len = max_idx - obj.size + 1
@@ -1234,7 +1239,7 @@ def unilab_matrix_concat(*rows):
                     else:
                         processed.append(np.atleast_2d(r))
                 # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
-                return np.hstack(processed)
+                return np.hstack(processed).astype(np.float64)
             except:
                 # Fallback to standard array creation
                 return np.array(items, dtype=object)
@@ -1243,7 +1248,7 @@ def unilab_matrix_concat(*rows):
         if builtins.all(isinstance(r, (str, np.str_)) for r in items):
             return "".join(str(r) for r in items)
 
-        return np.atleast_2d(items)
+        return np.atleast_2d(items).astype(np.float64)
 
     try:
         # Multi-row concatenation [A; B]
@@ -1284,12 +1289,15 @@ def unilab_matrix_concat(*rows):
                 # but it fixes the [ []; 2.0 ] case.
                 processed_rows = non_empty_rows
 
-        return np.vstack(processed_rows)
+        return np.vstack(processed_rows).astype(np.float64)
     except:
         # Fallback
         if builtins.all(isinstance(r, (str, np.str_)) for r in rows):
             return "".join(str(r) for r in rows)
-        return np.array(rows, dtype=object)
+        try:
+            return np.array(rows, dtype=np.float64)
+        except:
+            return np.array(rows, dtype=object)
 def unilab_nargin_sum(gen):
     import builtins
     return builtins.sum(gen)
@@ -1416,7 +1424,7 @@ def syms(*names):
     if not names:
         return None
         
-    symbols = sympy.symbols(names)
+    symbols = builtins.getattr(sympy, 'symbols')(names)
     
     if len(names) == 1:
         # symbols will be a single symbol if names was a string, 
@@ -1430,13 +1438,13 @@ def syms(*names):
         return symbols
 
 def simplify(expr):
-    return sympy.simplify(expr)
+    return builtins.getattr(sympy, 'simplify')(expr)
 
 def expand(expr):
-    return sympy.expand(expr)
+    return builtins.getattr(sympy, 'expand')(expr)
 
 def factor(expr):
-    return sympy.factor(expr)
+    return builtins.getattr(sympy, 'factor')(expr)
 
 def solve(eq, *args, **kwargs):
     import sympy
@@ -1580,7 +1588,10 @@ def clc():
 
 def length(x):
     if hasattr(x, '__len__'):
-        if isinstance(x, np.ndarray): return int(max(np.shape(x)) if x.size > 0 else 0)
+        if isinstance(x, np.ndarray):
+            if x.size == 0: return 0
+            if x.ndim == 0: return 1
+            return int(builtins.max(np.shape(x)))
         return len(x)
     return 1
 
@@ -1614,49 +1625,25 @@ def reshape(x, *args):
     return np.reshape(x, args)
 
 def sum(x, axis=None):
-
     if axis is not None:
-
-        # MATLAB is 1-based, NumPy is 0-based
-
         if isinstance(axis, (int, float)):
-
             axis = int(axis) - 1
-
     return np.sum(x, axis=axis)
 
-
-
 def prod(x, axis=None):
-
-
-
     if axis is not None:
-
-
-
         if isinstance(axis, (int, float)):
-
-
-
             axis = int(axis) - 1
-
-
-
     return np.prod(x, axis=axis, dtype=np.float64)
-
-
 
 def mean(x, axis=None):
     x_arr = np.asarray(x)
     if axis is None:
-        # MATLAB-like behavior: mean along first non-singleton dimension
         if x_arr.ndim <= 1:
             return np.mean(x_arr)
         for i, d in enumerate(x_arr.shape):
             if d > 1:
                 res = np.mean(x_arr, axis=i)
-                # Keep orientation if it was a column vector or matrix
                 if x_arr.ndim == 2 and i == 0:
                     return res.reshape(1, -1)
                 return res
@@ -1665,7 +1652,6 @@ def mean(x, axis=None):
     if isinstance(axis, (int, float)):
         axis = int(axis) - 1
     return np.mean(x_arr, axis=axis)
-
 
 def min(*args, axis=None):
     if len(args) == 1:
@@ -1733,23 +1719,11 @@ def svd(x):
 def linspace(start, stop, n=100): return np.atleast_2d(np.linspace(start, stop, int(n)))
 def logspace(start, stop, n=50): return np.atleast_2d(np.logspace(start, stop, int(n)))
 def meshgrid(*args):
-    """
-    MATLAB-compatible meshgrid.
-    Example:
-        [X, Y] = meshgrid(x, y)
-        [X, Y, Z] = meshgrid(x, y, z)
-    """
-    if not args:
-        return []
-    
-    # Flatten vectors (1xN or Nx1) to 1D for numpy.meshgrid
+    if not args: return []
     processed_args = [_unilab_vec(arg) for arg in args]
-    
     if len(processed_args) == 1:
-        # meshgrid(x) -> meshgrid(x, x)
         x = processed_args[0]
         return np.meshgrid(x, x)
-    
     return np.meshgrid(*processed_args)
 def randperm(n): return np.random.permutation(int(n)) + 1
 def _is_symbolic(x):
@@ -1781,70 +1755,60 @@ def rem(x, y): return np.remainder(x, y)
 def sign(x): return np.sign(x)
 
 def sin(x):
-    """Sine of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.sin(x)
     return np.sin(x)
 
 def cos(x):
-    """Cosine of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.cos(x)
     return np.cos(x)
 
 def tan(x):
-    """Tangent of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.tan(x)
     return np.tan(x)
 
 def tanh(x):
-    """Hyperbolic tangent."""
     if _is_symbolic(x):
         import sympy
         return sympy.tanh(x)
     return np.tanh(x)
 
 def atan(x):
-    """Arctangent of argument in radians."""
     if _is_symbolic(x):
         import sympy
         return sympy.atan(x)
     return np.arctan(x)
 
 def atan2(y, x):
-    """Two-argument arctangent function. Returns angle in radians between -pi and pi."""
     if _is_symbolic(y) or _is_symbolic(x):
         import sympy
         return sympy.atan2(y, x)
     return np.arctan2(y, x)
 
 def relu(x):
-    """Rectified Linear Unit."""
     if _is_symbolic(x):
         import sympy
         return sympy.Max(0, x)
     return np.maximum(0, x)
 
 def exp(x):
-    """Exponential."""
     if _is_symbolic(x):
         import sympy
         return sympy.exp(x)
     return np.exp(x)
 
 def log(x):
-    """Natural logarithm."""
     if _is_symbolic(x):
         import sympy
         return sympy.log(x)
     return np.log(x)
 
 def sqrt(x):
-    """Square root."""
     if _is_symbolic(x):
         import sympy
         return sympy.sqrt(x)
@@ -1903,7 +1867,6 @@ def test(cv):
     return mask
 
 def rng(seed=None, generator=None):
-    """Control the random number generator."""
     if seed is not None:
         if isinstance(seed, (int, np.integer)):
             np.random.seed(int(seed))
@@ -1914,12 +1877,10 @@ def rng(seed=None, generator=None):
 _tic_stack = []
 
 def tic():
-    """Start a stopwatch timer."""
     import time
     _tic_stack.append(time.time())
 
 def toc():
-    """Read the stopwatch timer."""
     import time
     if not _tic_stack:
         print("Error: toc called without a preceding tic.")
@@ -1943,7 +1904,6 @@ def randn(*args):
     return np.random.randn(*args) if args else np.random.randn()
 
 def randi(imax, *args):
-    """Random integers from 1 to imax."""
     if not args:
         return np.random.randint(1, int(imax) + 1)
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
@@ -1979,7 +1939,6 @@ def sprintf(fmt, *args):
     except:
         return str(fmt)
 
-# High-impact styling with a Dark Professional Aesthetic (Module Level)
 plt.rcParams.update({
     'axes.prop_cycle': plt.cycler(color=['#4fc3f7', '#81c784', '#ffb74d', '#f06292', '#ba68c8', '#a1887f']),
     'axes.linewidth': 1.5, 
@@ -2008,12 +1967,10 @@ plt.rcParams.update({
     'figure.dpi': 120
 })
 
-# Figure versioning and plot counter for unique snapshots
 _unilab_plot_counter = 0
 _unilab_fig_versions = {}
 
 def _unilab_update_fig_version(fig_num=None):
-    """Increments the version counter for a figure, indicating a new plot instance."""
     global _unilab_fig_versions
     if fig_num is None:
         try: fig_num = plt.gcf().number
@@ -2022,15 +1979,12 @@ def _unilab_update_fig_version(fig_num=None):
     return _unilab_fig_versions[fig_num]
 
 def _unilab_refresh_graph():
-    """Triggers a graph refresh by saving to a file and printing a marker."""
     global _unilab_plot_counter
     try:
         import json
         fig = plt.gcf()
         ax = plt.gca()
         if ax is None: return
-
-        # Extract metadata for ASCII overlay (Internal use)
         meta = {
             "title": ax.get_title(),
             "xlabel": ax.get_xlabel(),
@@ -2041,30 +1995,19 @@ def _unilab_refresh_graph():
             "ymax": float(ax.get_ylim()[1]),
             "is_3d": ax.name == '3d'
         }
-        
-        # Use a truly unique counter for each plot refresh to avoid collisions
         _unilab_plot_counter += 1
         plot_id = _unilab_plot_counter
-        
-        # Determine where to save based on session isolation (Context-safe)
         ws_path = unilab_workspace_ctx.get()
         prefix = pathlib.Path(ws_path).name.split('_')[-1][:6] + "_" if ws_path else ""
-        
-        # Add "3d" marker to filename if this is a 3D plot
         plot_type_marker = "3d_" if ax.name == '3d' else ""
         filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.png"
         meta_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.json"
-        
         save_path = pathlib.Path(ws_path) / filename if ws_path else pathlib.Path(filename)
         save_meta_path = pathlib.Path(ws_path) / meta_filename if ws_path else pathlib.Path(meta_filename)
-        
         with open(str(save_meta_path), "w") as f:
             json.dump(meta, f)
-
-        # Rendering Fixes for Headless/Web
         num_axes = len(fig.axes)
         if num_axes > 1:
-            # Try to determine the grid from the axes positions
             rows, cols = 1, 1
             try:
                 for ax_item in fig.axes:
@@ -2072,49 +2015,34 @@ def _unilab_refresh_graph():
                         spec = ax_item.get_subplotspec()
                         if spec:
                             gs = spec.get_gridspec()
-                            rows = max(rows, gs.nrows)
-                            cols = max(cols, gs.ncols)
+                            rows = builtins.max(rows, gs.nrows)
+                            cols = builtins.max(cols, gs.ncols)
             except: 
-                # Fallback to older heuristic if GridSpec fails
                 rows = (num_axes // 2 + num_axes % 2)
                 cols = 2 if num_axes >= 2 else 1
-            
-            # Divide the grid of the full width and place pictures on specific positions
-            # Use 9 inches per column and 7 inches per row for very generous spacing
-            fig.set_size_inches(max(14, 9 * cols), max(10, 7 * rows))
+            fig.set_size_inches(builtins.max(14, 9 * cols), builtins.max(10, 7 * rows))
         else:
-            # Make single plots smaller and more compact
             fig.set_size_inches(8, 5)
-
         fig.set_facecolor('#121212')
         fig.patch.set_facecolor('#121212')
         fig.patch.set_alpha(1.0)
-
-        # Ensure legend is also dark if it exists
         for leg in fig.legends:
             leg.get_frame().set_facecolor('#1e1e1e')
             leg.get_frame().set_edgecolor('#444444')
             for text_item in leg.get_texts():
                 text_item.set_color('#e0e0e0')
-
         for ax_item in fig.axes:
             ax_item.set_facecolor('#121212')
             ax_item.patch.set_facecolor('#121212')
-
-        # Ensure the layout is tight so labels are not cut off
         try:
-            has_3d = any(getattr(a, 'name', '') == '3d' for a in fig.axes)
+            has_3d = builtins.any(builtins.getattr(a, 'name', '') == '3d' for a in fig.axes)
             if not has_3d:
-                # Use constrained_layout if available or tight_layout with adequate padding
                 fig.tight_layout(pad=3.0)
             else:
-                # For 3D plots, tight_layout can be finicky, use subplots_adjust
                 fig.subplots_adjust(hspace=0.4, wspace=0.4, left=0.1, right=0.9, top=0.9, bottom=0.1)
         except Exception:
-            try:
-                fig.subplots_adjust(hspace=0.5, wspace=0.4)
+            try: fig.subplots_adjust(hspace=0.5, wspace=0.4)
             except: pass
-        # Handle 3D pane colors for dark mode and save 3D data
         if ax.name == '3d':
             try:
                 ax.xaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
@@ -2123,25 +2051,8 @@ def _unilab_refresh_graph():
                 ax.xaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
                 ax.yaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
             except: pass
-
-        # Force artists to be rendered
         plt.draw()
-
-
-        # Save with tight clipping to avoid cutting off labels/axes
-        # We use a small padding to ensure edges are clean
-        # We explicitly set facecolor and edgecolor to the dark theme to avoid white borders
-        fig.savefig(
-            str(save_path),
-            format='png',
-            dpi=120,
-            facecolor='#121212',
-            edgecolor='#121212',
-            transparent=False,
-            bbox_inches='tight',
-            pad_inches=0.1
-        )
-
+        fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', edgecolor='#121212', transparent=False, bbox_inches='tight', pad_inches=0.1)
         fig_num = fig.number
         fig_ver = _unilab_fig_versions.get(fig_num, 1)
         print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}")
@@ -2150,17 +2061,12 @@ def _unilab_refresh_graph():
 
 _unilab_hold = False
 
-def hold(state='on'):
-    global _unilab_hold
-    _unilab_hold = (state == 'on' or state == True or state == 1)
-
 def clf():
     plt.clf()
     _unilab_update_fig_version()
     _unilab_refresh_graph()
 
 def text(*args, **kwargs):
-    """Adds text to the plot."""
     args_list = list(args)
     target_ax = plt
     if args_list and hasattr(args_list[0], 'text'):
@@ -2168,33 +2074,13 @@ def text(*args, **kwargs):
     return target_ax.text(*args_list, **kwargs)
 
 def plot(*args, **kwargs):
-    """
-    Plot vectors or matrices.
-    Example:
-        plot(x, y, 'LineWidth', 2);
-    """
     args_list = list(args)
     target_ax = plt
-    
-    # Check if first arg is an axes object
     if args_list and hasattr(args_list[0], 'plot'):
         target_ax = args_list.pop(0)
-
-    # MATLAB-style Name-Value pair extraction
-    matlab_names = {
-        'LineWidth': 'linewidth',
-        'MarkerSize': 'markersize',
-        'MarkerFaceColor': 'markerfacecolor',
-        'MarkerEdgeColor': 'markeredgecolor',
-        'Color': 'color',
-        'LineStyle': 'linestyle',
-        'Marker': 'marker',
-        'DisplayName': 'label'
-    }
-    
-    # Process Name-Value pairs from args_list
+    matlab_names = {'LineWidth': 'linewidth', 'MarkerSize': 'markersize', 'MarkerFaceColor': 'markerfacecolor', 'MarkerEdgeColor': 'markeredgecolor', 'Color': 'color', 'LineStyle': 'linestyle', 'Marker': 'marker', 'DisplayName': 'label'}
     i = 0
-    while i < len(args_list) - 1:
+    while i < builtins.len(args_list) - 1:
         name = args_list[i]
         if isinstance(name, str) and (name in matlab_names or name.lower() == 'grid'):
             val = args_list[i+1]
@@ -2207,59 +2093,36 @@ def plot(*args, **kwargs):
             args_list.pop(i)
             continue
         i += 1
-
-    # Flatten vectors for Matplotlib compatibility
     args_list = [_unilab_vec(a) for a in args_list]
-
     if target_ax == plt and not _unilab_hold:
         plt.cla()
         _unilab_update_fig_version()
-        
     res = target_ax.plot(*args_list, **kwargs)
-    
-    if target_ax == plt:
-        _unilab_refresh_graph()
-    elif hasattr(target_ax, 'figure'):
-        target_ax.figure.canvas.draw()
-        
+    if target_ax == plt: _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
     return res
 
 def fill(*args, **kwargs):
-    """
-    Fill areas between curves.
-    Example:
-        fill(x, y, 'r');
-        fill(ax, x, y, 'r');
-    """
     args_list = list(args)
     target_ax = plt
     if args_list and hasattr(args_list[0], 'fill'):
         target_ax = args_list.pop(0)
-    
-    # MATLAB-style Name-Value pair extraction
     matlab_names = {'Alpha': 'alpha', 'FaceAlpha': 'alpha', 'FaceColor': 'facecolor', 'EdgeColor': 'edgecolor'}
     i = 0
-    while i < len(args_list) - 1:
+    while i < builtins.len(args_list) - 1:
         name = args_list[i]
         if isinstance(name, str) and name in matlab_names:
             kwargs[matlab_names[name]] = args_list[i+1]
             args_list.pop(i); args_list.pop(i)
             continue
         i += 1
-
-    # Flatten vectors
     args_list = [_unilab_vec(a) for a in args_list]
-    
     if target_ax == plt and not _unilab_hold:
         plt.cla()
         _unilab_update_fig_version()
-
     res = target_ax.fill(*args_list, **kwargs)
-    
-    if target_ax == plt:
-        _unilab_refresh_graph()
-    elif hasattr(target_ax, 'figure'):
-        target_ax.figure.canvas.draw()
+    if target_ax == plt: _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
     return res
 
 def xlim(*args):
@@ -2267,10 +2130,8 @@ def xlim(*args):
     target_ax = plt
     if args_list and hasattr(args_list[0], 'set_xlim'):
         target_ax = args_list.pop(0)
-    
     if not args_list:
         return target_ax.get_xlim() if hasattr(target_ax, 'get_xlim') else plt.xlim()
-    
     val = args_list[0]
     if isinstance(val, (list, np.ndarray)):
         val_arr = np.asarray(val).flatten()
@@ -2278,15 +2139,12 @@ def xlim(*args):
             res = target_ax.set_xlim(val_arr[0], val_arr[1]) if hasattr(target_ax, 'set_xlim') else plt.xlim(val_arr[0], val_arr[1])
         else:
             res = target_ax.set_xlim(val_arr) if hasattr(target_ax, 'set_xlim') else plt.xlim(val_arr)
-    elif len(args_list) == 2:
+    elif builtins.len(args_list) == 2:
         res = target_ax.set_xlim(args_list[0], args_list[1]) if hasattr(target_ax, 'set_xlim') else plt.xlim(args_list[0], args_list[1])
     else:
         res = target_ax.set_xlim(val) if hasattr(target_ax, 'set_xlim') else plt.xlim(val)
-        
-    if target_ax == plt:
-        _unilab_refresh_graph()
-    elif hasattr(target_ax, 'figure'):
-        target_ax.figure.canvas.draw()
+    if target_ax == plt: _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
     return res
 
 def ylim(*args):
@@ -2294,10 +2152,8 @@ def ylim(*args):
     target_ax = plt
     if args_list and hasattr(args_list[0], 'set_ylim'):
         target_ax = args_list.pop(0)
-    
     if not args_list:
         return target_ax.get_ylim() if hasattr(target_ax, 'get_ylim') else plt.ylim()
-    
     val = args_list[0]
     if isinstance(val, (list, np.ndarray)):
         val_arr = np.asarray(val).flatten()
@@ -2305,143 +2161,94 @@ def ylim(*args):
             res = target_ax.set_ylim(val_arr[0], val_arr[1]) if hasattr(target_ax, 'set_ylim') else plt.ylim(val_arr[0], val_arr[1])
         else:
             res = target_ax.set_ylim(val_arr) if hasattr(target_ax, 'set_ylim') else plt.ylim(val_arr)
-    elif len(args_list) == 2:
+    elif builtins.len(args_list) == 2:
         res = target_ax.set_ylim(args_list[0], args_list[1]) if hasattr(target_ax, 'set_ylim') else plt.ylim(args_list[0], args_list[1])
     else:
         res = target_ax.set_ylim(val) if hasattr(target_ax, 'set_ylim') else plt.ylim(val)
-        
-    if target_ax == plt:
-        _unilab_refresh_graph()
-    elif hasattr(target_ax, 'figure'):
-        target_ax.figure.canvas.draw()
+    if target_ax == plt: _unilab_refresh_graph()
+    elif hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
     return res
 
 def unilab_ascii_plot(y, x=None, height=20, width=60, plot_type='line'):
     try:
-        if x is None or (isinstance(x, (list, np.ndarray)) and len(x) == 0):
-            if isinstance(y, (list, np.ndarray)):
-                x = np.arange(len(y))
-            else:
-                x = np.arange(1)
-                y = [y]
-        
+        if x is None or (isinstance(x, (list, np.ndarray)) and builtins.len(x) == 0):
+            if isinstance(y, (list, np.ndarray)): x = np.arange(builtins.len(y))
+            else: x = np.arange(1); y = [y]
         y = np.asarray(y).flatten()
         x = np.asarray(x).flatten()
-        
         if y.size == 0: return ""
-        
-        # Filter out NaNs/Infs
         mask = np.isfinite(x) & np.isfinite(y)
         x = x[mask]
         y = y[mask]
-        
         if y.size == 0: return ""
-
         xmin, xmax = np.min(x), np.max(x)
         ymin, ymax = np.min(y), np.max(y)
-        
         if xmax == xmin: xmax += 1
         if ymax == ymin: ymax += 1
-        
         height = int(height) if height and height > 0 else 20
         width = int(width) if width and width > 0 else 60
-        
         canvas = [[' ' for _ in range(width)] for _ in range(height)]
-        
         def set_pixel(cx, cy, char):
-            if 0 <= cx < width and 0 <= cy < height:
-                canvas[cy][cx] = char
-
-        for i in range(len(x)):
+            if 0 <= cx < width and 0 <= cy < height: canvas[cy][cx] = char
+        for i in range(builtins.len(x)):
             px = int((x[i] - xmin) / (xmax - xmin) * (width - 1))
             py = int((y[i] - ymin) / (ymax - ymin) * (height - 1))
             py = height - 1 - py
-            
             if plot_type == 'line' and i > 0:
                 prev_px = int((x[i-1] - xmin) / (xmax - xmin) * (width - 1))
                 prev_py = height - 1 - int((y[i-1] - ymin) / (ymax - ymin) * (height - 1))
-                
-                dx = unilab_abs(px - prev_px)
-                dy = unilab_abs(py - prev_py)
+                dx = builtins.abs(px - prev_px)
+                dy = builtins.abs(py - prev_py)
                 sx = 1 if prev_px < px else -1
                 sy = 1 if prev_py < py else -1
                 err = dx - dy
-                
                 cx, cy = prev_px, prev_py
                 while True:
                     set_pixel(cx, cy, '*')
                     if cx == px and cy == py: break
                     e2 = 2 * err
-                    if e2 > -dy:
-                        err -= dy
-                        cx += sx
-                    if e2 < dx:
-                        err += dx
-                        cy += sy
-            elif plot_type == 'scatter':
-                set_pixel(px, py, 'o')
+                    if e2 > -dy: err -= dy; cx += sx
+                    if e2 < dx: err += dx; cy += sy
+            elif plot_type == 'scatter': set_pixel(px, py, 'o')
             elif plot_type == 'bar':
                 bar_top = py
                 bar_bottom = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
-                bar_bottom = max(0, min(height - 1, bar_bottom))
-                
-                start = min(bar_top, bar_bottom)
-                end = max(bar_top, bar_bottom)
-                for sy in range(start, end + 1):
-                    set_pixel(px, sy, '#')
+                bar_bottom = builtins.max(0, builtins.min(height - 1, bar_bottom))
+                for sy in range(builtins.min(bar_top, bar_bottom), builtins.max(bar_top, bar_bottom) + 1): set_pixel(px, sy, '#')
             elif plot_type == 'stem':
                 set_pixel(px, py, 'o')
                 zero_y = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
-                zero_y = max(0, min(height - 1, zero_y))
+                zero_y = builtins.max(0, builtins.min(height - 1, zero_y))
                 step = 1 if py < zero_y else -1
-                for sy in range(py + step, zero_y + step, step):
-                    set_pixel(px, sy, '|')
+                for sy in range(py + step, zero_y + step, step): set_pixel(px, sy, '|')
             elif plot_type == 'stairs' and i > 0:
                 prev_px = int((x[i-1] - xmin) / (xmax - xmin) * (width - 1))
                 prev_py = height - 1 - int((y[i-1] - ymin) / (ymax - ymin) * (height - 1))
-                
-                # Draw horizontal then vertical
-                for cx in range(min(prev_px, px), max(prev_px, px) + 1):
-                    set_pixel(cx, prev_py, '*')
-                for cy in range(min(prev_py, py), max(prev_py, py) + 1):
-                    set_pixel(px, cy, '*')
+                for cx in range(builtins.min(prev_px, px), builtins.max(prev_px, px) + 1): set_pixel(cx, prev_py, '*')
+                for cy in range(builtins.min(prev_py, py), builtins.max(prev_py, py) + 1): set_pixel(px, cy, '*')
             elif plot_type == 'area':
                 set_pixel(px, py, '*')
                 zero_y = height - 1 - int((0 - ymin) / (ymax - ymin) * (height - 1))
-                zero_y = max(0, min(height - 1, zero_y))
-                for sy in range(min(py, zero_y), max(py, zero_y) + 1):
-                    set_pixel(px, sy, '.')
-            else:
-                set_pixel(px, py, '*')
-
-        res = []
-        res.append(f" {ymax:8.2f} |" + "".join(canvas[0]) + "|")
-        for i in range(1, height - 1):
-            res.append(f"          |" + "".join(canvas[i]) + "|")
+                zero_y = builtins.max(0, builtins.min(height - 1, zero_y))
+                for sy in range(builtins.min(py, zero_y), builtins.max(py, zero_y) + 1): set_pixel(px, sy, '.')
+            else: set_pixel(px, py, '*')
+        res = [f" {ymax:8.2f} |" + "".join(canvas[0]) + "|"]
+        for i in range(1, height - 1): res.append(f"          |" + "".join(canvas[i]) + "|")
         res.append(f" {ymin:8.2f} |" + "".join(canvas[height-1]) + "|")
         res.append("           +" + "-" * width + "+")
-        
-        xmin_str = f"{xmin:.2f}"
-        xmax_str = f"{xmax:.2f}"
-        middle_space = " " * (width - len(xmin_str) - len(xmax_str))
-        res.append("            " + xmin_str + middle_space + xmax_str)
-        
+        xmin_str, xmax_str = f"{xmin:.2f}", f"{xmax:.2f}"
+        res.append("            " + xmin_str + " " * (width - builtins.len(xmin_str) - builtins.len(xmax_str)) + xmax_str)
         return "\n".join(res)
-    except Exception as e:
-        return f"Error generating ASCII plot: {e}"
+    except Exception as e: return f"Error generating ASCII plot: {e}"
 
 def unilab_ascii_heatmap(M, height=15, width=40):
     try:
         M = np.asarray(M)
         if M.size == 0: return ""
-        
         m_min, m_max = np.min(M), np.max(M)
         if m_max == m_min: m_max += 1
-        
-        # Simple manual resize (nearest neighbor)
         orig_h, orig_w = M.shape
         res_h, res_w = int(height), int(width)
-        
         ramp = " .:-=+*#%@"
         res = ["+" + "-" * res_w + "+"]
         for r in range(res_h):
@@ -2449,65 +2256,38 @@ def unilab_ascii_heatmap(M, height=15, width=40):
             orig_r = int(r * orig_h / res_h)
             for c in range(res_w):
                 orig_c = int(c * orig_w / res_w)
-                val = M[orig_r, orig_c]
-                idx = int((val - m_min) / (m_max - m_min) * (len(ramp) - 1))
-                row += ramp[max(0, min(len(ramp)-1, idx))]
-            row += "|"
-            res.append(row)
+                idx = int((M[orig_r, orig_c] - m_min) / (m_max - m_min) * (builtins.len(ramp) - 1))
+                row += ramp[builtins.max(0, builtins.min(builtins.len(ramp)-1, idx))]
+            res.append(row + "|")
         res.append("+" + "-" * res_w + "+")
         return "\n".join(res)
-    except Exception as e:
-        return f"Error generating ASCII heatmap: {e}"
+    except Exception as e: return f"Error generating ASCII heatmap: {e}"
 
-def is_web():
-    """Returns True if running in web mode."""
-    return os.environ.get('UNILAB_WEB_MODE') == '1'
+def is_web(): return os.environ.get('UNILAB_WEB_MODE') == '1'
 
 def terminal_plot_hd(y, x=None, height=None, width=None, type='line', **kwargs):
-    """HD Terminal Plotting with High-Contrast Styling."""
     grid_state = kwargs.pop('grid', True)
-    
-    if x is None or (isinstance(x, (list, np.ndarray)) and len(x) == 0):
-        if isinstance(y, (list, np.ndarray)):
-            x = np.arange(len(y))
-        else:
-            x = np.arange(1)
-            y = [y]
-    
-    # Ensure x and y are 1D for Matplotlib
-    x = _unilab_vec(x)
-    y = _unilab_vec(y)
-            
+    if x is None or (isinstance(x, (list, np.ndarray)) and builtins.len(x) == 0):
+        if isinstance(y, (list, np.ndarray)): x = np.arange(builtins.len(y))
+        else: x = np.arange(1); y = [y]
+    x, y = _unilab_vec(x), _unilab_vec(y)
     if not _unilab_hold:
         plt.clf()
-        # Ensure we have a figure with the right size if it's the first plot
-        if not plt.get_fignums():
-            plt.figure(figsize=(10, 6))
+        if not plt.get_fignums(): plt.figure(figsize=(10, 6))
         _unilab_update_fig_version()
-
-    if type == 'line':
-        plt.plot(x, y, linewidth=5.0)
-    elif type == 'area':
-        plt.fill_between(x, y, alpha=0.4)
-        plt.plot(x, y, linewidth=3.0)
-    elif type == 'stairs':
-        plt.step(x, y, where='mid', linewidth=5.0)
-    elif type == 'scatter':
-        plt.scatter(x, y, s=150)
-    elif type == 'bar':
-        plt.bar(x, y, width=0.8, color='tab:blue', edgecolor='black', linewidth=1.5)
+    if type == 'line': plt.plot(x, y, linewidth=5.0)
+    elif type == 'area': plt.fill_between(x, y, alpha=0.4); plt.plot(x, y, linewidth=3.0)
+    elif type == 'stairs': plt.step(x, y, where='mid', linewidth=5.0)
+    elif type == 'scatter': plt.scatter(x, y, s=150)
+    elif type == 'bar': plt.bar(x, y, width=0.8, color='tab:blue', edgecolor='black', linewidth=1.5)
     elif type == 'stem':
         markerline, stemlines, baseline = plt.stem(x, y)
-        plt.setp(stemlines, 'linewidth', 3)
-        plt.setp(markerline, 'markersize', 10)
-    elif type == 'box':
-        plt.boxplot(y, patch_artist=True, boxprops=dict(linewidth=3), medianprops=dict(linewidth=3))
-    
+        plt.setp(stemlines, 'linewidth', 3); plt.setp(markerline, 'markersize', 10)
+    elif type == 'box': plt.boxplot(y, patch_artist=True, boxprops=dict(linewidth=3), medianprops=dict(linewidth=3))
     plt.grid(grid_state == 'on' or grid_state == True or grid_state == 1, linestyle='--', alpha=0.6, linewidth=1.5)
     _unilab_refresh_graph()
 
 def terminal_heatmap_hd(M):
-    """HD Heatmap optimized for terminal grids."""
     plt.figure(figsize=(10, 6))
     plt.imshow(M, cmap='magma', interpolation='nearest')
     plt.colorbar()
@@ -2515,102 +2295,62 @@ def terminal_heatmap_hd(M):
     plt.close()
 
 def _parse_matlab_style_args(args):
-    MATLAB_PROPS = {
-        'linecolor', 'linewidth', 'markerfacecolor', 'markeredgecolor',
-        'markersize', 'displayname', 'location', 'name', 'position',
-        'color', 'edgecolor', 'facecolor', 'marker', 'linestyle', 'alpha',
-        'interpreter', 'fontweight', 'fontsize'
-    }
-    
-    pos_args = []
-    kwargs = {}
-    i = 0
-    while i < len(args):
-        if i + 1 < len(args) and isinstance(args[i], str) and args[i].lower() in MATLAB_PROPS:
-            key = args[i].lower()
-            val = args[i+1]
-            key_map = {
-                'linecolor': 'edgecolor',
-                'markerfacecolor': 'facecolor',
-                'markeredgecolor': 'edgecolor',
-                'displayname': 'label',
-                'location': 'loc'
-            }
+    MATLAB_PROPS = {'linecolor', 'linewidth', 'markerfacecolor', 'markeredgecolor', 'markersize', 'displayname', 'location', 'name', 'position', 'color', 'edgecolor', 'facecolor', 'marker', 'linestyle', 'alpha', 'interpreter', 'fontweight', 'fontsize'}
+    pos_args, kwargs, i = [], {}, 0
+    while i < builtins.len(args):
+        if i + 1 < builtins.len(args) and isinstance(args[i], str) and args[i].lower() in MATLAB_PROPS:
+            key, val = args[i].lower(), args[i+1]
+            key_map = {'linecolor': 'edgecolor', 'markerfacecolor': 'facecolor', 'markeredgecolor': 'edgecolor', 'displayname': 'label', 'location': 'loc'}
             kwargs[key_map.get(key, key)] = val
             i += 2
         else:
             arg = args[i]
-            # Automatically flatten vectors (1xN or Nx1) for Matplotlib compatibility
-            if isinstance(arg, np.ndarray) and (arg.shape[0] == 1 or arg.shape[1] == 1):
-                arg = _unilab_vec(arg)
-            pos_args.append(arg)
-            i += 1
+            if isinstance(arg, np.ndarray) and (arg.shape[0] == 1 or arg.shape[1] == 1): arg = _unilab_vec(arg)
+            pos_args.append(arg); i += 1
     return pos_args, kwargs
 
 def stem(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     res = plt.stem(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def stairs(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     res = plt.stairs(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def area(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    # area(y) or area(x, y)
-    if len(p_args) == 1:
-        y = p_args[0]
-        x = np.arange(len(y))
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if builtins.len(p_args) == 1:
+        y = p_args[0]; x = np.arange(builtins.len(y))
         res = plt.fill_between(x, y, **kwargs)
-    elif len(p_args) >= 2:
+    elif builtins.len(p_args) >= 2:
         x, y = p_args[0], p_args[1]
         res = plt.fill_between(x, y, **kwargs)
-    _unilab_refresh_graph()
-    return res
+    _unilab_refresh_graph(); return res
 
 def scatter(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    
-    # Matplotlib scatter is filled by default. Remove MATLAB flag.
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     p_args = [a for a in p_args if not (isinstance(a, str) and a == 'filled')]
-    
-    # Map 'markersize' to 's'
-    if 'markersize' in kwargs:
-        kwargs['s'] = kwargs.pop('markersize')
-            
+    if 'markersize' in kwargs: kwargs['s'] = kwargs.pop('markersize')
     res = plt.scatter(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def bar(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     res = plt.bar(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def hist(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def title(*args, **kwargs):
@@ -2621,9 +2361,7 @@ def title(*args, **kwargs):
         res = target.set_title(*args_list, **kwargs)
         if hasattr(target, 'figure'): target.figure.canvas.draw()
         return res
-    res = plt.title(*args_list, **kwargs)
-    _unilab_refresh_graph()
-    return res
+    res = plt.title(*args_list, **kwargs); _unilab_refresh_graph(); return res
 
 def xlabel(*args, **kwargs):
     args_list = list(args)
@@ -2633,9 +2371,7 @@ def xlabel(*args, **kwargs):
         res = target.set_xlabel(*args_list, **kwargs)
         if hasattr(target, 'figure'): target.figure.canvas.draw()
         return res
-    res = plt.xlabel(*args_list, **kwargs)
-    _unilab_refresh_graph()
-    return res
+    res = plt.xlabel(*args_list, **kwargs); _unilab_refresh_graph(); return res
 
 def ylabel(*args, **kwargs):
     args_list = list(args)
@@ -2645,16 +2381,13 @@ def ylabel(*args, **kwargs):
         res = target.set_ylabel(*args_list, **kwargs)
         if hasattr(target, 'figure'): target.figure.canvas.draw()
         return res
-    res = plt.ylabel(*args_list, **kwargs)
-    _unilab_refresh_graph()
-    return res
+    res = plt.ylabel(*args_list, **kwargs); _unilab_refresh_graph(); return res
 
 def gca(): return plt.gca()
 
 def figure(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    # Map some figure properties
     if 'name' in kwargs: kwargs.pop('name')
     if 'position' in kwargs: kwargs.pop('position')
     return plt.figure(**kwargs)
@@ -2662,18 +2395,12 @@ def figure(*args, **kwargs):
 def subplot(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    res = plt.subplot(*p_args, **kwargs)
-    _unilab_refresh_graph()
-    return res
+    res = plt.subplot(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def hold(*args):
     global _unilab_hold
     args_list = list(args)
-    if args_list and hasattr(args_list[0], 'plot'):
-        # First arg is likely an axes object, ignore it for now as UniLab 
-        # uses a global hold state for the current figure.
-        args_list.pop(0)
-    
+    if args_list and hasattr(args_list[0], 'plot'): args_list.pop(0)
     state = args_list[0] if args_list else 'on'
     val = str(state).lower()
     _unilab_hold = (val == 'on' or val == '1' or state is True)
@@ -2681,15 +2408,10 @@ def hold(*args):
 def grid(*args, **kwargs):
     args_list = list(args)
     target = plt
-    if args_list and hasattr(args_list[0], 'grid'):
-        target = args_list.pop(0)
-    
+    if args_list and hasattr(args_list[0], 'grid'): target = args_list.pop(0)
     state = args_list[0] if args_list else 'on'
-    val = str(state).lower()
-    visible = val == 'on' or val == '1' or state is True
-    
-    if target == plt:
-        plt.grid(visible, **kwargs)
+    visible = str(state).lower() == 'on' or str(state) == '1' or state is True
+    if target == plt: plt.grid(visible, **kwargs)
     else:
         target.grid(visible, **kwargs)
         if hasattr(target, 'figure'): target.figure.canvas.draw()
@@ -2698,449 +2420,183 @@ def grid(*args, **kwargs):
 def axis(*args):
     args_list = list(args)
     target = plt
-    if args_list and hasattr(args_list[0], 'axis'):
-        target = args_list.pop(0)
-    
-    if args_list:
-        res = target.axis(args_list[0])
-    else:
-        res = target.axis()
-        
-    _unilab_refresh_graph()
-    return res
+    if args_list and hasattr(args_list[0], 'axis'): target = args_list.pop(0)
+    res = target.axis(args_list[0]) if args_list else target.axis()
+    _unilab_refresh_graph(); return res
 
 def legend(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    
-    # If all positional arguments are strings, they are labels for the current plot.
-    # Matplotlib's legend expects a list of labels in this case.
-    if p_args and all(isinstance(a, str) for a in p_args):
-        p_args = [p_args]
-        
+    if p_args and builtins.all(isinstance(a, str) for a in p_args): p_args = [p_args]
     plt.legend(*p_args, **kwargs); _unilab_refresh_graph()
 
 def contourf(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    # MATLAB often passes levels as a 1xN matrix, Matplotlib wants 1D
-    if len(p_args) >= 4 and isinstance(p_args[3], np.ndarray):
-        p_args[3] = p_args[3].flatten()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if builtins.len(p_args) >= 4 and isinstance(p_args[3], np.ndarray): p_args[3] = p_args[3].flatten()
     res = plt.contourf(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
-
 def colormap(*args):
-    """Sets the colormap."""
     args_list = list(args)
-    target_ax = None
-    
-    if args_list and hasattr(args_list[0], 'imshow'):
-        target_ax = args_list.pop(0)
-    
-    if not args_list:
-        return
-        
+    target_ax = args_list.pop(0) if args_list and hasattr(args_list[0], 'imshow') else None
+    if not args_list: return
     cmap = args_list[0]
-    
     if isinstance(cmap, np.ndarray):
         from matplotlib.colors import ListedColormap
         import matplotlib as mpl
         cmap_obj = ListedColormap(cmap, name='unilab_custom')
-        try:
-            mpl.colormaps.register(cmap_obj, force=True)
-        except:
-            plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
+        try: mpl.colormaps.register(cmap_obj, force=True)
+        except: plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
         cmap_name = 'unilab_custom'
     else:
         cmap_name = str(cmap)
         maps = {'bone': 'bone', 'jet': 'jet', 'hot': 'hot', 'cool': 'cool', 'spring': 'spring', 'summer': 'summer'}
         cmap_name = maps.get(cmap_name.lower(), cmap_name)
-    
-    if target_ax is None:
-        plt.set_cmap(cmap_name)
-        _unilab_refresh_graph()
+    if target_ax is None: plt.set_cmap(cmap_name); _unilab_refresh_graph()
     else:
         images = target_ax.get_images()
         if images:
-            for img in images:
-                img.set_cmap(cmap_name)
-        if hasattr(target_ax, 'figure'):
-            target_ax.figure.canvas.draw()
-
-def _scatter_plot(x, y, t=None):
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    plt.scatter(x, y, s=100, alpha=0.6)
-    if t: plt.title(t, fontweight='bold', fontsize=22)
-    _unilab_refresh_graph()
-
-def _hist_plot(data, bins=10, t=None):
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    plt.hist(data, bins=bins, alpha=0.7, edgecolor='white')
-    if t: plt.title(t, fontweight='bold', fontsize=22)
-    _unilab_refresh_graph()
+            for img in images: img.set_cmap(cmap_name)
+        if hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
 
 def heatmap(M):
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    plt.imshow(M, interpolation='nearest')
-    plt.colorbar()
-    _unilab_refresh_graph()
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    plt.imshow(M, interpolation='nearest'); plt.colorbar(); _unilab_refresh_graph()
 
 def imagesc(*args, **kwargs):
-    """Displays image with scaled colors."""
     args_list = list(args)
-    target = plt
-    if args_list and hasattr(args_list[0], 'imshow'):
-        target = args_list.pop(0)
-    
-    if target == plt and not _unilab_hold:
-        plt.cla()
-        _unilab_update_fig_version()
-
-    # Heuristic for transpose if needed
-    if len(args_list) > 0 and isinstance(args_list[0], np.ndarray):
-        M = args_list[0]
-        # In MATLAB imagesc(data) uses (row, col) which maps to (y, x)
-        res = target.imshow(M, interpolation='nearest', aspect='auto', **kwargs)
-    else:
-        res = target.imshow(*args_list, **kwargs)
-        
-    if target == plt:
-        _unilab_refresh_graph()
-    elif hasattr(target, 'figure'):
-        target.figure.canvas.draw()
+    target = args_list.pop(0) if args_list and hasattr(args_list[0], 'imshow') else plt
+    if target == plt and not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if builtins.len(args_list) > 0 and isinstance(args_list[0], np.ndarray):
+        res = target.imshow(args_list[0], interpolation='nearest', aspect='auto', **kwargs)
+    else: res = target.imshow(*args_list, **kwargs)
+    if target == plt: _unilab_refresh_graph()
+    elif hasattr(target, 'figure'): target.figure.canvas.draw()
     return res
-
-def colormap(*args):
-    """Sets the colormap."""
-    args_list = list(args)
-    target_ax = None
-    
-    # Correctly identify if the first argument is an axes object
-    if args_list and hasattr(args_list[0], 'imshow'):
-        target_ax = args_list.pop(0)
-    
-    if not args_list:
-        return
-        
-    cmap_name = str(args_list[0])
-    # Map MATLAB names to matplotlib names
-    maps = {'bone': 'bone', 'jet': 'jet', 'hot': 'hot', 'cool': 'cool', 'spring': 'spring', 'summer': 'summer'}
-    cmap_name = maps.get(cmap_name.lower(), cmap_name)
-    
-    if target_ax is None:
-        plt.set_cmap(cmap_name)
-        _unilab_refresh_graph()
-    else:
-        # Directly set on axes images to avoid pyplot sca() error
-        images = target_ax.get_images()
-        if images:
-            for img in images:
-                img.set_cmap(cmap_name)
-        else:
-            # Fallback: setting current axes might still fail if not in pyplot, 
-            # but we can try setting the attribute if matplotlib allows it
-            pass
-        if hasattr(target_ax, 'figure'):
-            target_ax.figure.canvas.draw()
 
 def plot3(*args, **kwargs):
-    """Plot lines and points in 3D."""
     if not _unilab_hold: plt.cla()
-    from mpl_toolkits.mplot3d import Axes3D
     fig = plt.gcf()
-
-    # Ensure 3D axes
-    if not fig.axes or fig.gca().name != '3d':
-        ax = fig.add_subplot(111, projection='3d')
-    else:
-        ax = fig.gca()
-
-    # Flatten vectors for Matplotlib compatibility
+    ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
-
     res = ax.plot(*args, **kwargs)
-
     try:
-        _unilab_3d_data_store[fig.number] = {
-            'type': 'scatter3d',
-            'x': np.asarray(args[0]).tolist() if len(args) > 0 else [],
-            'y': np.asarray(args[1]).tolist() if len(args) > 1 else [],
-            'z': np.asarray(args[2]).tolist() if len(args) > 2 else [],
-        }
-    except Exception:
-        pass
-
-    _unilab_refresh_graph()
-    return res
+        _unilab_3d_data_store[fig.number] = {'type': 'scatter3d', 'x': np.asarray(args[0]).tolist() if builtins.len(args) > 0 else [], 'y': np.asarray(args[1]).tolist() if builtins.len(args) > 1 else [], 'z': np.asarray(args[2]).tolist() if builtins.len(args) > 2 else []}
+    except: pass
+    _unilab_refresh_graph(); return res
 
 def colorbar(*args, **kwargs):
     if not args:
-        # Try to find a mappable in current axes
-        ax = plt.gca()
-        mappable = None
-        # Check for collections (like Poly3DCollection from surf)
-        if hasattr(ax, 'collections') and ax.collections:
-            mappable = ax.collections[-1]
-        # Check for images (like from imshow)
-        elif hasattr(ax, 'images') and ax.images:
-            mappable = ax.images[-1]
-        
-        if mappable:
-            res = plt.colorbar(mappable, **kwargs)
-        else:
-            res = plt.colorbar(**kwargs)
-    else:
-        res = plt.colorbar(*args, **kwargs)
-    _unilab_refresh_graph()
-    return res
+        ax, mappable = plt.gca(), None
+        if hasattr(ax, 'collections') and ax.collections: mappable = ax.collections[-1]
+        elif hasattr(ax, 'images') and ax.images: mappable = ax.images[-1]
+        res = plt.colorbar(mappable, **kwargs) if mappable else plt.colorbar(**kwargs)
+    else: res = plt.colorbar(*args, **kwargs)
+    _unilab_refresh_graph(); return res
 
 def surf(*args, **kwargs):
-    """Create a 3D surface plot."""
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    from mpl_toolkits.mplot3d import Axes3D
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     fig = plt.gcf()
-    
-    # Ensure 3D axes
-    if not fig.axes or fig.gca().name != '3d':
-        ax = fig.add_subplot(111, projection='3d')
-    else:
-        ax = fig.gca()
-    
-    # Handle peaks(N) returning (X, Y, Z) tuple
-    if len(args) == 1 and isinstance(args[0], (tuple, list)) and len(args[0]) == 3:
-        args = args[0]
-
-    # Flatten vectors
+    ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
+    if builtins.len(args) == 1 and isinstance(args[0], (tuple, list)) and builtins.len(args[0]) == 3: args = args[0]
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
-    
     X_out, Y_out, Z_out = None, None, None
-    if len(args) == 1:
+    if builtins.len(args) == 1:
         Z = np.asarray(args[0])
-        if Z.ndim == 1:
-             # Just a line? or reshape?
-             Z = Z.reshape(1, -1)
+        if Z.ndim == 1: Z = Z.reshape(1, -1)
         rows, cols = Z.shape
         X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
         X_out, Y_out, Z_out = X, Y, Z
         if 'cmap' not in kwargs: kwargs['cmap'] = 'viridis'
         res = ax.plot_surface(X, Y, Z, **kwargs)
-    elif len(args) == 3:
+    elif builtins.len(args) == 3:
         X, Y, Z = args
-        # MATLAB supports surf(x, y, Z) where x and y are vectors
-        if X.ndim == 1 and Y.ndim == 1:
-            X, Y = np.meshgrid(X, Y)
+        if X.ndim == 1 and Y.ndim == 1: X, Y = np.meshgrid(X, Y)
         X_out, Y_out, Z_out = X, Y, Z
         if 'cmap' not in kwargs: kwargs['cmap'] = 'viridis'
         res = ax.plot_surface(X, Y, Z, **kwargs)
-    else:
-        res = ax.plot_surface(*args, **kwargs)
-
+    else: res = ax.plot_surface(*args, **kwargs)
     try:
-        if X_out is not None and Y_out is not None and Z_out is not None:
-            _unilab_3d_data_store[fig.number] = {
-                'type': 'surface',
-                'x': np.asarray(X_out).tolist(),
-                'y': np.asarray(Y_out).tolist(),
-                'z': np.asarray(Z_out).tolist(),
-            }
-    except Exception:
-        pass
-
-    _unilab_refresh_graph()
-    return res
+        if X_out is not None: _unilab_3d_data_store[fig.number] = {'type': 'surface', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
+    except: pass
+    _unilab_refresh_graph(); return res
 
 def mesh(*args, **kwargs):
-    """Create a 3D wireframe mesh plot."""
-    if not _unilab_hold: 
-        plt.cla()
-        _unilab_update_fig_version()
-    from mpl_toolkits.mplot3d import Axes3D
+    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
     fig = plt.gcf()
-    
-    # Ensure 3D axes
-    if not fig.axes or fig.gca().name != '3d':
-        ax = fig.add_subplot(111, projection='3d')
-    else:
-        ax = fig.gca()
-    
-    # Flatten vectors
+    ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
-
     X_out, Y_out, Z_out = None, None, None
-    if len(args) == 1:
-        Z = np.asarray(args[0])
-        rows, cols = Z.shape
-        X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+    if builtins.len(args) == 1:
+        Z = np.asarray(args[0]); rows, cols = Z.shape; X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
         X_out, Y_out, Z_out = X, Y, Z
         res = ax.plot_wireframe(X, Y, Z, **kwargs)
-    elif len(args) == 3:
+    elif builtins.len(args) == 3:
         X, Y, Z = args
-        if X.ndim == 1 and Y.ndim == 1:
-            X, Y = np.meshgrid(X, Y)
+        if X.ndim == 1 and Y.ndim == 1: X, Y = np.meshgrid(X, Y)
         X_out, Y_out, Z_out = X, Y, Z
         res = ax.plot_wireframe(X, Y, Z, **kwargs)
-    else:
-        res = ax.plot_wireframe(*args, **kwargs)
-
+    else: res = ax.plot_wireframe(*args, **kwargs)
     try:
-        if X_out is not None and Y_out is not None and Z_out is not None:
-            _unilab_3d_data_store[fig.number] = {
-                'type': 'wireframe',
-                'x': np.asarray(X_out).tolist(),
-                'y': np.asarray(Y_out).tolist(),
-                'z': np.asarray(Z_out).tolist(),
-            }
-    except Exception:
-        pass
-
-    _unilab_refresh_graph()
-    return res
+        if X_out is not None: _unilab_3d_data_store[fig.number] = {'type': 'wireframe', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
+    except: pass
+    _unilab_refresh_graph(); return res
 
 def plot_nn(layers, title="Neural Network Architecture"):
-    """Plots a neural network architecture."""
     from backend.ml.visualizers.nn_vis import plot_neural_network
-    res = plot_neural_network(layers, title=title)
-    return res
-
-def plot_neural_network(layers, title="Neural Network Architecture"):
-    """Alias for plot_nn."""
-    return plot_nn(layers, title=title)
+    return plot_neural_network(layers, title=title)
 
 def render_image_terminal(img_path, width=None):
-    import os
-    import json
-    from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+    import os, json
+    from PIL import Image, ImageOps, ImageEnhance
     from ..utils.terminal_graphics import get_terminal_graphics
-    
-    env = os.environ
-    force_fallback = env.get("UNILAB_FORCE_FALLBACK", "0") == "1"
-    
-    # Try high-resolution graphics if modern terminal is detected
-    if not force_fallback:
+    if os.environ.get("UNILAB_FORCE_FALLBACK", "0") != "1":
         high_res = get_terminal_graphics(img_path)
-        if high_res:
-            return f"\n\x1b[1;34m[ Graphical Plot View ]\x1b[0m\n{high_res}\n"
-
+        if high_res: return f"\n\x1b[1;34m[ Graphical Plot View ]\x1b[0m\n{high_res}\n"
     try:
-        # Load metadata if available
         meta_path = os.path.splitext(img_path)[0] + ".json"
         meta = {}
         if os.path.exists(meta_path):
-            try:
-                with open(meta_path, "r") as f:
-                    meta = json.load(f)
-            except: pass
-
-        # Open and convert to RGB to preserve colors
+            with open(meta_path, "r") as f: meta = json.load(f)
         im = Image.open(img_path).convert('RGB')
-        
-        # Crop to the actual data area
-        grayscale = ImageOps.grayscale(im)
-        box_im = ImageOps.invert(grayscale).point(lambda p: 255 if p > 50 else 0)
-        bbox = box_im.getbbox()
-        if bbox:
-            im = im.crop(bbox)
-
-        # Pre-process
+        bbox = ImageOps.invert(ImageOps.grayscale(im)).point(lambda p: 255 if p > 50 else 0).getbbox()
+        if bbox: im = im.crop(bbox)
         im = ImageEnhance.Contrast(im).enhance(1.5)
-        
-        # Determine terminal size
         try: term_cols = os.get_terminal_size().columns
         except: term_cols = 80
-            
-        target_w = min(width or 100, term_cols - 4)
-        target_h = int(target_w * (im.height / im.width) * 0.5)
-        if target_h < 20: target_h = 20
-        if target_h > 50: target_h = 50
-        
-        # Resize
-        img = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        pixels = img.load()
-        
-        # ASCII density ramp - more detailed
+        target_w = builtins.min(width or 100, term_cols - 4)
+        target_h = builtins.max(20, builtins.min(50, int(target_w * (im.height / im.width) * 0.5)))
+        img = im.resize((target_w, target_h), Image.Resampling.LANCZOS); pixels = img.load()
         ramp = " .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczMW&8%B@$"
-        ramp_len = len(ramp)
-
         grid_data = []
         for y in range(target_h):
             row = ""
             for x in range(target_w):
-                r, g, b = pixels[x, y]
-                # Calculate luminance for character selection
-                luma = 0.299*r + 0.587*g + 0.114*b
-                
-                # If it's very dark (theme background), treat as empty
-                if luma < 25:
-                    row += " "
-                    continue
-                    
-                idx = int(luma * (ramp_len - 1) / 255)
-                idx = max(0, min(idx, ramp_len - 1))
-                char = ramp[idx]
-                
-                # Apply TrueColor to the character
-                row += f"\x1b[38;2;{r};{g};{b}m{char}\x1b[0m"
+                r, g, b = pixels[x, y]; luma = 0.299*r + 0.587*g + 0.114*b
+                if luma < 25: row += " "; continue
+                idx = builtins.max(0, builtins.min(builtins.len(ramp)-1, int(luma * (builtins.len(ramp)-1) / 255)))
+                row += f"\x1b[38;2;{r};{g};{b}m{ramp[idx]}\x1b[0m"
             grid_data.append(row)
-
-        # Reconstruct with Overlay
         res = ["\n\x1b[1;36m[ Pastel Colored Plot ]\x1b[0m"]
-        
-        title_str = meta.get("title", "")
-        if title_str:
-            res.append(" " * 15 + f"\x1b[1m{title_str.center(target_w)}\x1b[0m")
-
-        # Y-Axis formatting
-        ymax = f"{meta.get('ymax', 1.0):.2f}"
-        ymin = f"{meta.get('ymin', 0.0):.2f}"
-        y_val_w = max(len(ymax), len(ymin))
-        
-        ylabel_text = meta.get("ylabel", "")
-        ylabel_padded = ylabel_text.center(target_h)
-        
+        t_str = meta.get("title", "")
+        if t_str: res.append(" " * 15 + f"\x1b[1m{t_str.center(target_w)}\x1b[0m")
+        ymax, ymin = f"{meta.get('ymax', 1.0):.2f}", f"{meta.get('ymin', 0.0):.2f}"
+        y_val_w = builtins.max(builtins.len(ymax), builtins.len(ymin))
+        ylabel_padded = meta.get("ylabel", "").center(target_h)
         for i, row in enumerate(grid_data):
-            yl = ylabel_padded[i] if i < len(ylabel_padded) else " "
-            if i == 0:
-                prefix = f"{yl} {ymax:>{y_val_w}} |"
-            elif i == target_h - 1:
-                prefix = f"{yl} {ymin:>{y_val_w}} |"
-            else:
-                prefix = f"{yl} {' ':>{y_val_w}} |"
-            
-            res.append(f"{prefix}{row}|")
-
-        # X-Axis formatting
-        xmin = f"{meta.get('xmin', 0.0):.2f}"
-        xmax = f"{meta.get('xmax', 1.0):.2f}"
-        xaxis_line = " " * (y_val_w + 3) + "+" + "-" * target_w + "+"
-        res.append(xaxis_line)
-        
-        # X-Axis values
-        xvals = f"{xmin}{xmax:>{target_w + 1 - len(xmin)}}"
-        res.append(" " * (y_val_w + 3) + xvals)
-        
-        xlabel_text = meta.get("xlabel", "")
-        if xlabel_text:
-            res.append(" " * (y_val_w + 3) + f"\x1b[3m{xlabel_text.center(target_w)}\x1b[0m")
-
-        legend = meta.get("legend", [])
-        if legend:
-            res.append("\n" + " " * (y_val_w + 3) + "\x1b[1mLegend:\x1b[0m " + ", ".join(legend))
-
+            yl = ylabel_padded[i] if i < builtins.len(ylabel_padded) else " "
+            prefix = f"{yl} {ymax:>{y_val_w}} |" if i == 0 else (f"{yl} {ymin:>{y_val_w}} |" if i == target_h - 1 else f"{yl} {' ':>{y_val_w}} |")
+            res.append(prefix + row + "|")
+        xmin, xmax = f"{meta.get('xmin', 0.0):.2f}", f"{meta.get('xmax', 1.0):.2f}"
+        res.append(" " * (y_val_w + 3) + "+" + "-" * target_w + "+")
+        res.append(" " * (y_val_w + 3) + f"{xmin}{xmax:>{target_w + 1 - builtins.len(xmin)}}")
+        xl_text = meta.get("xlabel", "")
+        if xl_text: res.append(" " * (y_val_w + 3) + f"\x1b[3m{xl_text.center(target_w)}\x1b[0m")
+        leg = meta.get("legend", [])
+        if leg: res.append("\n" + " " * (y_val_w + 3) + "\x1b[1mLegend:\x1b[0m " + ", ".join(leg))
         return "\n".join(res)
-        
-    except Exception as e:
-        return f"\n\x1b[1;31m[ Render failed: {e} ]\x1b[0m\n"
+    except Exception as e: return f"\n\x1b[1;31m[ Render failed: {e} ]\x1b[0m\n"
 
 def list_libraries():
     import pathlib
@@ -3153,63 +2609,86 @@ def list_libraries():
                 print(f"  > {item.name}:")
                 line = "    "
                 for i, f in enumerate(funcs):
-                    if len(line) + len(f) + 2 > 80: print(line); line = "    "
-                    line += f + (", " if i < len(funcs) - 1 else "")
+                    if builtins.len(line) + builtins.len(f) + 2 > 80: print(line); line = "    "
+                    line += f + (", " if i < builtins.len(funcs) - 1 else "")
                 print(line)
     print("\n" + "-" * 50)
 
 def unilab_clear_workspace(g):
-    """Clears all variables from the workspace except protected ones."""
     import types
     keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
-    
-    # Protect everything from this runtime module
     import backend.core.runtime as rt
     for name in dir(rt):
         if not name.startswith('_'): keys_to_keep.add(name)
-        
-    # Also protect any modules (libraries like ml, stats)
     modules_to_keep = [k for k, v in g.items() if isinstance(v, types.ModuleType)]
     keys_to_keep.update(modules_to_keep)
-    
     to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
     for k in to_remove: del g[k]
 
 def unilab_clear_variables(g, names):
-    """Clears specific variables from the workspace."""
     for name in names:
-        if name in g:
-            del g[name]
+        if name in g: del g[name]
 
 def unilab_iter(x):
-    """Iterates over a UniLab object (columns for 2D arrays)."""
     if isinstance(x, np.ndarray):
-        # Handle 0-d arrays by converting to a single-element list
-        if x.ndim == 0:
-            return iter([x.item()])
-        if x.ndim == 1:
-            return iter(x)
-        # Iterate over columns (MATLAB style)
+        if x.ndim == 0: return iter([x.item()])
+        if x.ndim == 1: return iter(x)
         return (x[:, i] if x.shape[0] > 1 else x[0, i] for i in range(x.shape[1]))
     return iter(x)
 
 def struct(*args):
-    """Creates a UniLab structure (dictionary)."""
     res = {}
-    if len(args) == 0:
-        return res
-    
-    # Handle struct('field1', val1, 'field2', val2, ...)
-    for i in range(0, len(args), 2):
-        if i+1 < len(args):
-            res[args[i]] = args[i+1]
+    for i in range(0, builtins.len(args), 2):
+        if i+1 < builtins.len(args): res[args[i]] = args[i+1]
     return res
 
-def error(msg):
-    raise RuntimeError(str(msg))
-
-def warning(msg):
-    print(f"Warning: {msg}")
-
+def error(msg): raise RuntimeError(str(msg))
+def warning(msg): print(f"Warning: {msg}")
 def unilab_not(x): return np.logical_not(x)
 def unilab_xor(a, b): return np.logical_xor(a, b)
+
+def length(x):
+    if hasattr(x, '__len__'):
+        if isinstance(x, np.ndarray):
+            if x.size == 0: return 0
+            if x.ndim == 0: return 1
+            return int(builtins.max(np.shape(x)))
+        return builtins.len(x)
+    return 1
+
+def size(x, dim=None):
+    try: s = np.shape(x)
+    except: s = (builtins.len(x),) if isinstance(x, list) else ()
+    if builtins.len(s) == 0: s = (1, builtins.len(x)) if isinstance(x, (str, bytes, list)) else (1, 1)
+    elif builtins.len(s) == 1: s = (1, s[0])
+    if dim is not None: return s[dim-1] if dim <= builtins.len(s) else 1
+    n = unilab_get_nargout()
+    if n > 1: return tuple(s)
+    return np.array([s]) if isinstance(s, tuple) else s
+
+def numel(x):
+    if isinstance(x, np.ndarray): return x.size
+    if hasattr(x, '__len__'): return builtins.len(x)
+    return 1
+
+def sum(x, axis=None):
+    if axis is not None:
+        if isinstance(axis, (int, float)): axis = int(axis) - 1
+    return np.sum(x, axis=axis)
+
+def prod(x, axis=None):
+    if axis is not None:
+        if isinstance(axis, (int, float)): axis = int(axis) - 1
+    return np.prod(x, axis=axis, dtype=np.float64)
+
+def any(a, axis=None):
+    if not isinstance(a, np.ndarray) or a.ndim == 0: return bool(a)
+    result = np.any(a, axis=axis)
+    if isinstance(result, np.ndarray) and result.ndim == 0: return bool(result)
+    return result
+
+def all(a, axis=None):
+    if not isinstance(a, np.ndarray) or a.ndim == 0: return bool(a)
+    result = np.all(a, axis=axis)
+    if isinstance(result, np.ndarray) and result.ndim == 0: return bool(result)
+    return result
