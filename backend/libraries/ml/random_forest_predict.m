@@ -7,9 +7,7 @@ function [y_pred] = random_forest_predict(X, forest)
     
     for i = 1:n_trees
         tree = forest{i};
-        % Use only the features this tree was trained on
-        X_subset = X(:, tree.feat_indices);
-        votes(:, i) = decision_tree_predict(X_subset, tree);
+        votes(:, i) = decision_tree_predict(X, tree);
     end
     
     % Majority vote

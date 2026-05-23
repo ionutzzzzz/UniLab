@@ -578,6 +578,21 @@ class UniLabToPython(Transformer):
             f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params if not has_varargin else raw_params[:idx])}] if x is not None)" if not has_varargin else f"nargin = {len(raw_params)-1} + len(varargin_args)",
             f"nargout = unilab_get_nargout()"
         ]
+        
+        # Initialize output variables
+        if ret:
+            if isinstance(ret, list):
+                for r in ret:
+                    if r == "varargout":
+                        inner.append("varargout = []")
+                    else:
+                        inner.append(f"{r} = None")
+            else:
+                if ret == "varargout":
+                    inner.append("varargout = []")
+                else:
+                    inner.append(f"{ret} = None")
+
         if has_varargin:
             inner.append(f"varargin = unilab_cell_concat([list(varargin_args)])")
 

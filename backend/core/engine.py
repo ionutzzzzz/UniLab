@@ -92,6 +92,8 @@ class TranspilerEngine:
         return vars_snap
 
     def _save_workspace(self):
+        # Ensure workspace directory exists before saving
+        self.workspace_path.mkdir(parents=True, exist_ok=True)
         save_path = self.workspace_path / ".unilab_workspace.pkl"
         vars_to_save = {}
         for k, v in self.globals.items():

@@ -1,3 +1,4 @@
-function [y] = cosh_custom(x)
-    y = (exp(x) + exp(-x)) / 2;
+function y = cosh_custom(x)
+    % COSH_CUSTOM Alias for cosh
+    y = cosh(x);
 end

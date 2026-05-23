@@ -1,3 +1,3 @@
-function [c] = nchoosek_custom(n, k)
-    c = factorial_custom(n) / (factorial_custom(k) * factorial_custom(n - k));
+function y = nchoosek_custom(n, k)
+    y = factorial(n) / (factorial(k) * factorial(n-k));
 end

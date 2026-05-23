@@ -35,11 +35,18 @@ function [tree] = decision_tree_train(X, y, max_depth, min_samples_split, max_fe
     end
     
     for feature_idx = feat_indices
-        thresholds = unique(X(:, feature_idx));
+        x_col = X(:, feature_idx);
+        thresholds = unique(x_col);
+        
+        % Optimization: If too many thresholds, use quantiles
+        if length(thresholds) > 10
+            thresholds = quantile(x_col, linspace(0.05, 0.95, 10));
+        end
+        
         for i = 1:length(thresholds)
             threshold = thresholds(i);
             
-            left_mask = X(:, feature_idx) <= threshold;
+            left_mask = x_col <= threshold;
             right_mask = ~left_mask;
             
             if sum(left_mask) == 0 || sum(right_mask) == 0
@@ -50,8 +57,11 @@ function [tree] = decision_tree_train(X, y, max_depth, min_samples_split, max_fe
             y_right = y(right_mask);
             
             if strcmp(task, 'class')
-                imp_left = 1 - sum((histcounts(y_left, unique_classes) / length(y_left)).^2);
-                imp_right = 1 - sum((histcounts(y_right, unique_classes) / length(y_right)).^2);
+                % Vectorized Gini Impurity
+                counts_left = histcounts(y_left, unique_classes);
+                counts_right = histcounts(y_right, unique_classes);
+                imp_left = 1 - sum((counts_left / length(y_left)).^2);
+                imp_right = 1 - sum((counts_right / length(y_right)).^2);
             else
                 imp_left = var(y_left);
                 imp_right = var(y_right);

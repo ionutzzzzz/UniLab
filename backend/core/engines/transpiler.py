@@ -108,9 +108,15 @@ class TranspilerEngine(BaseEngine):
         self.globals['round'] = runtime.round
         self.globals['floor'] = runtime.floor
         self.globals['ceil'] = runtime.ceil
-        self.globals['max'] = runtime.max
-        self.globals['min'] = runtime.min
-        self.globals['sum'] = runtime.sum
+        self.globals['max'] = runtime.unilab_max
+        self.globals['min'] = runtime.unilab_min
+        self.globals['sum'] = runtime.unilab_sum
+        self.globals['any'] = runtime.unilab_any
+        self.globals['all'] = runtime.unilab_all
+        self.globals['prod'] = runtime.unilab_prod
+        self.globals['eig'] = runtime.unilab_eig
+        self.globals['xcorr'] = runtime.unilab_xcorr
+        self.globals['ode45'] = runtime.ode45
         
         # Load custom packages from backend/packages
         self._load_custom_packages()
@@ -623,6 +629,8 @@ class TranspilerEngine(BaseEngine):
         return vars_snap
 
     def _save_workspace(self):
+        # Ensure workspace directory exists before saving
+        self.workspace_path.mkdir(parents=True, exist_ok=True)
         save_path = self.workspace_path / ".unilab_workspace.pkl"
         vars_to_save = {}
         for k, v in self.globals.items():
