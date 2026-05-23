@@ -356,12 +356,12 @@ class TranspilerEngine(BaseEngine):
                 plot_3d_data = []
 
                 if plot_indices:
-                    render_func = self.globals.get('render_image_terminal')
-
-                    # Deduplicate: only keep the last update for each figure number in this execution.
-                    # This prevents intermediate plots (e.g. from plot(), then title(), then xlabel())
-                    # from being displayed as separate images.
-                    plot_markers = {}
+                    # Deduplicate for rendering: only keep the last update for each figure number
+                    # to be returned in the 'plots' list and base64 data.
+                    # But we must DELETE ALL files.
+                    final_plot_markers = {}
+                    all_plot_files = []
+                    
                     for idx in plot_indices:
                         line = stdout_lines[idx]
                         parts = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")
@@ -369,59 +369,61 @@ class TranspilerEngine(BaseEngine):
 
                         fig_info = parts[1].split("::VER::") if len(parts) > 1 else ["default"]
                         fig_num = fig_info[0].strip()
-                        fig_ver = fig_info[1].strip() if len(fig_info) > 1 else "1"
+                        
+                        final_plot_markers[fig_num] = (idx, filename)
+                        all_plot_files.append((idx, filename))
 
-                        # Key by fig_num to only keep the final state of each figure
-                        plot_markers[fig_num] = (idx, filename)
-
-                    final_render_indices = {v[0] for v in plot_markers.values()}
-
+                    final_render_indices = {v[0] for v in final_plot_markers.values()}
                     import base64
-                    # Sort markers by their original index to maintain chronological order
-                    sorted_markers = sorted(plot_markers.items(), key=lambda x: x[1][0])
-
-                    for fig_num, (idx, filename) in sorted_markers:
-                        plots.append(filename)
+                    
+                    # Process and delete files
+                    for idx, filename in all_plot_files:
+                        is_final = idx in final_render_indices
+                        p = self.workspace_path / filename
+                        if not p.exists(): p = self.cwd / filename
+                        
                         data_3d_entry = None
-
-                        if os.environ.get('UNILAB_WEB_MODE') == '1':
-                            # Try workspace then CWD
-                            p = self.workspace_path / filename
-                            if not p.exists(): p = self.cwd / filename
-
-                            if p.exists():
+                        
+                        # Handle metadata/3D data sidecar (always look for it)
+                        base_name = os.path.splitext(filename)[0]
+                        for ext in ['.json', '.3d.json']:
+                            meta_path = self.workspace_path / (base_name + ext)
+                            if not meta_path.exists(): meta_path = self.cwd / (base_name + ext)
+                            
+                            if meta_path.exists():
                                 try:
+                                    if is_final:
+                                        with open(str(meta_path), 'r') as f:
+                                            data_3d_entry = json.load(f)
+                                    
+                                    if os.environ.get('UNILAB_WEB_MODE') == '1':
+                                        meta_path.unlink()
+                                except Exception as e:
+                                    print(f"Error handling metadata sidecar {meta_path}: {e}")
+                        
+                        if is_final:
+                            plots.append(filename)
+                            plot_3d_data.append(data_3d_entry)
+
+                        if p.exists():
+                            try:
+                                if is_final and os.environ.get('UNILAB_WEB_MODE') == '1':
                                     b64 = base64.b64encode(p.read_bytes()).decode('utf-8')
                                     plot_data_b64.append(f"data:image/png;base64,{b64}")
-                                except Exception as e:
-                                    print(f"Base64 conversion error for {filename}: {e}")
-
-                        # Check for 3D data sidecar
-                        if filename:
-                            data3d_filename = os.path.splitext(filename)[0] + '.3d.json'
-                            data3d_path = self.workspace_path / data3d_filename
-                            if not data3d_path.exists(): data3d_path = self.cwd / data3d_filename
-
-                            if data3d_path.exists():
-                                try:
-                                    with open(str(data3d_path), 'r') as f:
-                                        data_3d_entry = json.load(f)
-                                except Exception as e:
-                                    print(f"Error loading 3D data sidecar {data3d_filename}: {e}")
-
-                        plot_3d_data.append(data_3d_entry)
+                                
+                                if os.environ.get('UNILAB_WEB_MODE') == '1':
+                                    p.unlink()
+                            except Exception as e:
+                                print(f"Error unlinking plot file {p}: {e}")
 
                     # Clean up stdout markers
+                    render_func = self.globals.get('render_image_terminal')
                     for idx in plot_indices:
                         if idx in final_render_indices and render_func and os.environ.get('UNILAB_WEB_MODE') != '1':
-                            line = stdout_lines[idx]
-                            filename = line.split("::GRAPHICAL_PLOT::", 1)[1].split("::FIG::")[0].strip()
-                            p = self.workspace_path / filename
-                            if not p.exists(): p = self.cwd / filename
-                            render_out = render_func(str(p))
-                            stdout_lines[idx] = render_out if render_out else ""
-                        else:
-                            stdout_lines[idx] = ""
+                            # In CLI mode, we don't delete yet because render_func might need it
+                            # Actually, render_func usually prints to terminal.
+                            pass
+                        stdout_lines[idx] = ""
 
                 return ExecutionResult(
                     success=success,

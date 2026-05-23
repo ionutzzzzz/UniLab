@@ -1,10 +1,12 @@
 """Export and visualization endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from typing import Optional, List
 from pathlib import Path
 import json
+import os
+import logging
 from backend.api.dependencies import get_core
 from backend.api.schemas import (
     ExportRequest, ExportResponse, PlotRequest, PlotResponse, PlotListResponse
@@ -12,9 +14,24 @@ from backend.api.schemas import (
 from backend.core.main import UniLabCore
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["export"])
+logger = logging.getLogger("api.export")
 
 # Store for generated plots
 _generated_plots = {}
+
+async def cleanup_file(path: str, plot_id: Optional[str] = None):
+    """Background task to remove temporary files after they are served."""
+    try:
+        p = Path(path)
+        if p.exists():
+            p.unlink()
+            logger.info(f"Cleaned up temporary file: {path}")
+        
+        if plot_id and plot_id in _generated_plots:
+            del _generated_plots[plot_id]
+            logger.info(f"Removed plot metadata for: {plot_id}")
+    except Exception as e:
+        logger.error(f"Error cleaning up file {path}: {e}")
 
 
 @router.post("/{session_id}/export", response_model=ExportResponse)
@@ -52,6 +69,7 @@ async def export_workspace(
 async def download_export(
     session_id: str,
     export_id: str,
+    background_tasks: BackgroundTasks,
     core: UniLabCore = Depends(get_core)
 ):
     """Download exported workspace file."""
@@ -68,6 +86,9 @@ async def download_export(
         export_file = export_dir / export_id
         if not export_file.exists():
             raise HTTPException(status_code=404, detail="Export file not found")
+        
+        # Add cleanup task
+        background_tasks.add_task(cleanup_file, str(export_file))
         
         return FileResponse(export_file)
     except HTTPException:
@@ -138,6 +159,7 @@ async def generate_plot(
 async def get_plot(
     session_id: str,
     plot_id: str,
+    background_tasks: BackgroundTasks,
     core: UniLabCore = Depends(get_core)
 ):
     """Download a generated plot."""
@@ -151,11 +173,15 @@ async def get_plot(
         if not plot_path.exists():
             raise HTTPException(status_code=404, detail="Plot file not found")
         
+        # Add cleanup task
+        background_tasks.add_task(cleanup_file, str(plot_path), plot_id)
+        
         return FileResponse(plot_path, media_type=f"image/{plot_info['format']}")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/{session_id}/plots", response_model=PlotListResponse)

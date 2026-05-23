@@ -1,6 +1,6 @@
 """File operations endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from typing import Optional, List
 import aiofiles
 import os
@@ -47,16 +47,49 @@ async def list_workspace_files(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def is_temporary_file(filename: str, parent_path: Path) -> bool:
+    """Check if a file is a temporary artifact that should be cleaned up after download."""
+    # Check if it's in a known temp subdirectory
+    if parent_path.name in ['plots', 'exports']:
+        return True
+    
+    # Check for specific temporary file patterns in the root or elsewhere
+    if filename.startswith('graph_') and (filename.endswith('.png') or filename.endswith('.json')):
+        return True
+    if filename.startswith('workspace_export_'):
+        return True
+    
+    return False
+
+async def cleanup_temp_file(path: Path, logger):
+    """Background task to remove temporary files."""
+    try:
+        if path.exists():
+            path.unlink()
+            logger.info(f"Cleaned up temporary file: {path}")
+    except Exception as e:
+        logger.error(f"Failed to cleanup {path}: {e}")
+
 @router.get("/{session_id}/files/{file_path:path}", response_model=FileContentResponse)
 async def get_file_content(
     session_id: str,
     file_path: str,
+    background_tasks: BackgroundTasks,
     core: UniLabCore = Depends(get_core)
 ):
     """Get content of a file."""
+    import logging
+    logger = logging.getLogger("api.files")
     try:
         content = await core.read_file(session_id, file_path)
         
+        session = await core.get_session(session_id)
+        if session:
+            filename = os.path.basename(file_path)
+            full_path = session.workspace_path / file_path
+            if is_temporary_file(filename, full_path.parent):
+                background_tasks.add_task(cleanup_temp_file, full_path, logger)
+
         file_size = len(content.encode('utf-8')) if isinstance(content, str) else len(content)
         
         return FileContentResponse(
@@ -230,6 +263,7 @@ async def run_script(
 async def download_file(
     session_id: str,
     file_path: str,
+    background_tasks: BackgroundTasks,
     core: UniLabCore = Depends(get_core)
 ):
     """Download a file from workspace."""
@@ -247,10 +281,23 @@ async def download_file(
         # Security: prevent directory traversal
         filename = os.path.basename(file_path)
         workspace_base = session.workspace_path.resolve()
-        full_path = workspace_base / filename
+        full_path = (workspace_base / file_path).resolve()
         
-        # Check standard location
+        # Ensure the file is within the workspace
+        if not str(full_path).startswith(str(workspace_base)):
+             # Try standard locations if not found in root
+             alt_found = False
+             for sub in ['plots', 'exports']:
+                 alt_path = workspace_base / sub / filename
+                 if alt_path.exists():
+                     full_path = alt_path
+                     alt_found = True
+                     break
+             if not alt_found:
+                raise HTTPException(status_code=403, detail="Forbidden")
+
         if not full_path.exists():
+            # Try subdirectories if not found exactly as requested
             for sub in ['plots', 'exports']:
                 alt_path = workspace_base / sub / filename
                 if alt_path.exists():
@@ -260,11 +307,17 @@ async def download_file(
         if not full_path.exists():
             raise HTTPException(status_code=404, detail=f"File not found: {filename}")
         
+        is_temp = is_temporary_file(filename, full_path.parent)
+        
         # Read file directly and return binary Response
-        # This is more robust than FileResponse in some setups
         try:
             content = full_path.read_bytes()
             media_type = "image/png" if filename.endswith(".png") else "application/octet-stream"
+            
+            # If it's a temporary file, schedule cleanup
+            if is_temp:
+                background_tasks.add_task(cleanup_temp_file, full_path, logger)
+                
             return Response(content=content, media_type=media_type)
         except Exception as e:
             logger.error(f"Failed to read file for download: {e}")
@@ -275,3 +328,4 @@ async def download_file(
     except Exception as e:
         logger.error(f"Download Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+

@@ -142,7 +142,9 @@ class UniLabCore:
         data_to_export = {k: v['preview'] for k, v in vars_snapshot.items()}
         
         filename = filename or f"workspace_export_{int(time.time())}.{format}"
-        output_path = self.sessions[session_id].workspace_path / filename
+        export_dir = self.sessions[session_id].workspace_path / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        output_path = export_dir / filename
         
         from backend.exporters import CSVExporter, JSONExporter
         if format.lower() == "csv":
