@@ -10,13 +10,23 @@ function [mst_edges, total_weight] = kruskal_algorithm(A)
     mst_edges = [];
     total_weight = 0;
     
-    function p = find_set(i)
-        if parent(i) == i, p = i; else, parent(i) = find_set(parent(i)); p = parent(i); end
-    end
-    
     for i = 1:size(edges, 1)
-        root1 = find_set(edges(i, 1));
-        root2 = find_set(edges(i, 2));
+        u_node = edges(i, 1);
+        v_node = edges(i, 2);
+        
+        % Find set with path compression (iterative)
+        curr = u_node;
+        while parent(curr) ~= curr
+            curr = parent(curr);
+        end
+        root1 = curr;
+        
+        curr = v_node;
+        while parent(curr) ~= curr
+            curr = parent(curr);
+        end
+        root2 = curr;
+        
         if root1 ~= root2
             mst_edges = [mst_edges; edges(i, :)];
             total_weight = total_weight + edges(i, 3);

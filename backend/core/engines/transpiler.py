@@ -94,22 +94,11 @@ class TranspilerEngine(BaseEngine):
             '__builtins__': __builtins__,
             'addpath': self._add_path,
             'ans': None,
-            'inf': np.inf,
-            'Inf': np.inf,
-            'nan': np.nan,
-            'NaN': np.nan,
-            'pi': np.pi,
-            'eps': runtime.eps,
             'i': 1j,
             'j': 1j,
-            'realmax': np.finfo(float).max,
-            'realmin': np.finfo(float).tiny,
-            'true': True,
-            'false': False,
-            'struct': runtime.unilab_struct,
         })
         
-        # Inject runtime functions
+        # Inject runtime functions and constants (inf, nan, true, false, etc.)
         for name in dir(runtime):
             if not name.startswith('_'):
                 self.globals[name] = getattr(runtime, name)
@@ -315,25 +304,10 @@ class TranspilerEngine(BaseEngine):
                 import importlib
                 importlib.reload(runtime)
                 
-                # Re-verify critical runtime functions are in globals
+                # Re-verify critical runtime functions and constants are in globals
                 for name in dir(runtime):
                     if not name.startswith('_'):
                         self.globals[name] = getattr(runtime, name)
-                
-                # Re-verify critical constants are available
-                critical_constants = {
-                    'pi': np.pi,
-                    'inf': np.inf,
-                    'Inf': np.inf,
-                    'nan': np.nan,
-                    'NaN': np.nan,
-                    'eps': runtime.eps,
-                    'i': 1j,
-                    'j': 1j,
-                    'realmax': np.finfo(float).max,
-                    'realmin': np.finfo(float).tiny,
-                }
-                self.globals.update(critical_constants)
                 
                 # Prepare execution environment
                 out = io.StringIO()

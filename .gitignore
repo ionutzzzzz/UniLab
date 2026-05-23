@@ -8,6 +8,9 @@ test_runs
 test_workspace
 console_workspaces
 unilab_workspaces
+graph*.png
+graph*.json
+*.pyc
 
 # Prerequisites
 *.d

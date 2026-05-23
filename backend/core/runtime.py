@@ -144,11 +144,52 @@ def unilab_ellip(*args, **kwargs):
 def unilab_tf(num, den): return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
 
 # --- Standard UniLab Constants ---
-inf = np.inf
-Inf = np.inf
-nan = np.nan
-NaN = np.nan
-pi = np.pi
+class UnilabCallableConstant:
+    def __init__(self, val, dtype=None):
+        self.val = val
+        self.dtype = dtype
+    def __call__(self, *args, **kwargs):
+        if not args: return self.val
+        if len(args) == 1:
+            if isinstance(args[0], (list, tuple, np.ndarray)):
+                shape = tuple(int(i) for i in np.asarray(args[0]).flatten())
+            else:
+                n = int(args[0])
+                shape = (n, n)
+        else:
+            shape = tuple(int(i) for i in args)
+        return np.full(shape, self.val, dtype=self.dtype or type(self.val))
+    def __getitem__(self, idx):
+        if isinstance(idx, tuple):
+            return self(*idx)
+        return self(idx)
+    def __repr__(self): return str(self.val).lower()
+    def __str__(self): return str(self.val).lower()
+    def __float__(self): return float(self.val)
+    def __int__(self): return int(self.val)
+    def __bool__(self): return bool(self.val)
+    def __add__(self, other): return self.val + other
+    def __radd__(self, other): return other + self.val
+    def __sub__(self, other): return self.val - other
+    def __rsub__(self, other): return other - self.val
+    def __mul__(self, other): return self.val * other
+    def __rmul__(self, other): return other * self.val
+    def __truediv__(self, other): return self.val / other
+    def __rtruediv__(self, other): return other / self.val
+    def __pow__(self, other): return self.val ** other
+    def __rpow__(self, other): return other ** self.val
+    def __eq__(self, other): return self.val == other
+    def __ne__(self, other): return self.val != other
+    def __lt__(self, other): return self.val < other
+    def __le__(self, other): return self.val <= other
+    def __gt__(self, other): return self.val > other
+    def __ge__(self, other): return self.val >= other
+
+inf = UnilabCallableConstant(np.inf)
+Inf = inf
+nan = UnilabCallableConstant(np.nan)
+NaN = nan
+pi = UnilabCallableConstant(np.pi)
 def eps(*args):
     if not args: return np.finfo(float).eps
     x = args[0]
@@ -159,8 +200,8 @@ i = 1j
 j = 1j
 realmax = np.finfo(float).max
 realmin = np.finfo(float).tiny
-true = True
-false = False
+true = UnilabCallableConstant(True, dtype=bool)
+false = UnilabCallableConstant(False, dtype=bool)
 
 def unilab_tf2ss(num, den):
     return signal.tf2ss(_unilab_vec(num), _unilab_vec(den))
@@ -1144,6 +1185,10 @@ def unilab_set(obj, val, *args):
                         obj = np.pad(obj, (0, pad_len), mode='constant')
             except Exception:
                 pass # Fallback to standard assignment if max_idx extraction fails
+            
+            # Promotion to complex if assigning complex to real array
+            if np.iscomplexobj(v) and not np.iscomplexobj(obj):
+                obj = obj.astype(complex)
                 
             try:
                 obj.flat[idx_adj] = v
@@ -1380,16 +1425,43 @@ def isvector(x):
     return False
 
 def find(condition, k=None, direction='first'):
-    if isinstance(condition, np.ndarray):
+    if not isinstance(condition, np.ndarray):
+        condition = np.asarray(condition)
+        
+    n_out = unilab_get_nargout()
+    
+    if n_out <= 1:
+        # Linear indices
         indices = np.where(condition.flatten())[0] + 1
         if k is not None:
             k = int(k)
-            if direction == 'first':
-                indices = indices[:k]
-            else:
-                indices = indices[-k:]
-        return indices
-    return np.array([])
+            indices = indices[:k] if direction == 'first' else indices[-k:]
+        return indices.reshape(1, -1) if indices.size > 0 else np.array([])
+
+    # Multiple outputs: [row, col] or [row, col, val]
+    rows, cols = np.where(condition)
+    rows += 1 # 1-based
+    cols += 1
+    
+    if k is not None:
+        k = int(k)
+        if direction == 'first':
+            rows, cols = rows[:k], cols[:k]
+        else:
+            rows, cols = rows[-k:], cols[-k:]
+            
+    if n_out == 2:
+        return rows.reshape(-1, 1), cols.reshape(-1, 1)
+    
+    # 3 outputs: [row, col, val]
+    vals = condition[rows-1, cols-1]
+    return rows.reshape(-1, 1), cols.reshape(-1, 1), vals.reshape(-1, 1)
+
+def triu(A, k=0):
+    return np.triu(np.asarray(A), k=int(k))
+
+def tril(A, k=0):
+    return np.tril(np.asarray(A), k=int(k))
 
 def norm(x, ord=None):
     return np.linalg.norm(x, ord=ord)
@@ -1778,11 +1850,17 @@ def tan(x):
         return sympy.tan(x)
     return np.tan(x)
 
-def tanh(x):
+def asin(x):
     if _is_symbolic(x):
         import sympy
-        return sympy.tanh(x)
-    return np.tanh(x)
+        return sympy.asin(x)
+    return np.arcsin(x)
+
+def acos(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.acos(x)
+    return np.arccos(x)
 
 def atan(x):
     if _is_symbolic(x):
@@ -1795,6 +1873,61 @@ def atan2(y, x):
         import sympy
         return sympy.atan2(y, x)
     return np.arctan2(y, x)
+
+def sinh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.sinh(x)
+    return np.sinh(x)
+
+def cosh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.cosh(x)
+    return np.cosh(x)
+
+def tanh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.tanh(x)
+    return np.tanh(x)
+
+def asinh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.asinh(x)
+    return np.asinh(x)
+
+def acosh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.acosh(x)
+    return np.acosh(x)
+
+def atanh(x):
+    if _is_symbolic(x):
+        import sympy
+        return sympy.atanh(x)
+    return np.atanh(x)
+
+def sec(x): return 1.0 / np.cos(x)
+def csc(x): return 1.0 / np.sin(x)
+def cot(x): return 1.0 / np.tan(x)
+
+def asec(x): return np.arccos(1.0 / np.asarray(x))
+def acsc(x): return np.arcsin(1.0 / np.asarray(x))
+def acot(x): return np.arctan(1.0 / np.asarray(x))
+
+def sech(x): return 1.0 / np.cosh(x)
+def csch(x): return 1.0 / np.sinh(x)
+def coth(x): return 1.0 / np.tanh(x)
+
+def asech(x): return np.arccosh(1.0 / np.asarray(x))
+def acsch(x): return np.arcsinh(1.0 / np.asarray(x))
+def acoth(x): return np.arctanh(1.0 / np.asarray(x))
+
+def rad2deg(x): return np.rad2deg(x)
+def deg2rad(x): return np.deg2rad(x)
 
 def relu(x):
     if _is_symbolic(x):
@@ -2637,14 +2770,26 @@ def list_libraries():
 
 def unilab_clear_workspace(g):
     import types
-    keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
     import backend.core.runtime as rt
+    keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
+    
+    # Track runtime names to reset them later
+    runtime_names = set()
     for name in dir(rt):
-        if not name.startswith('_'): keys_to_keep.add(name)
+        if not name.startswith('_'): 
+            keys_to_keep.add(name)
+            runtime_names.add(name)
+            
     modules_to_keep = [k for k, v in g.items() if isinstance(v, types.ModuleType)]
     keys_to_keep.update(modules_to_keep)
+    
     to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
     for k in to_remove: del g[k]
+    
+    # Reset constants and built-ins to ensure they weren't shadowed
+    for name in runtime_names:
+        if name in g:
+            g[name] = getattr(rt, name)
 
 def unilab_clear_variables(g, names):
     for name in names:
