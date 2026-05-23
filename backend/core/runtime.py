@@ -141,7 +141,11 @@ def unilab_ellip(*args, **kwargs):
     kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
     return signal.ellip(*args, **kwargs)
 
-def unilab_tf(num, den): return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
+def unilab_tf(num, den=None): 
+    if den is None:
+        if isinstance(num, signal.lti): return num.to_tf()
+        return signal.TransferFunction(_unilab_vec(num), [1])
+    return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
 
 # --- Standard UniLab Constants ---
 class UnilabCallableConstant:
@@ -209,12 +213,28 @@ def unilab_tf2ss(num, den):
 def unilab_ss2tf(A, B, C, D, iu=0):
     return signal.ss2tf(A, B, C, D, input=iu)
 
-def unilab_ss(A, B, C, D): return signal.StateSpace(A, B, C, D)
+def unilab_ss(A, B, C, D=None): 
+    if B is None:
+        if isinstance(A, signal.lti): return A.to_ss()
+        return signal.StateSpace(A)
+    if D is None: D = np.zeros((np.atleast_2d(C).shape[0], np.atleast_2d(B).shape[1]))
+    return signal.StateSpace(A, B, C, D)
 
 def unilab_ssdata(sys):
     if not isinstance(sys, signal.StateSpace):
         sys = sys.to_ss()
     return sys.A, sys.B, sys.C, sys.D
+
+def unilab_tfdata(sys):
+    if not isinstance(sys, signal.TransferFunction):
+        sys = sys.to_tf()
+    # MATLAB tfdata returns cell arrays for num/den
+    return [sys.num], [sys.den]
+
+def unilab_zpkdata(sys):
+    if not isinstance(sys, signal.ZerosPolesGain):
+        sys = sys.to_zpk()
+    return [sys.zeros], [sys.poles], sys.gain
 
 def unilab_series(sys1, sys2):
     s1 = sys1 if isinstance(sys1, signal.TransferFunction) else sys1.to_tf()
@@ -242,6 +262,60 @@ def unilab_feedback(sys1, sys2=None, sign=-1):
     else:
         den = d1 - d2
     return signal.TransferFunction(num, den)
+
+def unilab_dcgain(sys):
+    if isinstance(sys, signal.StateSpace):
+        # DC gain = D - C * inv(A) * B
+        return sys.D - sys.C @ np.linalg.inv(sys.A) @ sys.B
+    elif isinstance(sys, signal.TransferFunction):
+        return sys.num[-1] / sys.den[-1] if sys.den[-1] != 0 else np.inf
+    else:
+        return sys.gain * np.prod(-sys.zeros) / np.prod(-sys.poles) if np.all(sys.poles != 0) else np.inf
+
+def unilab_pole(sys):
+    return sys.poles
+
+def unilab_zero(sys):
+    return sys.zeros
+
+def unilab_pzmap(sys):
+    plt.clf()
+    p = sys.poles
+    z = sys.zeros
+    plt.plot(np.real(p), np.imag(p), 'rx', markersize=15, markeredgewidth=3, label='Poles')
+    if len(z) > 0:
+        plt.plot(np.real(z), np.imag(z), 'bo', markersize=15, markeredgewidth=3, label='Zeros')
+    plt.axhline(0, color='black', lw=1)
+    plt.axvline(0, color='black', lw=1)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.title('Pole-Zero Map')
+    plt.xlabel('Real')
+    plt.ylabel('Imaginary')
+    plt.legend()
+    _unilab_refresh_graph()
+    return p, z
+
+def unilab_damp(sys):
+    p = sys.poles
+    wn = np.abs(p)
+    zeta = -np.real(p) / wn
+    # Print table-like output
+    print(f"{'Pole':^25} {'Damping':^15} {'Frequency':^15}")
+    print("-" * 55)
+    for i in range(len(p)):
+        print(f"{str(p[i]):^25} {zeta[i]:^15.4f} {wn[i]:^15.4f}")
+    return wn, zeta, p
+
+def unilab_c2d(sys, dt, method='zoh'):
+    return signal.cont2discrete((sys.A, sys.B, sys.C, sys.D) if isinstance(sys, signal.StateSpace) else sys, dt, method=method)
+
+def unilab_ctrb(A, B):
+    n = A.shape[0]
+    return np.hstack([np.linalg.matrix_power(A, i) @ B for i in range(n)])
+
+def unilab_obsv(A, C):
+    n = A.shape[0]
+    return np.vstack([C @ np.linalg.matrix_power(A, i) for i in range(n)])
 
 def unilab_rlocus(sys):
     s = sys if isinstance(sys, signal.TransferFunction) else sys.to_tf()
@@ -370,7 +444,7 @@ def unilab_bode(sys, w=None):
     
     # Plotting for Bode
     if not _unilab_hold: 
-        plt.cla()
+        plt.clf()
         _unilab_update_fig_version()
 
     fig, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -387,6 +461,222 @@ def unilab_bode(sys, w=None):
     
     _unilab_refresh_graph()
     return w, mag, phase
+
+def unilab_nyquist(sys, w=None):
+    w, h = signal.freqresp(sys, w=_unilab_vec(w) if w is not None else None)
+    plt.clf()
+    plt.plot(np.real(h), np.imag(h), 'b', linewidth=3, label='H(jw)')
+    plt.plot(np.real(h), -np.imag(h), 'r--', linewidth=2, label='H(-jw)')
+    plt.plot(-1, 0, 'k+', markersize=20, markeredgewidth=3, label='(-1, 0)')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.axhline(0, color='black', lw=1)
+    plt.axvline(0, color='black', lw=1)
+    plt.title('Nyquist Plot')
+    plt.xlabel('Real')
+    plt.ylabel('Imaginary')
+    plt.legend()
+    _unilab_refresh_graph()
+    return w, h
+
+def unilab_nichols(sys, w=None):
+    w, h = signal.freqresp(sys, w=_unilab_vec(w) if w is not None else None)
+    mag = 20 * np.log10(np.abs(h))
+    phase = np.angle(h, deg=True)
+    # Wrap phase to -360 to 0
+    phase = (phase + 180) % 360 - 180
+    
+    plt.clf()
+    plt.plot(phase, mag, 'b', linewidth=3)
+    plt.grid(True, which='both', linestyle='--', alpha=0.6)
+    plt.axhline(0, color='black', lw=1)
+    plt.axvline(-180, color='red', lw=2, linestyle='--')
+    plt.title('Nichols Chart')
+    plt.xlabel('Phase (deg)')
+    plt.ylabel('Magnitude (dB)')
+    _unilab_refresh_graph()
+    return w, h
+
+def unilab_sigma(sys, w=None):
+    # Singular values of frequency response. For SISO, it's just magnitude.
+    # For MIMO, it would be the SVD of the freq response matrix at each frequency.
+    # SciPy signal's freqresp for MIMO returns (w, h) where h is shape (outputs, inputs, frequencies)
+    w, h = signal.freqresp(sys, w=_unilab_vec(w) if w is not None else None)
+    
+    # h has shape (outputs, inputs, len(w)) for MIMO in newer scipy, 
+    # but older scipy might return something else.
+    # Assuming standard scipy behavior for LTI systems.
+    
+    sigmas = []
+    if h.ndim == 3: # MIMO
+        for i in range(len(w)):
+            H_w = h[:, :, i]
+            s = np.linalg.svd(H_w, compute_uv=False)
+            sigmas.append(s)
+    else: # SISO
+        sigmas = np.abs(h).reshape(-1, 1)
+        
+    sigmas = np.array(sigmas)
+    
+    plt.clf()
+    plt.semilogx(w, 20 * np.log10(sigmas), linewidth=2)
+    plt.grid(True, which='both', linestyle='--', alpha=0.6)
+    plt.title('Singular Values (Sigma Plot)')
+    plt.xlabel('Frequency (rad/s)')
+    plt.ylabel('Singular Values (dB)')
+    _unilab_refresh_graph()
+    return w, sigmas
+
+def unilab_margin(sys):
+    w, mag_db, phase = signal.bode(sys)
+    mag = 10**(mag_db/20)
+    
+    # Gain margin: mag at phase = -180
+    idx_gm = np.argmin(np.abs(phase + 180))
+    gm = 1/mag[idx_gm] if mag[idx_gm] != 0 else np.inf
+    w_gm = w[idx_gm]
+    
+    # Phase margin: phase at mag = 1 (0 dB)
+    idx_pm = np.argmin(np.abs(mag - 1))
+    pm = 180 + phase[idx_pm]
+    w_pm = w[idx_pm]
+    
+    print(f"Gain Margin: {20*np.log10(gm):.2f} dB (at {w_gm:.2f} rad/s)")
+    print(f"Phase Margin: {pm:.2f} deg (at {w_pm:.2f} rad/s)")
+    
+    return gm, pm, w_gm, w_pm
+
+def unilab_lqr(A, B, Q, R):
+    from scipy.linalg import solve_continuous_are
+    A, B, Q, R = np.atleast_2d(A), np.atleast_2d(B), np.atleast_2d(Q), np.atleast_2d(R)
+    P = solve_continuous_are(A, B, Q, R)
+    K = np.linalg.inv(R) @ (B.T @ P)
+    E = np.linalg.eigvals(A - B @ K)
+    return K, P, E
+
+def unilab_place(A, B, p):
+    res = signal.place_poles(np.atleast_2d(A), np.atleast_2d(B), _unilab_vec(p))
+    return res.gain_matrix
+
+def unilab_acker(A, B, p):
+    # Ackermann's formula for SISO
+    A, B = np.atleast_2d(A), np.atleast_2d(B)
+    n = A.shape[0]
+    p = _unilab_vec(p)
+    # Desired characteristic polynomial: poly(p)
+    poly = np.poly(p)
+    # Matrix polynomial Phi(A)
+    Phi = np.zeros_like(A)
+    for i, coeff in enumerate(reversed(poly)):
+        Phi += coeff * np.linalg.matrix_power(A, i)
+    # Controllability matrix
+    C = unilab_ctrb(A, B)
+    C_inv = np.linalg.inv(C)
+    # Last row of inverse C
+    e_n = np.zeros((1, n))
+    e_n[0, -1] = 1
+    K = e_n @ C_inv @ Phi
+    return K
+
+def unilab_initial(sys, x0, T=None):
+    if not isinstance(sys, signal.StateSpace):
+        sys = sys.to_ss()
+    if T is None: T = np.linspace(0, 10, 1000)
+    elif isinstance(T, (int, float, np.integer, np.floating)): T = np.linspace(0, T, 1000)
+    T = _unilab_vec(T)
+    U = np.zeros_like(T)
+    t, y, x = signal.lsim(sys, U, T, X0=_unilab_vec(x0))
+    return t, y, x
+
+def unilab_stepinfo(sys):
+    t, y = unilab_step(sys)
+    y = y.flatten()
+    ss_val = y[-1]
+    if np.abs(ss_val) < 1e-12: return {}
+    idx10 = np.where(y >= 0.1 * ss_val)[0]
+    idx90 = np.where(y >= 0.9 * ss_val)[0]
+    tr = t[idx90[0]] - t[idx10[0]] if len(idx10) > 0 and len(idx90) > 0 else 0
+    # Settling time (2%)
+    tol = 0.02 * np.abs(ss_val)
+    idx_outside = np.where(np.abs(y - ss_val) > tol)[0]
+    ts = t[idx_outside[-1] + 1] if len(idx_outside) > 0 and idx_outside[-1] + 1 < len(t) else t[-1]
+    peak_idx = np.argmax(np.abs(y))
+    peak_val = y[peak_idx]
+    os = (np.abs(peak_val) - np.abs(ss_val)) / np.abs(ss_val) * 100
+    return {'RiseTime': tr, 'SettlingTime': ts, 'Overshoot': os, 'Peak': peak_val, 'PeakTime': t[peak_idx], 'SteadyStateValue': ss_val}
+
+def unilab_bandwidth(sys, db_drop=-3):
+    w, mag, _ = signal.bode(sys)
+    dc_mag = mag[0]
+    target = dc_mag + db_drop
+    idx = np.where(mag <= target)[0]
+    return w[idx[0]] if len(idx) > 0 else np.inf
+
+def unilab_gram(sys, type='c'):
+    from scipy.linalg import solve_continuous_lyapunov
+    if not isinstance(sys, signal.StateSpace): sys = sys.to_ss()
+    A, B, C, D = sys.A, sys.B, sys.C, sys.D
+    if type.lower() == 'c': return solve_continuous_lyapunov(A, -np.atleast_2d(B) @ np.atleast_2d(B).T)
+    else: return solve_continuous_lyapunov(A.T, -np.atleast_2d(C).T @ np.atleast_2d(C))
+
+def unilab_care(A, B, Q, R):
+    from scipy.linalg import solve_continuous_are
+    return solve_continuous_are(np.atleast_2d(A), np.atleast_2d(B), np.atleast_2d(Q), np.atleast_2d(R))
+
+def unilab_dare(A, B, Q, R):
+    from scipy.linalg import solve_discrete_are
+    return solve_discrete_are(np.atleast_2d(A), np.atleast_2d(B), np.atleast_2d(Q), np.atleast_2d(R))
+
+def unilab_lyap(A, Q):
+    from scipy.linalg import solve_continuous_lyapunov
+    return solve_continuous_lyapunov(np.atleast_2d(A), np.atleast_2d(Q))
+
+def unilab_kalman(sys, Q, R):
+    from scipy.linalg import solve_continuous_are
+    if not isinstance(sys, signal.StateSpace): sys = sys.to_ss()
+    A, C, Q, R = np.atleast_2d(sys.A), np.atleast_2d(sys.C), np.atleast_2d(Q), np.atleast_2d(R)
+    P = solve_continuous_are(A.T, C.T, Q, R)
+    L = P @ C.T @ np.linalg.inv(R)
+    return L, P, np.linalg.eigvals(A - L @ C)
+
+def unilab_lqg(sys, Q, R, Qn, Rn):
+    if not isinstance(sys, signal.StateSpace): sys = sys.to_ss()
+    K, _, _ = unilab_lqr(sys.A, sys.B, Q, R)
+    L, _, _ = unilab_kalman(sys, Qn, Rn)
+    A_reg = sys.A - sys.B @ K - L @ sys.C
+    return signal.StateSpace(A_reg, L, K, np.zeros((K.shape[0], L.shape[1])))
+
+def unilab_d2c(sys, method='zoh'):
+    return sys.to_continuous()
+
+def unilab_zp2ss(z, p, k):
+    return signal.zpk2ss(_unilab_vec(z), _unilab_vec(p), k)
+
+def unilab_ss2zp(A, B, C, D, iu=0):
+    return signal.ss2zpk(A, B, C, D, input=iu)
+
+def blkdiag(*args):
+    from scipy.linalg import block_diag
+    return block_diag(*[np.atleast_2d(a) for a in args])
+
+def unilab_append(*args):
+    from scipy.linalg import block_diag
+    As, Bs, Cs, Ds = [], [], [], []
+    for s in args:
+        if not isinstance(s, signal.StateSpace): s = s.to_ss()
+        As.append(s.A); Bs.append(s.B); Cs.append(s.C); Ds.append(s.D)
+    return signal.StateSpace(block_diag(*As), block_diag(*Bs), block_diag(*Cs), block_diag(*Ds))
+
+def unilab_canon(sys, type='modal'):
+    if not isinstance(sys, signal.StateSpace): sys = sys.to_ss()
+    if type == 'modal':
+        E, V = np.linalg.eig(sys.A)
+        invV = np.linalg.inv(V)
+        # Handle complex pairs to keep real if desired? No, MATLAB modal can be complex diagonal
+        return signal.StateSpace(np.diag(E), invV @ sys.B, sys.C @ V, sys.D)
+    return sys
+
+def unilab_allmargin(sys):
+    return unilab_margin(sys)
 
 def unilab_freqfreqz(b, a, worN=None):
     w, h = signal.freqz(_unilab_vec(b), _unilab_vec(a), worN=worN)
@@ -735,8 +1025,8 @@ def unilab_call_nargout(nargout, obj, *args, **kwargs):
             name = getattr(obj, '__name__', None)
             if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
             if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
-            if name == 'min' or obj == builtins.min: return min(*args, **kwargs)
-            if name == 'max' or obj == builtins.max: return max(*args, **kwargs)
+            if name == 'min' or obj == builtins.min: return unilab_min(*args, **kwargs)
+            if name == 'max' or obj == builtins.max: return unilab_max(*args, **kwargs)
             if name == 'sum' or obj == builtins.sum: return sum(*args, **kwargs)
             if name == 'any' or obj == builtins.any: return any(*args, **kwargs)
             if name == 'all' or obj == builtins.all: return all(*args, **kwargs)
@@ -772,8 +1062,8 @@ def unilab_call(obj, *args, **kwargs):
             name = getattr(obj, '__name__', None)
             if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
             if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
-            if name == 'min' or obj == builtins.min: return min(*args, **kwargs)
-            if name == 'max' or obj == builtins.max: return max(*args, **kwargs)
+            if name == 'min' or obj == builtins.min: return unilab_min(*args, **kwargs)
+            if name == 'max' or obj == builtins.max: return unilab_max(*args, **kwargs)
             if name == 'sum' or obj == builtins.sum: return sum(*args, **kwargs)
             if name == 'any' or obj == builtins.any: return any(*args, **kwargs)
             if name == 'all' or obj == builtins.all: return all(*args, **kwargs)
@@ -1753,7 +2043,7 @@ def min(*args, axis=None):
         return res, idx
     return np.minimum(*args)
 
-def max(*args, axis=None):
+def unilab_max(*args, axis=None):
     if len(args) == 1:
         x_arr = np.asarray(args[0])
         if axis is None:
@@ -1774,6 +2064,8 @@ def max(*args, axis=None):
             return res.reshape(1, -1), idx.reshape(1, -1)
         return res, idx
     return np.maximum(*args)
+
+max = unilab_max
 
 def sort(x, axis=None):
     if axis is None:
