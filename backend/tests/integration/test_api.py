@@ -13,7 +13,7 @@ except ImportError:
     app = None
     get_core = None
 
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 
 class TestUniLabAPI(unittest.TestCase):
     @classmethod

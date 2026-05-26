@@ -3205,7 +3205,7 @@ def mesh(*args, **kwargs):
     _unilab_refresh_graph(); return res
 
 def plot_nn(layers, title="Neural Network Architecture"):
-    from backend.ml.visualizers.nn_vis import plot_neural_network
+    from backend.stdlib.packages.ml.visualizers.nn_vis import plot_neural_network
     return plot_neural_network(layers, title=title)
 
 def render_image_terminal(img_path, width=None):

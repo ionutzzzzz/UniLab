@@ -6,7 +6,7 @@ from backend.api.dependencies import get_core
 from backend.api.schemas import (
     WorkspaceResponse, VariableInfo, SetVariableRequest, ClearWorkspaceRequest
 )
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["workspace"])
 

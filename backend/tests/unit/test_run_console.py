@@ -3,7 +3,7 @@ import os
 import sys
 import pathlib
 sys.path.insert(0, os.path.abspath('.'))
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 from backend.core.models import SessionInfo
 
 async def main():

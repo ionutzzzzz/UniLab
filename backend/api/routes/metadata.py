@@ -7,7 +7,7 @@ from backend.api.schemas import (
     FunctionListResponse, FunctionSignature, LibraryListResponse, LibraryInfo,
     SearchRequest
 )
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/api/v1", tags=["metadata"])
 

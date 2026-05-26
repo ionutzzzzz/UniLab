@@ -3,7 +3,7 @@ import pytest_asyncio
 import asyncio
 import pathlib
 import os
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 
 # Get the path to the sample directory
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent

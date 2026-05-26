@@ -1,4 +1,4 @@
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 from backend.core.models import BackendConfig
 
 # Singleton instance for the core engine

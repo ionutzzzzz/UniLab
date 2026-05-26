@@ -18,16 +18,17 @@ import time
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, filedialog
 
-# ensure project root is on sys.path so `core.main` is importable
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+# ensure project root is on sys.path so `backend` package is importable
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# import UniLabCore from your core/main.py module
+# import UniLabCore from your core/unilab_core.py module
 try:
-    from core.main import UniLabCore, BackendConfig
+    from backend.core.unilab_core import UniLabCore
+    from backend.core.models import BackendConfig
 except Exception as e:
-    raise RuntimeError("Could not import UniLabCore from core.main — make sure client/ sits next to core/") from e
+    raise RuntimeError("Could not import UniLabCore from core.unilab_core") from e
 
 
 class AsyncRunner:

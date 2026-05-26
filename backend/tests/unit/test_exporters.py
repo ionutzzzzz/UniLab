@@ -4,8 +4,8 @@ import json
 import pandas as pd
 import numpy as np
 import asyncio
-from backend.exporters.csv_exporter import CSVExporter
-from backend.exporters.json_exporter import JSONExporter
+from backend.utils.exporters.csv_exporter import CSVExporter
+from backend.utils.exporters.json_exporter import JSONExporter
 
 class TestExporters(unittest.TestCase):
     def setUp(self):

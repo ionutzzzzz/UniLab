@@ -1,5 +1,5 @@
 import unittest
-from backend.core.core import UniLabTranspiler
+from backend.core.transpiler_core import UniLabTranspiler
 
 class TestUniLabTranspiler(unittest.TestCase):
     def setUp(self):
@@ -27,7 +27,7 @@ class TestUniLabTranspiler(unittest.TestCase):
     def test_function_call(self):
         code = "y = sin(x);"
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("y = unilab_call(sin, x)", result)
+        self.assertIn("y = unilab_call_nargout(1, sin, unilab_call(x))", result)
 
     def test_for_loop(self):
         code = """
@@ -37,7 +37,7 @@ class TestUniLabTranspiler(unittest.TestCase):
         """
         result, _, _ = self.transpiler.transpile(code)
         self.assertIn("for i in", result)
-        self.assertIn("unilab_call(disp, i)", result)
+        self.assertIn("unilab_call_nargout(0, disp, i)", result)
 
     def test_if_statement(self):
         code = """
@@ -50,8 +50,8 @@ class TestUniLabTranspiler(unittest.TestCase):
         end
         """
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("if unilab_to_bool(unilab_gt(x, 0)):", result)
-        self.assertIn("elif unilab_to_bool(unilab_lt(x, 0)):", result)
+        self.assertIn("if unilab_to_bool(unilab_gt(unilab_call(x), 0)):", result)
+        self.assertIn("elif unilab_to_bool(unilab_lt(unilab_call(x), 0)):", result)
         self.assertIn("else:", result)
 
     def test_function_definition(self):
@@ -73,11 +73,11 @@ class TestUniLabTranspiler(unittest.TestCase):
     def test_anonymous_function(self):
         code = "f = @(x, y) x + y;"
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("f = (lambda x, y: (x + y))", result)
+        self.assertIn("f = unilab_handle(lambda x, y: ((unilab_call(x) + unilab_call(y))))", result)
         
         code_no_args = "h = @() 42;"
         result_no_args, _, _ = self.transpiler.transpile(code_no_args)
-        self.assertIn("h = (lambda : 42)", result_no_args)
+        self.assertIn("h = unilab_handle(lambda : (42))", result_no_args)
 
 if __name__ == "__main__":
     unittest.main()
