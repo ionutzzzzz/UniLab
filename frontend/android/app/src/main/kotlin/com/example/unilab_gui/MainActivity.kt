@@ -1,4 +1,4 @@
-package com.example.unilab_gui
+package com.example.unilab
 
 import io.flutter.embedding.android.FlutterActivity
 

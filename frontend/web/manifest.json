@@ -1,6 +1,6 @@
 {
-    "name": "unilab_gui",
-    "short_name": "unilab_gui",
+    "name": "unilab",
+    "short_name": "unilab",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,7 +1,7 @@
 # UniLab: Development Roadmap (v2.0 Native GUI)
 
 ## 🏗️ Phase 1: Foundation & Bridging (Q3 2026)
-- [ ] Initialize Flutter Project (`unilab_gui`)
+- [ ] Initialize Flutter Project (`unilab`)
 - [ ] Initialize Rust Workspace (`unilab_core`)
 - [ ] Integrate `flutter_rust_bridge` for cross-language calls
 - [ ] Proof of Concept: Native math execution (Rust) → UI display (Flutter)
