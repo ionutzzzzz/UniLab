@@ -1,9 +1,12 @@
 """Code execution endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from typing import Optional, Dict, Any
+import asyncio
+import logging
 import uuid
 from datetime import datetime
+from typing import Optional, Dict, Any
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from backend.api.dependencies import get_core
 from backend.api.schemas import (
     ExecuteCodeRequest, ExecutionResultResponse, BatchExecuteRequest,
@@ -13,6 +16,7 @@ from backend.api.schemas import (
 from backend.core.main import UniLabCore
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["execution"])
+logger = logging.getLogger("api.execution")
 
 # Store for background execution tracking
 _background_executions: Dict[str, Dict[str, Any]] = {}
@@ -32,7 +36,19 @@ async def execute_code(
             if not code.endswith(';'):
                 code += ';'
         
-        result = await core.run_code(session_id, code, timeout=req.timeout)
+        try:
+            result = await core.run_code(session_id, code, timeout=req.timeout)
+        except asyncio.TimeoutError:
+            return ExecutionResultResponse(
+                success=False,
+                stdout="",
+                stderr=f"Execution timed out after {req.timeout} seconds.",
+                return_code=124,
+                duration_s=req.timeout,
+                variables_snapshot={},
+                plots=[],
+                execution_id=str(uuid.uuid4())
+            )
         
         # Convert VariableInfo dicts to the schema
         variables_snapshot = {}
@@ -57,9 +73,11 @@ async def execute_code(
             extra=result.extra
         )
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        logger.error(f"Execution failed: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Execution system error: {str(e)}")
 
 
 @router.post("/{session_id}/execute-async")
@@ -80,6 +98,12 @@ async def execute_code_async(
                 "result": result,
                 "timestamp": datetime.now().isoformat()
             }
+        except asyncio.TimeoutError:
+             _background_executions[execution_id] = {
+                "status": "failed",
+                "error": "Execution timed out",
+                "timestamp": datetime.now().isoformat()
+            }
         except Exception as e:
             _background_executions[execution_id] = {
                 "status": "failed",
@@ -87,6 +111,14 @@ async def execute_code_async(
                 "timestamp": datetime.now().isoformat()
             }
     
+    # Check session existence first
+    try:
+        session = await core.get_session(session_id)
+        if not session:
+             raise HTTPException(status_code=404, detail="Session not found")
+    except KeyError:
+         raise HTTPException(status_code=404, detail="Session not found")
+
     _background_executions[execution_id] = {
         "status": "running",
         "timestamp": datetime.now().isoformat()

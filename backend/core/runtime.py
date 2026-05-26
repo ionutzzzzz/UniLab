@@ -188,6 +188,10 @@ class UnilabCallableConstant:
     def __le__(self, other): return self.val <= other
     def __gt__(self, other): return self.val > other
     def __ge__(self, other): return self.val >= other
+    def __neg__(self): return -self.val
+
+def kron(a, b):
+    return np.kron(a, b)
 
 inf = UnilabCallableConstant(np.inf)
 Inf = inf
@@ -1015,7 +1019,9 @@ def unilab_range(start, stop, step=1):
     if isinstance(start, UnilabEnd) or isinstance(stop, UnilabEnd):
         return slice(start, stop, step)
     # Standard numerical range
-    return np.atleast_2d(np.arange(start, stop + step, step))
+    # Use a small epsilon to handle floating point precision and match MATLAB's inclusive-if-within-step behavior
+    eps = abs(step) * 1e-10
+    return np.atleast_2d(np.arange(start, stop + eps, step))
 
 
 def _unilab_resolve_idx(idx, size):
@@ -1168,7 +1174,7 @@ def unilab_call(obj, *args, **kwargs):
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
                 if isinstance(res, np.ndarray) and res.ndim == 1: 
                     # Try to maintain orientation if original was column vector
-                    if obj.ndim == 2 and obj.shape[1] == 1:
+                    if (obj.ndim == 2 and obj.shape[1] == 1) or obj.ndim == 1:
                         return res.reshape(-1, 1)
                     return res.reshape(1, -1)
                 return res
@@ -1515,6 +1521,56 @@ def specgram(*args, **kwargs):
     _unilab_refresh_graph()
     return res
 
+def unilab_mean(x, axis=None):
+    """MATLAB-compatible mean() function."""
+    x_arr = np.asarray(x)
+    if axis is not None:
+        if isinstance(axis, (int, float, np.integer, np.floating)):
+            axis = int(axis) - 1
+    elif x_arr.ndim > 1:
+        # MATLAB default mean is along first non-singleton dimension
+        axis = 0
+        for i, d in enumerate(x_arr.shape):
+            if d > 1: axis = i; break
+            
+    res = np.mean(x_arr, axis=axis)
+    # Return as Python scalar if it's a single value
+    if hasattr(res, 'item') and res.size == 1:
+        return res.item()
+    return res
+
+def unilab_median(x, axis=None):
+    """MATLAB-compatible median() function."""
+    x_arr = np.asarray(x)
+    if axis is not None:
+        if isinstance(axis, (int, float, np.integer, np.floating)):
+            axis = int(axis) - 1
+    elif x_arr.ndim > 1:
+        axis = 0
+        for i, d in enumerate(x_arr.shape):
+            if d > 1: axis = i; break
+    res = np.median(x_arr, axis=axis)
+    if hasattr(res, 'item') and res.size == 1:
+        return res.item()
+    return res
+
+def unilab_quantile(x, p, axis=None):
+    """MATLAB-compatible quantile() function."""
+    x_arr = np.asarray(x)
+    p_arr = np.asarray(p)
+    if axis is not None:
+        if isinstance(axis, (int, float, np.integer, np.floating)):
+            axis = int(axis) - 1
+    elif x_arr.ndim > 1:
+        axis = 0
+        for i, d in enumerate(x_arr.shape):
+            if d > 1: axis = i; break
+    # MATLAB quantile takes p in [0, 1], NumPy quantile also does (since version 1.15)
+    res = np.quantile(x_arr, p_arr, axis=axis)
+    if hasattr(res, 'item') and res.size == 1:
+        return res.item()
+    return res
+
 def unilab_set(obj, val, *args):
     if len(args) == 1 and isinstance(args[0], str):
         # Property set
@@ -1551,8 +1607,14 @@ def unilab_set(obj, val, *args):
             
         if isinstance(obj, np.ndarray):
             v_val = val
-            if isinstance(val, np.ndarray) and val.size == 1:
-                v_val = val.item()
+            # Handle size-1 values (arrays, lists, tuples) by converting to scalar
+            if hasattr(val, '__len__') or isinstance(val, np.ndarray):
+                if np.size(val) == 1:
+                    try:
+                        if isinstance(val, np.ndarray): v_val = val.item()
+                        elif isinstance(val, (list, tuple)): v_val = val[0]
+                        else: v_val = float(val)
+                    except: pass
                 
             # Handle automatic array expansion
             try:
@@ -1591,8 +1653,16 @@ def unilab_set(obj, val, *args):
                     else:
                         obj.flat[idx_adj] = v_val
                 except:
-                    # Last resort: reshape val to match target if possible
-                    obj.flat[idx_adj] = np.asarray(v_val).flatten()
+                    # Last resort: try to broadcast/reshape
+                    try:
+                        v_arr = np.asarray(v_val)
+                        if v_arr.size == 1:
+                            obj.flat[idx_adj] = v_arr.item()
+                        else:
+                            obj.flat[idx_adj] = v_arr.flatten()
+                    except Exception as final_err:
+                        # If it still fails, raise a more descriptive error
+                        raise ValueError(f"Failed to set value at index {idx_adj}: {final_err}")
             return obj
         
         # Handle list expansion (for cell arrays and varargout)
@@ -1692,7 +1762,9 @@ def unilab_matrix_concat(*rows):
                     else:
                         processed.append(np.atleast_2d(r))
                 # In UniLab [X, Y] where X and Y are matrices usually means horizontal concat.
-                return np.hstack(processed).astype(np.float64)
+                res = np.hstack(processed)
+                target_dtype = np.complex128 if np.iscomplexobj(res) else np.float64
+                return res.astype(target_dtype)
             except:
                 # Fallback to standard array creation
                 return np.array(items, dtype=object)
@@ -1701,7 +1773,9 @@ def unilab_matrix_concat(*rows):
         if builtins.all(isinstance(r, (str, np.str_)) for r in items):
             return "".join(str(r) for r in items)
 
-        return np.atleast_2d(items).astype(np.float64)
+        res = np.atleast_2d(items)
+        target_dtype = np.complex128 if np.iscomplexobj(res) else np.float64
+        return res.astype(target_dtype)
 
     try:
         # Multi-row concatenation [A; B]
@@ -1742,13 +1816,18 @@ def unilab_matrix_concat(*rows):
                 # but it fixes the [ []; 2.0 ] case.
                 processed_rows = non_empty_rows
 
-        return np.vstack(processed_rows).astype(np.float64)
+        # Use complex if any row is complex
+        res = np.vstack(processed_rows)
+        target_dtype = np.complex128 if np.iscomplexobj(res) else np.float64
+        return res.astype(target_dtype)
     except:
         # Fallback
         if builtins.all(isinstance(r, (str, np.str_)) for r in rows):
             return "".join(str(r) for r in rows)
         try:
-            return np.array(rows, dtype=np.float64)
+            arr = np.array(rows)
+            target_dtype = np.complex128 if np.iscomplexobj(arr) else np.float64
+            return arr.astype(target_dtype)
         except:
             return np.array(rows, dtype=object)
 def unilab_nargin_sum(gen):
@@ -3201,12 +3280,32 @@ def unilab_clear_workspace(g):
     import backend.core.runtime as rt
     keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
     
+    # Aliases injected by transpiler that need to be preserved/restored
+    aliases = {
+        'abs': rt.unilab_abs,
+        'round': getattr(rt, 'round', builtins.round),
+        'floor': getattr(rt, 'floor', np.floor),
+        'ceil': getattr(rt, 'ceil', np.ceil),
+        'max': rt.unilab_max,
+        'min': rt.unilab_min,
+        'sum': rt.unilab_sum,
+        'mean': rt.unilab_mean,
+        'any': rt.unilab_any,
+        'all': rt.unilab_all,
+        'prod': getattr(rt, 'unilab_prod', np.prod),
+        'eig': rt.unilab_eig,
+        'xcorr': rt.unilab_xcorr,
+        'ode45': getattr(rt, 'ode45', None)
+    }
+
     # Track runtime names to reset them later
     runtime_names = set()
     for name in dir(rt):
         if not name.startswith('_'): 
             keys_to_keep.add(name)
             runtime_names.add(name)
+            
+    keys_to_keep.update(aliases.keys())
             
     modules_to_keep = [k for k, v in g.items() if isinstance(v, types.ModuleType)]
     keys_to_keep.update(modules_to_keep)
@@ -3218,6 +3317,11 @@ def unilab_clear_workspace(g):
     for name in runtime_names:
         if name in g:
             g[name] = getattr(rt, name)
+            
+    # Restore aliases
+    for name, func in aliases.items():
+        if func is not None:
+            g[name] = func
 
 def unilab_clear_variables(g, names):
     for name in names:
@@ -3299,5 +3403,5 @@ def find_peaks(x, min_height=-np.inf):
     n_out = unilab_get_nargout()
     if n_out <= 1:
         return np.array(peaks).reshape(1, -1)
-    
     return np.array(peaks).reshape(-1, 1), np.array(locs).reshape(-1, 1)
+

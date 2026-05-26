@@ -570,12 +570,11 @@
         function appendPlot(session_id, plotId, b64Data = null, data3d = null, target = outputEl) {
             // Check if this is a 3D plot by examining the data or filename
             // Priority 1: Check for explicit "3d_" marker in filename (from backend)
-            const is3DPlot = plotId.includes('3d_') ||
-                             plotId.includes('3d') ||
+            const is3DPlot = !!data3d ||
+                             plotId.includes('3d_') ||
                              plotId.includes('surf') ||
                              plotId.includes('mesh') ||
-                             plotId.includes('scatter3') ||
-                             (b64Data && b64Data.includes('3D'));
+                             plotId.includes('scatter3');
 
             if (is3DPlot && data3d) {
                 // Render 3D plot interactively with Plotly.js

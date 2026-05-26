@@ -1,14 +1,12 @@
 # 🧪 UniLab
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![SCSS](https://img.shields.io/badge/SCSS-CC6699?style=for-the-badge&logo=sass&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=Flutter&logoColor=white)
+![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
+![Dart](https://img.shields.io/badge/dart-%230175C2.svg?style=for-the-badge&logo=dart&logoColor=white)
+![WebAssembly](https://img.shields.io/badge/wasm-%23624DE8.svg?style=for-the-badge&logo=webassembly&logoColor=white)
 
-
-<!-- ![C/C++](https://img.shields.io/badge/C%2FC%2B%2B-00599C?style=for-the-badge&logo=c&logoColor=white) -->
-
-> An accessible, modern environment for the simulation, modeling, and analysis of mathematical systems.
+> A high-performance, local-first environment for the simulation, modeling, and analysis of mathematical systems.
 
 ---
 
@@ -16,137 +14,86 @@
 1. [About The Project](#-about-the-project)
 2. [Key Features](#-key-features)
 3. [Technology Stack](#-technology-stack)
-4. [Getting Started](#-getting-started)
-5. [Usage Examples](#-usage-examples)
-6. [Roadmap](#-roadmap)
-7. [Contributing](#-contributing)
-8. [License](#-license)
+4. [Architecture Pivot](#-architecture-pivot)
+5. [Roadmap](#-roadmap)
+6. [Contributing](#-contributing)
+7. [License](#-license)
 
 ---
 
 ## 📖 About The Project
 
-**UniLab** is a personal project designed for students and researchers. It focuses on the simulation, modeling, and analysis of mathematical systems, with deep applications in artificial intelligence, engineering, and data processing. 
+**UniLab** is an advanced platform designed for students, researchers, and engineers. It focuses on the simulation, modeling, and analysis of mathematical systems, with deep applications in artificial intelligence, control theory, and signal processing.
 
-Historically, advanced mathematical modeling has been locked behind expensive, heavy, and visually outdated legacy software. The platform was built to provide an accessible and modern alternative to industry-standard tools such as Matlab and Wolfram Alpha. By integrating computational methods, dynamic visualization, and algorithmic experimentation into a single unified environment, UniLab streamlines complex technical workflows.
+Historically, advanced mathematical modeling has been locked behind expensive, server-heavy, or visually outdated legacy software. UniLab provides a **modern, local-first alternative**. By moving computation directly to your device (Mobile, Desktop, or Web) using Rust and WebAssembly, UniLab eliminates latency and ensures your data stays private.
 
-Whether you are plotting multi-variable calculus equations, training a localized machine learning model, or analyzing signal processing data, UniLab provides the necessary horsepower in a lightweight, browser-accessible interface.
+Whether you are designing a control system, training a machine learning model, or analyzing complex signals, UniLab provides the horsepower of a native environment in a sleek, high-fidelity interface.
 
 ---
 
 ## ✨ Key Features
 
-* **Mathematical Simulation & Modeling**: Advanced environments tailored for analyzing complex, non-linear mathematical systems.
-* **AI & Engineering Applications**: Engineered to handle heavy data processing and artificial intelligence workflows out of the box.
-* **Unified Workspace**: Seamlessly combines raw computation, visualization, and algorithmic testing in one dashboard.
-* **Modern & Accessible**: A sleek, user-friendly counterpart to traditional legacy software, prioritizing user experience without sacrificing power.
-* **Containerized Execution**: Safely execute complex scripts in isolated environments to prevent system-level interference.
-* **Real-time Collaboration** *(Beta)*: Share workspaces and algorithmic models with peers dynamically.
+* **Local-First Execution**: Computation happens on your device. No remote servers, no latency, no privacy concerns.
+* **Cross-Platform Parity**: A unified experience across iOS, Android, macOS, Windows, Linux, and the Web.
+* **High-Fidelity Graphics**: Interactive, real-time plotting and 3D visualizations powered by Flutter's Impeller/Skia engines.
+* **Rust-Powered Engine**: A high-performance core designed for native speed and the future home of a custom mathematical compiler.
+* **MATLAB-Compatible Syntax**: Leverage your existing knowledge with a familiar scientific syntax transpiled for speed.
 
 ---
 
 ## 🛠️ Technology Stack
 
-UniLab leverages a robust, high-performance technology stack to ensure both computational speed and a responsive user interface:
+UniLab is transitioning to a memory-safe, high-performance stack:
 
-### **Computation & Core Engine**
-* **Python**: The backbone for data science libraries, machine learning matrices, and high-level logic.
-* **C / C++**: Utilized for low-level performance bottlenecks, ensuring that heavy mathematical simulations run at native speeds.
+### **Engine & Computation**
+* **Rust**: The core execution engine, providing safety and native performance.
+* **WebAssembly (Wasm)**: Enables the Rust engine to run at near-native speeds in web browsers.
+* **FFI**: Bridges the core engine to mobile and desktop platforms.
 
-### **Frontend Architecture**
-* **React**: Powers the dynamic, single-page application (SPA) interface, allowing for real-time visual updates.
-* **SCSS**: Provides modular, maintainable, and sleek styling for the modern web interface.
+### **Frontend & UI**
+* **Flutter**: Powers the pixel-perfect, interactive GUI across all platforms.
+* **Dart**: The language behind Flutter's responsive and smooth user experience.
 
-### **Deployment & Infrastructure**
-* **Docker**: Ensures seamless containerization, meaning the project runs consistently across development, staging, and production environments regardless of the host OS.
+---
+
+## 🔄 Architecture Pivot
+
+We are currently in the process of migrating from a Python/React/Docker architecture to a **Native Flutter/Rust** stack. This change is driven by the need for:
+1. **Offline Capability**: Removing the dependency on a backend server.
+2. **Performance**: Leveraging Rust's zero-cost abstractions for heavy math.
+3. **Consistency**: Ensuring a single codebase provides a premium experience on every device.
 
 ---
 
 ## 🚀 Getting Started
 
-To get a local copy up and running, follow these simple steps.
+*Note: The project is currently in the middle of the architectural migration. Local Python execution is still supported via the CLI.*
 
-### Prerequisites
-Make sure you have the following installed on your local machine:
-* [Docker Desktop](https://www.docker.com/products/docker-desktop)
-* [Git](https://git-scm.com/)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ionutzzzzz/Unilab
-   cd unilab
-   ```
-
-2. **Build the Docker containers**
-    ```bash
-    docker-compose build
-    ```
-
-3. **Run the application**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Open your browser and navigate to http://localhost:3000.**
-
-## 💻 Usage Examples
-
-UniLab allows you to define systems using a simplified, Python-inspired syntax. Here is a quick example of defining a basic matrix operation and plotting it via the internal API:
-
-```m
-% 1. Create Data
-x = 0:0.1:2*pi;    % Range from 0 to 2*pi with 0.1 increments
-y = sin(x);        % Calculate sine of x
-
-% 2. Create Plot
-figure;            % Open new figure window
-plot(x, y, '-r', 'LineWidth', 2); % Plot red solid line
-
-% 3. Customize Plot
-title('Sine Wave Example');
-xlabel('Angle (radians)');
-ylabel('sin(x)');
-grid on;           % Add grid lines
-
+### CLI Usage (Legacy Python)
+```bash
+cd backend
+python3 UniLab.py console
 ```
+
+### Building the New GUI (Coming Soon)
+Stay tuned as we initialize the Flutter and Rust workspaces.
+
+---
 
 ## 🗺️ Roadmap
 
-- [x] Core computation engine (Transplier)
+- [x] Core computation engine (Python Transpiler)
+- [x] 65+ Scientific Library toolboxes
+- [x] Architectural Design for Cross-Platform GUI
+- [ ] Initialize Flutter + Rust (FFI/Wasm) bridge
+- [ ] Port Parser/Transpiler to Rust
+- [ ] Native high-performance plotting in Flutter
+- [ ] Local File/Workspace Manager
+- [ ] Custom UniLab Compiler/Interpreter in Rust
 
-- [x] Testing and implementation
+---
 
-- [x] Create custom libraries
-
-- [ ] Basic React/SCSS frontend integration
-
-- [ ] Docker containerization
-
-- [ ] Implement advanced neural network visualizers
-
-- [ ] Add export support for .csv, .json, and .pdf reports
-
-- [ ] Cloud-hosted deployment and user authentication
-
-- [ ] Plugin marketplace for community-driven algorithms
-
-## 🤝 Contributing
-
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
-
-Fork the Project
-
-Create your Feature Branch (git checkout -b feature/AmazingFeature)
-
-Commit your Changes (git commit -m 'Add some AmazingFeature')
-
-Push to the Branch (git push origin feature/AmazingFeature)
-
-Open a Pull Request
-
-## 📝License
+## 📝 License
 
 Distributed under the MIT License. See LICENSE for more information.
 

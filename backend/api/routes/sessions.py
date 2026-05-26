@@ -78,7 +78,7 @@ async def get_session(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found or has expired")
         
         return SessionResponse(
             session_id=session.session_id,

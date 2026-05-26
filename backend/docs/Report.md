@@ -1,86 +1,77 @@
 # UniLab: Comprehensive Technical Report
-## Scientific Computing & Research Platform
+## Scientific Computing & Native GUI Transition
 
-**Date:** May 18, 2026  
-**Status:** Version 1.0 (Post-Bug Fix)  
-**Project Type:** Machine Learning, Engineering & Math Research Platform
+**Date:** May 26, 2026  
+**Status:** Version 2.0 (Architectural Pivot)  
+**Project Type:** Native Cross-Platform Simulation & Modeling
 
 ---
 
 ## Executive Summary
 
-UniLab is a MATLAB-compatible scientific platform that transpiles `.m` scripts to Python, enabling seamless execution of mathematical, machine learning, and engineering algorithms on a modern Python backend. The platform combines:
+UniLab is transitioning from a MATLAB-to-Python transpiler into a **fully native, local-first scientific computing platform**. By leveraging **Flutter** for the UI and **Rust** for the core execution engine, UniLab provides a high-performance environment that runs locally on Mobile, Desktop, and Web browsers (via WebAssembly).
 
-- **MATLAB-like syntax** for researchers familiar with MATLAB/Octave
-- **Python backend** leveraging NumPy, SciPy, scikit-learn, and SymPy
-- **Automatic function loading** from a library ecosystem
-- **Support for symbolic math, control systems, ML algorithms, and signal processing**
-
-### Project Health
-- **Initial Status:** 80/88 tests passing (90.9%)
-- **Critical Issue Found:** Array literal transpilation bug affecting 7 of 8 failures
-- **Post-Fix Status:** Expecting 88/88 passing (100%)
-- **Supported Features:** ML, statistics, control theory, symbolic math, signal processing, visualization
+### Project Evolution
+- **Phase 1 (Legacy):** Python-based backend using NumPy/SciPy (Stabilized).
+- **Phase 2 (Active):** Native transition to Rust and Flutter for true cross-platform parity.
+- **Goal:** A professional-grade, offline-capable alternative to MATLAB with a custom native compiler.
 
 ---
 
-## Architecture Overview
+## Architecture Overview (v2.0)
 
-### Execution Pipeline
+### New Execution Pipeline
 ```
-.m File
+.m File (Local Device Storage)
     ↓
-UniLabTranspiler (Lark EBNF Grammar)
+Rust Core Parser (Nom/Pest based)
     ↓
-Python Code String
+AST Generation
     ↓
-exec() in AutoloadDict Context
+Rust AST Interpreter / Future Native Compiler
     ↓
-Runtime Builtins + Autoloaded Libraries
+Native Math Libraries (Rust ndarray/nalgebra)
     ↓
-Output (Variables, Plots, Results)
+Flutter UI (Real-time data-driven rendering)
 ```
 
 ### Key Components
 
-#### 1. **Transpiler (`backend/core/core.py`)**
-- **Grammar:** MATLAB-like syntax with custom extensions
-- **Architecture:** Lark EBNF parser + Python AST transformer
-- **Features:**
-  - Variable assignment, array operations, matrix literals
-  - Control flow (if/elseif/else, for, while, try/catch)
-  - Anonymous functions (lambda expressions)
-  - Function definitions and nested scopes
-  - String and numeric literal handling
-  - Array indexing (1-based MATLAB style → 0-based Python)
+#### 1. **Frontend: Flutter (Dart)**
+- **Role:** Interactive GUI, Workspace Manager, and Plotting Engine.
+- **Rendering:** Uses the Impeller/Skia engine for smooth 60fps interactive charts and 3D visualizations.
+- **Platforms:** iOS, Android, macOS, Windows, Linux, and Web.
 
-#### 2. **Runtime (`backend/core/runtime.py`)**
-- **Mathematical Functions:** sin, cos, tan, log, exp, sqrt, etc.
-- **Array Operations:** zeros, ones, eye, reshape, transpose, etc.
-- **Statistics:** mean, std, var, median, quantile
-- **Linear Algebra:** inv, det, eig, svd
-- **String Functions:** sprintf, num2str, mat2str
-- **Control Functions:** tf (transfer functions), feedback, step, bode
+#### 2. **Core Engine: Rust**
+- **Role:** High-performance mathematical execution and parsing.
+- **Portability:** Compiles to native binaries (FFI) for apps and WebAssembly (Wasm) for the browser.
+- **Safety:** Leverages Rust's memory safety to ensure stability during complex simulations.
 
-#### 3. **Autoload System (`backend/core/engines/transpiler.py`)**
-- **AutoloadDict:** Python dict subclass that loads `.m` files on-demand
-- **Search Paths:** `backend/libraries/*/` and user-defined paths
-- **Execution:** Transpile + execute autoloaded files in shared context
-- **Libraries:**
-  - `math/` — Optimization, ODE solvers, advanced calculus
-  - `stats/` — Statistical functions (regression, scaling, distribution analysis)
-  - `control/` — Control theory (transfer functions, stability analysis)
-  - `signal/` — Signal processing (filters, transforms)
-  - `viz/` — Visualization and plotting
-- **ML/Stats Packages:** Python packages loaded as `ml` and `stats` modules
-
-#### 4. **Test Suite (`backend/tests/unit/`)**
-- 88 unit tests covering all core functionality
-- Categories: API endpoints, transpiler, runtime, sample scripts, visualization
+#### 3. **Bridge: flutter_rust_bridge**
+- **Role:** Asynchronous communication layer between Dart and Rust.
+- **Features:** Type-safe data transfer, zero-copy optimization, and simplified API generation.
 
 ---
 
-## Bugs Found & Fixed
+## Roadmap: The Path to Native UniLab
+
+### Phase 1: Engine Foundation
+- **Parser Migration:** Porting the Lark EBNF grammar to Rust using the `pest` library for faster, native parsing.
+- **AST Interpreter:** Building a high-speed tree-walking interpreter in Rust to replace the Python `exec()` model.
+- **Numerical Core:** Integrating `ndarray` and `nalgebra` to replace NumPy functionalities.
+
+### Phase 2: Native GUI Development
+- **Flutter Workspace:** Developing a local file explorer and workspace manager that works offline.
+- **Interactive Plotting:** Building custom Flutter widgets that render data vectors directly from Rust, removing the dependency on Matplotlib.
+- **Code Editor:** Implementation of a high-performance editor with syntax highlighting and code completion.
+
+### Phase 3: The Custom Compiler
+- **IR Generation:** Designing an Intermediate Representation (IR) optimized for mathematical operations.
+- **LLVM Integration:** Exploring LLVM as a backend for the UniLab compiler to achieve native machine-code speeds.
+
+---
+
+## Legacy Phase 1: Bugs Found & Fixed (Python Core)
 
 ### Summary Table
 | # | File | Bug | Fix | Impact |
@@ -92,7 +83,7 @@ Output (Variables, Plots, Results)
 | 5 | `gradient_descent.m` | eps shadows global constant | Rename to epsilon | Variable corruption |
 | 6 | `test_transpiler.py` | Outdated assertion strings | Update assertions | Test failure |
 
-### Detailed Fixes
+### Detailed Fixes (Legacy)
 
 #### Fix 1: Array Literal Transpilation (`runtime.py:638-679`)
 **Problem:** The transpiler's `row()` function converts all tokens to strings via `str()`. Numeric literals become Python string representations (`'1'`, `'2'`, `'3'`). When `unilab_matrix_concat(['1', '2', '3'])` runs, it detects all strings and does MATLAB-style char-array concatenation → returns `"123"` instead of numeric array.

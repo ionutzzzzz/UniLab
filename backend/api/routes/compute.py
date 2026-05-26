@@ -30,16 +30,16 @@ async def run_code(req: RunCodeRequest, core: UniLabCore = Depends(get_core)):
         result = await core.run_code(req.session_id, req.code, timeout=req.timeout)
         return result
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=f"Session {req.session_id} not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Compute engine error: {str(e)}")
 
 @router.get("/sessions/{session_id}/files")
 async def list_files(session_id: str, path: Optional[str] = None, core: UniLabCore = Depends(get_core)):
     try:
         return await core.list_files(session_id, path)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
 @router.post("/sessions/{session_id}/export")
 async def export_workspace(session_id: str, format: str = "json", filename: Optional[str] = None, core: UniLabCore = Depends(get_core)):
@@ -47,6 +47,6 @@ async def export_workspace(session_id: str, format: str = "json", filename: Opti
         path = await core.export_workspace(session_id, format, filename)
         return {"path": path}
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

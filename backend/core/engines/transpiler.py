@@ -111,6 +111,7 @@ class TranspilerEngine(BaseEngine):
         self.globals['max'] = runtime.unilab_max
         self.globals['min'] = runtime.unilab_min
         self.globals['sum'] = runtime.unilab_sum
+        self.globals['mean'] = runtime.unilab_mean
         self.globals['any'] = runtime.unilab_any
         self.globals['all'] = runtime.unilab_all
         self.globals['prod'] = runtime.unilab_prod

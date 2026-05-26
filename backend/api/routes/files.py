@@ -42,7 +42,7 @@ async def list_workspace_files(
             path=path or ""
         )
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -100,9 +100,9 @@ async def get_file_content(
             is_text=True
         )
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,7 +119,7 @@ async def upload_file(
         # Get session workspace
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         workspace_path = session.workspace_path
         file_path = workspace_path / file.filename
@@ -128,7 +128,7 @@ async def upload_file(
         if file_path.exists() and not overwrite:
             raise HTTPException(
                 status_code=409,
-                detail="File already exists. Set overwrite=true to replace."
+                detail=f"File '{file.filename}' already exists. Set overwrite=true to replace."
             )
         
         # Write file
@@ -157,14 +157,14 @@ async def create_file(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         file_path = session.workspace_path / req.filename
         
         if file_path.exists() and not req.overwrite:
             raise HTTPException(
                 status_code=409,
-                detail="File already exists. Set overwrite=true to replace."
+                detail=f"File '{req.filename}' already exists. Set overwrite=true to replace."
             )
         
         await core.write_file(session_id, req.filename, req.content)
@@ -191,12 +191,12 @@ async def delete_file(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         file_path = session.workspace_path / filepath
         
         if not file_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
         
         file_path.unlink()
         
@@ -252,9 +252,9 @@ async def run_script(
             "variables": variables_snapshot
         }
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Script file not found")
+        raise HTTPException(status_code=404, detail=f"Script file '{req.filename}' not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -276,7 +276,7 @@ async def download_file(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         # Security: prevent directory traversal
         filename = os.path.basename(file_path)
@@ -294,7 +294,7 @@ async def download_file(
                      alt_found = True
                      break
              if not alt_found:
-                raise HTTPException(status_code=403, detail="Forbidden")
+                raise HTTPException(status_code=403, detail="Access denied: path is outside workspace")
 
         if not full_path.exists():
             # Try subdirectories if not found exactly as requested
@@ -328,4 +328,3 @@ async def download_file(
     except Exception as e:
         logger.error(f"Download Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-

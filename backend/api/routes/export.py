@@ -60,9 +60,9 @@ async def export_workspace(
             filename=export_file.name
         )
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 
 @router.get("/{session_id}/export/{export_id}")
@@ -76,16 +76,16 @@ async def download_export(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         # Look for export file
         export_dir = session.workspace_path / "exports"
         if not export_dir.exists():
-            raise HTTPException(status_code=404, detail="Export not found")
+            raise HTTPException(status_code=404, detail=f"Export directory not found for session {session_id}")
         
         export_file = export_dir / export_id
         if not export_file.exists():
-            raise HTTPException(status_code=404, detail="Export file not found")
+            raise HTTPException(status_code=404, detail=f"Export file '{export_id}' not found")
         
         # Add cleanup task
         background_tasks.add_task(cleanup_file, str(export_file))
@@ -123,6 +123,9 @@ async def generate_plot(
         
         # Save plot
         session = await core.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
         plot_dir = session.workspace_path / "plots"
         plot_dir.mkdir(exist_ok=True)
         
@@ -151,6 +154,8 @@ async def generate_plot(
         )
     except HTTPException:
         raise
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Plot generation failed: {str(e)}")
 
@@ -165,13 +170,13 @@ async def get_plot(
     """Download a generated plot."""
     try:
         if plot_id not in _generated_plots:
-            raise HTTPException(status_code=404, detail="Plot not found")
+            raise HTTPException(status_code=404, detail=f"Plot {plot_id} not found")
         
         plot_info = _generated_plots[plot_id]
         plot_path = Path(plot_info['path'])
         
         if not plot_path.exists():
-            raise HTTPException(status_code=404, detail="Plot file not found")
+            raise HTTPException(status_code=404, detail=f"Plot file not found for {plot_id}")
         
         # Add cleanup task
         background_tasks.add_task(cleanup_file, str(plot_path), plot_id)
@@ -193,7 +198,7 @@ async def list_plots(
     try:
         session = await core.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
         plot_dir = session.workspace_path / "plots"
         plots = []
@@ -225,7 +230,7 @@ async def delete_plot(
     """Delete a generated plot."""
     try:
         if plot_id not in _generated_plots:
-            raise HTTPException(status_code=404, detail="Plot not found")
+            raise HTTPException(status_code=404, detail=f"Plot {plot_id} not found")
         
         plot_info = _generated_plots[plot_id]
         plot_path = Path(plot_info['path'])
@@ -252,8 +257,10 @@ async def export_plot_as_data(
     """Export plot data (for recreation on client)."""
     try:
         if plot_id not in _generated_plots:
-            raise HTTPException(status_code=404, detail="Plot not found")
+            raise HTTPException(status_code=404, detail=f"Plot {plot_id} not found")
         
         return _generated_plots[plot_id]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

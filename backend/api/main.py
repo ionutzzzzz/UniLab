@@ -1,35 +1,38 @@
 import os
 import sys
 import pathlib
+import traceback
+from datetime import datetime
 from contextlib import asynccontextmanager
 
-# Force Headless Mode for Matplotlib and Qt
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 os.environ['UNILAB_WEB_MODE'] = '1'
 import matplotlib
 matplotlib.use('Agg')
 
-# Add the project root to sys.path
 current_dir = pathlib.Path(__file__).resolve().parent
 project_root = (current_dir / ".." / "..").resolve()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from backend.api.routes import (
     compute, sessions, execution, workspace, files, export, metadata, system
 )
 from backend.api.dependencies import start_core, stop_core
+from backend.api.schemas import ErrorResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
     await start_core()
     yield
-    # Shutdown logic
     await stop_core()
 
 app = FastAPI(
@@ -41,6 +44,50 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     lifespan=lifespan
 )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP Error",
+            "detail": str(exc.detail),
+            "status_code": exc.status_code,
+            "timestamp": datetime.now().timestamp()
+        },
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    detail = []
+    for error in errors:
+        loc = " -> ".join(str(l) for l in error.get("loc", []))
+        msg = error.get("msg", "Unknown error")
+        detail.append(f"[{loc}]: {msg}")
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": "Validation Error",
+            "detail": "; ".join(detail) if detail else "Invalid request parameters",
+            "status_code": 422,
+            "timestamp": datetime.now().timestamp()
+        },
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Internal Server Error",
+            "detail": str(exc),
+            "traceback": traceback.format_exc() if os.environ.get("DEBUG") else None,
+            "status_code": 500,
+            "timestamp": datetime.now().timestamp()
+        },
+    )
 
 # Configure CORS
 app.add_middleware(
@@ -64,7 +111,7 @@ app.include_router(files.router)
 app.include_router(export.router)
 app.include_router(metadata.router)
 app.include_router(system.router)
-app.include_router(compute.router)  # Keep legacy routes for backward compatibility
+app.include_router(compute.router)  
 
 from fastapi.responses import Response
 

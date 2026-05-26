@@ -42,7 +42,7 @@ async def get_workspace(
             variable_count=len(variables)
         )
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,12 +67,12 @@ async def get_variable(
                 preview=str(info.get('preview', ''))[:1000]
             )
         else:
-            raise HTTPException(status_code=404, detail=f"Variable '{var_name}' not found")
+            raise HTTPException(status_code=404, detail=f"Variable '{var_name}' not found in workspace")
     
     except HTTPException:
         raise
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -106,10 +106,10 @@ async def set_variable(
         if result.success:
             return {"status": "success", "variable": var_name}
         else:
-            raise HTTPException(status_code=400, detail=f"Failed to set variable: {result.stderr}")
+            raise HTTPException(status_code=400, detail=f"Failed to set variable '{var_name}': {result.stderr}")
     
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -126,7 +126,7 @@ async def delete_variable(
         
         return {"status": "success", "variable": var_name, "cleared": result.success}
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -153,7 +153,7 @@ async def clear_workspace(
             "message": "Workspace cleared"
         }
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -186,7 +186,7 @@ async def get_variables_detailed(
             "timestamp": result.duration_s
         }
     except KeyError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
