@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniLab UI/UX Redesign Master Plan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Deep Slate & Cyan Accent (MATLAB/VS Code Inspired). Main background: Slate-900 (#0f172a), Panels: Slate-800 (#1e293b), Accents: Cyan-500 (#06b6d4) and Blue-500 (#3b82f6), Text: Slate-200 to Slate-50. -->
+    <!-- Application Structure Plan: A dashboard-style presentation prioritizing the architectural vision. Section 1 is an interactive 'Interactive Layout Blueprint' that visually translates the 5-zone UI requirements (Left, Right, Center, Top, Bottom) into a clickable structural model, allowing developers to immediately grasp the spatial relationships and content of each panel. Section 2 is an 'Implementation Roadmap' utilizing a timeline and an effort-estimation chart to break down the 6 execution phases. Section 3 is a 'Feature Matrix' grouping technical requirements and dependencies. This structure was chosen because it converts a linear markdown list into a spatial, interactive planning tool, much more suited for UI/UX engineering. -->
+    <!-- Visualization & Content Choices: 1. Target UI Layout -> Interactive CSS Grid Model -> Allows users to click zones to reveal detailed specs -> Justification: Better than reading a list, visually represents the end goal -> HTML/CSS/Tailwind + JS click events. 2. Implementation Phases -> Polar Area Chart -> Shows estimated complexity/effort for the 6 phases -> Justification: Helps prioritize development resources -> Chart.js (Canvas). 3. Features -> Interactive Toggle List -> Condenses data and prevents cognitive overload -> HTML/CSS + JS. Confirming NO SVG/Mermaid used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        .blueprint-zone {
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        .blueprint-zone:hover, .blueprint-zone.active {
+            background-color: #0ea5e9;
+            color: #ffffff;
+            border-color: #38bdf8;
+            box-shadow: inset 0 0 15px rgba(255,255,255,0.2);
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+    </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-cyan-500 selection:text-white">
+
+    <div class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        
+        <header class="mb-12 border-b border-slate-700 pb-6 text-center sm:text-left flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+                    <span class="text-cyan-400">UniLab</span> UI/UX Redesign
+                </h1>
+                <p class="mt-2 text-lg text-slate-400">Professional Engineering Workspace Transformation Plan</p>
+            </div>
+            <div class="flex gap-3 text-sm font-medium text-slate-300">
+                <span class="bg-slate-800 px-3 py-1 rounded border border-slate-700">MATLAB R2025</span>
+                <span class="bg-slate-800 px-3 py-1 rounded border border-slate-700">MS Office</span>
+                <span class="bg-slate-800 px-3 py-1 rounded border border-slate-700">VS Code</span>
+            </div>
+        </header>
+
+        <section class="mb-16">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                    <span class="text-xl">🎛️</span> Interactive Architecture Blueprint
+                </h2>
+                <p class="text-slate-400 max-w-3xl">
+                    This section translates the linear layout requirements from the redesign plan into a spatial, interactive model. The target is a professional IDE environment featuring a dominant center canvas surrounded by modular, resizable panels. <strong>Click on any zone in the blueprint below</strong> to reveal the specific architectural guidelines, feature requirements, and UI inspirations for that exact sector of the application.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-xl">
+                    <div class="w-full h-96 flex flex-col gap-1">
+                        <div id="zone-top" class="blueprint-zone active h-12 rounded-t" onclick="selectZone('top')">
+                            TOP: RIBBON / TABS
+                        </div>
+                        <div class="flex flex-1 gap-1 min-h-0">
+                            <div id="zone-left" class="blueprint-zone w-1/4" onclick="selectZone('left')">
+                                LEFT<br>SIDEBAR
+                            </div>
+                            <div id="zone-center" class="blueprint-zone w-1/2 text-2xl" onclick="selectZone('center')">
+                                CENTER CANVAS
+                            </div>
+                            <div id="zone-right" class="blueprint-zone w-1/4" onclick="selectZone('right')">
+                                RIGHT<br>SIDEBAR
+                            </div>
+                        </div>
+                        <div id="zone-bottom" class="blueprint-zone h-16 rounded-b" onclick="selectZone('bottom')">
+                            BOTTOM: CONSOLE
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl flex flex-col h-96 overflow-y-auto">
+                    <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-700">
+                        <div id="detail-icon" class="text-3xl bg-slate-700 w-12 h-12 flex items-center justify-center rounded text-cyan-400">🎀</div>
+                        <h3 id="detail-title" class="text-xl font-bold text-white tracking-wide uppercase">Top Navigation</h3>
+                    </div>
+                    <div id="detail-content" class="text-slate-300 space-y-4">
+                        <p class="font-medium text-cyan-300 border-l-2 border-cyan-500 pl-3">Inspiration: Microsoft Office & MATLAB R2025</p>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li>Menu bar featuring ribbon & quick actions.</li>
+                            <li>Tabbed navigation hierarchy: <strong>HOME, PLOTS, APPS, EDITOR, PUBLISH, VIEW, TOOLS</strong>.</li>
+                            <li>Sub-menus and organized button groups under each main tab.</li>
+                            <li>Modern flat design incorporating responsive hover states.</li>
+                            <li>Quick access toolbar implementation.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                    <span class="text-xl">🚀</span> Implementation Roadmap & Complexity
+                </h2>
+                <p class="text-slate-400 max-w-3xl">
+                    The redesign is structured into 6 distinct implementation phases to manage complexity and ensure stable builds. This section visualizes the engineering effort required across the project lifecycle. The timeline on the left details the sequential steps, while the polar area chart on the right provides an analytical estimate of relative complexity and development effort for each phase, helping to allocate engineering resources effectively.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+                <div>
+                    <div class="space-y-4">
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">1</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Core Layout</h4>
+                                <p class="text-sm text-slate-400">3-panel system with resizable dividers</p>
+                            </div>
+                        </div>
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">2</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Top Navigation</h4>
+                                <p class="text-sm text-slate-400">Menu bar with ribbon & quick actions</p>
+                            </div>
+                        </div>
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">3</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Drag-and-Drop</h4>
+                                <p class="text-sm text-slate-400">Draggable panels & modular components</p>
+                            </div>
+                        </div>
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">4</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Visualization</h4>
+                                <p class="text-sm text-slate-400">Plot gallery & advanced viewer system</p>
+                            </div>
+                        </div>
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">5</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Settings & Workspace</h4>
+                                <p class="text-sm text-slate-400">Customizable appearance, themes, shortcuts</p>
+                            </div>
+                        </div>
+                        <div class="group relative flex items-start cursor-default">
+                            <div class="flex h-9 items-center"><div class="relative z-10 w-8 h-8 flex items-center justify-center bg-cyan-600 rounded-full border-2 border-slate-800 text-white font-bold text-sm">6</div></div>
+                            <div class="ml-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 w-full hover:border-cyan-500/50 transition">
+                                <h4 class="text-white font-bold">Polish & Utilities</h4>
+                                <p class="text-sm text-slate-400">Command palette, search, status bar, window controls</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col items-center">
+                    <h3 class="text-center text-slate-300 font-semibold mb-2">Estimated Complexity Matrix</h3>
+                    <div class="chart-container">
+                        <canvas id="complexityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                    <span class="text-xl">✅</span> Feature Checklist & Dependencies
+                </h2>
+                <p class="text-slate-400 max-w-3xl">
+                    This section catalogs the concrete deliverables required to achieve the vision. It lists the core functionalities that define the user experience and maps them alongside the specific external packages and dependencies necessary for Flutter implementation. Use this matrix to track project scope and technical requirements.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+                    <h3 class="text-lg font-bold text-cyan-400 mb-4 uppercase tracking-wider text-sm">Key Features Planned</h3>
+                    <ul class="space-y-3" id="feature-list">
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Collapsible/resizable panels with drag-and-drop
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Professional dark theme (MATLAB-style)
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Customizable UI: colors, fonts, scale, theme
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> File browser with tree view & search
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Tab-based editor with multiple files
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Workspace variables display
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Plot gallery with export
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Keyboard shortcuts manager & Command palette
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-200 bg-slate-700/30 p-2 rounded">
+                            <span class="text-green-400 font-bold text-xl leading-none">✓</span> Real-time status indicators
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl flex flex-col">
+                    <h3 class="text-lg font-bold text-blue-400 mb-4 uppercase tracking-wider text-sm">Required UI Dependencies</h3>
+                    <div class="flex-1 flex flex-col justify-center">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-900 border border-slate-600 p-4 rounded text-center">
+                                <div class="text-2xl mb-2">📈</div>
+                                <div class="font-bold text-slate-200">FL Chart</div>
+                                <div class="text-xs text-slate-400 mt-1">Data Visualization & Plots</div>
+                            </div>
+                            <div class="bg-slate-900 border border-slate-600 p-4 rounded text-center">
+                                <div class="text-2xl mb-2">🖱️</div>
+                                <div class="font-bold text-slate-200">Context Menus</div>
+                                <div class="text-xs text-slate-400 mt-1">Native Right-Click Menus</div>
+                            </div>
+                            <div class="bg-slate-900 border border-slate-600 p-4 rounded text-center">
+                                <div class="text-2xl mb-2">🪟</div>
+                                <div class="font-bold text-slate-200">Window Manager</div>
+                                <div class="text-xs text-slate-400 mt-1">Custom Titlebars & Controls</div>
+                            </div>
+                            <div class="bg-slate-900 border border-slate-600 p-4 rounded text-center">
+                                <div class="text-2xl mb-2">🖐️</div>
+                                <div class="font-bold text-slate-200">Drag-Drop</div>
+                                <div class="text-xs text-slate-400 mt-1">Panel & File Management</div>
+                            </div>
+                            <div class="bg-slate-900 border border-slate-600 p-4 rounded text-center col-span-2">
+                                <div class="text-2xl mb-2">🔍</div>
+                                <div class="font-bold text-slate-200">Fuzzy Search</div>
+                                <div class="text-xs text-slate-400 mt-1">Command Palette Engine</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        const zoneData = {
+            top: {
+                icon: "🎀",
+                title: "Top Navigation (Ribbon)",
+                inspiration: "Inspiration: Microsoft Office & MATLAB R2025",
+                items: [
+                    "Menu bar featuring ribbon & quick actions.",
+                    "Tabbed navigation hierarchy: <strong>HOME, PLOTS, APPS, EDITOR, PUBLISH, VIEW, TOOLS</strong>.",
+                    "Sub-menus and organized button groups under each main tab.",
+                    "Modern flat design incorporating responsive hover states.",
+                    "Quick access toolbar implementation."
+                ]
+            },
+            left: {
+                icon: "🗂️",
+                title: "Left Sidebar",
+                inspiration: "Inspiration: VS Code & MATLAB R2025",
+                items: [
+                    "File browser and Project explorer.",
+                    "Fully collapsible and resizable panel architecture.",
+                    "Hierarchical tree view representation of the local file system.",
+                    "Integrated file search functionality.",
+                    "Drag-and-drop file organization capabilities."
+                ]
+            },
+            center: {
+                icon: "💻",
+                title: "Center Canvas (Editor)",
+                inspiration: "Inspiration: VS Code & Professional IDEs",
+                items: [
+                    "Dominant UI space dedicated to the primary task.",
+                    "Main code editor or visual canvas.",
+                    "Robust tab-based interface supporting multiple open files.",
+                    "Syntax highlighting and code folding capabilities.",
+                    "Customizable scaling and font rendering."
+                ]
+            },
+            right: {
+                icon: "⚙️",
+                title: "Right Sidebar",
+                inspiration: "Inspiration: Microsoft Office & MATLAB R2025",
+                items: [
+                    "Workspace and Environment panel.",
+                    "Live display of active variables, data types, and current state.",
+                    "Context-sensitive Properties/Settings inspector based on center canvas selection.",
+                    "Collapsible UI to maximize center canvas when not needed."
+                ]
+            },
+            bottom: {
+                icon: "⌨️",
+                title: "Bottom Console",
+                inspiration: "Inspiration: MATLAB R2025 & VS Code",
+                items: [
+                    "Command window and direct CLI input.",
+                    "Console output for build logs, errors, and system feedback.",
+                    "Bottom status bar indicating app state, line numbers, and active environment.",
+                    "Resizable vertical divider."
+                ]
+            }
+        };
+
+        function selectZone(zoneId) {
+            document.querySelectorAll('.blueprint-zone').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            document.getElementById(`zone-${zoneId}`).classList.add('active');
+            
+            const data = zoneData[zoneId];
+            document.getElementById('detail-icon').textContent = data.icon;
+            document.getElementById('detail-title').textContent = data.title;
+            
+            let listHtml = `<p class="font-medium text-cyan-300 border-l-2 border-cyan-500 pl-3">${data.inspiration}</p><ul class="list-disc pl-5 space-y-2">`;
+            data.items.forEach(item => {
+                listHtml += `<li>${item}</li>`;
+            });
+            listHtml += `</ul>`;
+            
+            document.getElementById('detail-content').innerHTML = listHtml;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const ctx = document.getElementById('complexityChart').getContext('2d');
+            
+            Chart.defaults.color = '#cbd5e1';
+            Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+            
+            new Chart(ctx, {
+                type: 'polarArea',
+                data: {
+                    labels: [
+                        'Core Layout', 
+                        'Top Navigation', 
+                        'Drag & Drop', 
+                        'Visualization', 
+                        'Settings', 
+                        'Polish'
+                    ],
+                    datasets: [{
+                        label: 'Relative Engineering Complexity',
+                        data: [7, 6, 9, 8, 5, 7],
+                        backgroundColor: [
+                            'rgba(6, 182, 212, 0.6)', 
+                            'rgba(59, 130, 246, 0.6)', 
+                            'rgba(139, 92, 246, 0.6)', 
+                            'rgba(14, 165, 233, 0.6)',  
+                            'rgba(16, 185, 129, 0.6)',  
+                            'rgba(245, 158, 11, 0.6)'   
+                        ],
+                        borderColor: [
+                            'rgba(6, 182, 212, 1)',
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(139, 92, 246, 1)',
+                            'rgba(14, 165, 233, 1)',
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(245, 158, 11, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            ticks: { display: false },
+                            grid: { color: 'rgba(51, 65, 85, 0.5)' },
+                            angleLines: { color: 'rgba(51, 65, 85, 0.5)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                padding: 20,
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ' + context.label + ': ' + context.raw + '/10 Complexity';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

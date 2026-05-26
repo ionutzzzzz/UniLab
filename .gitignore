@@ -31,7 +31,6 @@ graph*.json
 *.pch
 
 # Libraries
-*.lib
 *.a
 *.la
 *.lo
@@ -142,7 +141,6 @@ tags
 *.lai
 *.la
 *.a
-*.lib
 
 # Executables
 *.exe
@@ -154,8 +152,8 @@ tags
 .Python
 [Bb]in
 [Ii]nclude
-[Ll]ib
-[Ll]ib64
+# [Ll]ib
+# [Ll]ib64
 [Ll]ocal
 [Ss]cripts
 pyvenv.cfg
@@ -180,8 +178,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-# lib/
-lib64/
 parts/
 sdist/
 var/

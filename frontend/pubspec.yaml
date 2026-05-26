@@ -19,6 +19,16 @@ dependencies:
   flutter_highlight: ^0.7.0
   shared_preferences: ^2.5.2
   path: ^1.9.1
+  highlight: ^0.7.0
+
+  # UI/UX Redesign Dependencies
+  fl_chart: ^1.2.0
+  context_menus: ^2.0.0+1
+  intl: ^0.20.2
+  uuid: ^4.5.3
+  window_manager: ^0.5.1
+  desktop_drop: ^0.7.1
+  fuzzy: ^0.5.1
 
 dev_dependencies:
   flutter_test:
