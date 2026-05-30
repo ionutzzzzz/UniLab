@@ -285,7 +285,9 @@ class _RibbonSection extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             title, 
-            style: const TextStyle(fontSize: 10, color: Color(0xFF888888))
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 9, color: Color(0xFF888888))
           ),
         ],
       ),
@@ -320,20 +322,25 @@ class _RibbonButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(4.0),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 4.0),
-            constraints: BoxConstraints(minWidth: isLarge ? 50 : 40),
+            constraints: BoxConstraints(minWidth: isLarge ? 50 : 40, maxWidth: isLarge ? 65 : 55),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon, 
-                  size: isLarge ? 26 : 18, 
+                  size: isLarge ? 24 : 16, 
                   color: iconColor ?? const Color(0xFFCCCCCC)
                 ),
-                SizedBox(height: isLarge ? 4 : 2),
-                Text(
-                  label, 
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFCCCCCC))
+                SizedBox(height: isLarge ? 3 : 1),
+                Flexible(
+                  child: Text(
+                    label, 
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: Color(0xFFCCCCCC), height: 1.1)
+                  ),
                 ),
               ],
             ),

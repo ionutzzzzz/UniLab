@@ -34,9 +34,9 @@ class _ConsolePanelState extends State<ConsolePanel> {
       children: [
         // Tab Bar and Search
         Container(
-          height: 36,
+          height: 32,
           decoration: BoxDecoration(
-            color: Theme.of(context).canvasColor,
+            color: Theme.of(context).cardColor,
             border: Border(
               bottom: BorderSide(
                 color: Theme.of(context).dividerColor,
@@ -47,8 +47,7 @@ class _ConsolePanelState extends State<ConsolePanel> {
           child: Row(
             children: [
               Expanded(
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
                     _buildTab('Output', 'output'),
                     _buildTab('Issues', 'issues'),
@@ -59,20 +58,20 @@ class _ConsolePanelState extends State<ConsolePanel> {
               ),
               // Compact Search Bar
               Container(
-                width: 180,
-                height: 24,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
+                width: 200,
+                height: 22,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
                 child: TextField(
                   controller: _filterController,
                   style: const TextStyle(fontSize: 10, color: Color(0xFFCCCCCC)),
                   decoration: InputDecoration(
-                    hintText: 'Filter...',
+                    hintText: 'Filter output...',
                     hintStyle: const TextStyle(fontSize: 10, color: Color(0xFF858585)),
                     prefixIcon: const Icon(Icons.search, size: 12),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(2),
                       borderSide: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                     filled: true,
@@ -82,24 +81,25 @@ class _ConsolePanelState extends State<ConsolePanel> {
                 ),
               ),
               _buildActionButton(
-                icon: Icons.refresh,
-                tooltip: 'Clear',
+                icon: Icons.block,
+                tooltip: 'Clear Console',
                 onPressed: () {
                   Provider.of<AppProvider>(context, listen: false).clearConsole();
                 },
               ),
               _buildActionButton(
-                icon: _autoScroll ? Icons.unfold_less : Icons.unfold_more,
-                tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+                icon: _autoScroll ? Icons.vertical_align_bottom : Icons.vertical_align_top,
+                tooltip: _autoScroll ? 'Auto-scroll: On' : 'Auto-scroll: Off',
                 onPressed: () {
                   setState(() => _autoScroll = !_autoScroll);
                   if (_autoScroll) _scrollToBottom();
                 },
               ),
+              const SizedBox(width: 8),
             ],
           ),
         ),
-        // Console Output (Removed the old separate search bar container)
+        // Console Output
         Expanded(
           child: Consumer<AppProvider>(
             builder: (context, appProvider, _) {
@@ -119,9 +119,11 @@ class _ConsolePanelState extends State<ConsolePanel> {
 
               return Container(
                 color: Theme.of(context).scaffoldBackgroundColor,
-                padding: const EdgeInsets.all(12),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: ListView(
                   controller: _scrollController,
+                  primary: false,
                   children: [
                     SelectableText(
                       displayText.isEmpty ? '>> Ready' : displayText,
@@ -133,7 +135,7 @@ class _ConsolePanelState extends State<ConsolePanel> {
                             : displayText.contains('Error')
                                 ? const Color(0xFFF48771)
                                 : const Color(0xFFCCCCCC),
-                        height: 1.5,
+                        height: 1.6,
                       ),
                     ),
                   ],
@@ -154,25 +156,31 @@ class _ConsolePanelState extends State<ConsolePanel> {
         setState(() => _selectedTab = id);
       },
       child: Container(
+        height: 32,
         decoration: BoxDecoration(
           color: isActive ? Theme.of(context).scaffoldBackgroundColor : Colors.transparent,
           border: Border(
+            right: BorderSide(color: Theme.of(context).dividerColor, width: 1),
             bottom: BorderSide(
               color: isActive ? Theme.of(context).primaryColor : Colors.transparent,
               width: 2,
             ),
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
         child: Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            color: isActive ? Colors.white : const Color(0xFF858585),
+            fontSize: 11,
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildActionButton({
     required IconData icon,

@@ -23,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
-    final settings = settingsProvider.settings;
 
     return Scaffold(
       backgroundColor: Theme.of(context).cardColor,
@@ -139,7 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _colorCircle(Color color, Color current, VoidCallback onTap) {
-    final isSelected = color.value == current.value;
+    final isSelected = color == current;
     return GestureDetector(
       onTap: onTap,
       child: Container(

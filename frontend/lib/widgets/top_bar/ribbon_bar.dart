@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../screens/settings_screen.dart';
 
 /// Enhanced Ribbon Bar with professional layout similar to MATLAB/Office
 class RibbonBar extends StatefulWidget {
@@ -33,7 +32,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
     final borderColor = Theme.of(context).dividerColor;
 
     return Container(
-      height: 95, // Slightly more compact
+      height: 115, // Increased height for better spacing
       decoration: BoxDecoration(
         color: ribbonBgColor,
         border: Border(
@@ -45,22 +44,11 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
         children: [
           // Ribbon Tab Navigation
           Container(
-            height: 30, // Tighter tab bar
-            color: Theme.of(context).canvasColor,
+            height: 32,
+            color: Theme.of(context).cardColor,
             child: Row(
               children: [
-                // App Logo / Title
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text(
-                    'UniLab',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
+                const SizedBox(width: 8),
                 // Ribbon Tabs
                 Expanded(
                   child: TabBar(
@@ -68,56 +56,40 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
                     isScrollable: true,
                     dividerColor: Colors.transparent,
                     indicator: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
+                      color: ribbonBgColor,
                       border: Border(
-                        top: BorderSide(color: Theme.of(context).primaryColor, width: 2),
                         left: BorderSide(color: borderColor),
                         right: BorderSide(color: borderColor),
+                        top: BorderSide(color: Theme.of(context).primaryColor, width: 2),
                       ),
                     ),
                     indicatorSize: TabBarIndicatorSize.tab,
                     labelColor: Theme.of(context).primaryColor,
                     unselectedLabelColor: const Color(0xFF999999),
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 20),
                     labelStyle: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.8,
                     ),
                     tabs: const [
-                      Tab(height: 30, text: 'HOME'),
-                      Tab(height: 30, text: 'PLOTS'),
-                      Tab(height: 30, text: 'EDITOR'),
-                      Tab(height: 30, text: 'TOOLS'),
-                      Tab(height: 30, text: 'VIEW'),
+                      Tab(height: 32, text: 'HOME'),
+                      Tab(height: 32, text: 'PLOTS'),
+                      Tab(height: 32, text: 'EDITOR'),
+                      Tab(height: 32, text: 'ANALYZE'),
+                      Tab(height: 32, text: 'VIEW'),
                     ],
                   ),
                 ),
-                // Quick Actions in Header
+                // Quick Actions
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildQuickActionButton(
-                        context,
-                        Icons.undo,
-                        'Undo',
-                        () {},
-                      ),
-                      _buildQuickActionButton(
-                        context,
-                        Icons.redo,
-                        'Redo',
-                        () {},
-                      ),
-                      const SizedBox(width: 8),
-                      _buildQuickActionButton(
-                        context,
-                        Icons.help_outline,
-                        'Help',
-                        () {},
-                      ),
+                      _buildQuickActionButton(context, Icons.save_outlined, 'Save (Ctrl+S)', () => appProvider.saveActiveFile()),
+                      _buildQuickActionButton(context, Icons.undo, 'Undo', () {}),
+                      _buildQuickActionButton(context, Icons.redo, 'Redo', () {}),
                     ],
                   ),
                 ),
@@ -126,19 +98,16 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           ),
           // Ribbon Content Area
           Expanded(
-            child: Container(
-              color: ribbonBgColor,
-              child: TabBarView(
-                controller: _tabController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _buildHomeTab(context, appProvider),
-                  _buildPlotsTab(context),
-                  _buildEditorTab(context, appProvider),
-                  _buildToolsTab(context, appProvider),
-                  _buildViewTab(context, appProvider),
-                ],
-              ),
+            child: TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildHomeTab(context, appProvider),
+                _buildPlotsTab(context, appProvider),
+                _buildEditorTab(context, appProvider),
+                _buildAnalyzeTab(context, appProvider),
+                _buildViewTab(context, appProvider),
+              ],
             ),
           ),
         ],
@@ -148,6 +117,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
 
   Widget _buildHomeTab(BuildContext context, AppProvider appProvider) {
     return ListView(
+      primary: false,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
@@ -155,22 +125,22 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           title: 'FILE',
           children: [
             _RibbonButton(
-              icon: Icons.note_add,
-              label: 'New',
+              icon: Icons.note_add_outlined,
+              label: 'New Script',
               onPressed: () => appProvider.addNewFile(),
               isLarge: true,
               tooltip: 'Create a new script file (Ctrl+N)',
             ),
             _RibbonButton(
-              icon: Icons.folder_open,
+              icon: Icons.folder_open_outlined,
               label: 'Open',
-              onPressed: () {},
+              onPressed: () => appProvider.openFilePicker(),
               tooltip: 'Open an existing file (Ctrl+O)',
             ),
             _RibbonButton(
-              icon: Icons.save,
+              icon: Icons.save_outlined,
               label: 'Save',
-              onPressed: () {},
+              onPressed: () => appProvider.saveActiveFile(),
               tooltip: 'Save current file (Ctrl+S)',
             ),
           ],
@@ -179,7 +149,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           title: 'EXECUTION',
           children: [
             _RibbonButton(
-              icon: Icons.play_arrow,
+              icon: Icons.play_circle_outline,
               label: 'Run',
               iconColor: const Color(0xFF4EC9B0),
               onPressed: () => appProvider.runActiveFile(),
@@ -189,25 +159,41 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
             _RibbonButton(
               icon: Icons.playlist_play,
               label: 'Run Section',
-              onPressed: () {},
-              tooltip: 'Run the current section (Ctrl+Enter)',
+              onPressed: () => appProvider.runActiveFile(),
+              tooltip: 'Run current code section (Ctrl+Enter)',
             ),
             _RibbonButton(
-              icon: Icons.stop,
+              icon: Icons.stop_circle_outlined,
               label: 'Stop',
               iconColor: const Color(0xFFF48771),
-              onPressed: () {},
+              onPressed: () => appProvider.stopExecution(),
               tooltip: 'Stop execution',
             ),
           ],
         ),
         _RibbonGroup(
+          title: 'WORKSPACE',
+          children: [
+            _RibbonButton(
+              icon: Icons.cleaning_services_outlined,
+              label: 'Clear',
+              onPressed: () => appProvider.clearWorkspace(),
+              tooltip: 'Clear variables from workspace',
+            ),
+            _RibbonButton(
+              icon: Icons.import_export,
+              label: 'Import Data',
+              onPressed: () {},
+            ),
+          ],
+        ),
+        _RibbonGroup(
           title: 'SAMPLES',
-          children: appProvider.availableSamples.take(8).map((file) {
+          children: appProvider.availableSamples.take(5).map((file) {
             final fileName = file.path.split('/').last.replaceAll('.m', '');
             return _RibbonButton(
-              icon: Icons.science,
-              label: fileName.length > 10 ? '${fileName.substring(0, 10)}...' : fileName,
+              icon: Icons.science_outlined,
+              label: fileName.length > 12 ? '${fileName.substring(0, 12)}...' : fileName,
               onPressed: () => appProvider.openSample(file),
             );
           }).toList(),
@@ -216,28 +202,54 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildPlotsTab(BuildContext context) {
+  Widget _buildPlotsTab(BuildContext context, AppProvider appProvider) {
     return ListView(
+      primary: false,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
         _RibbonGroup(
-          title: 'FIGURES',
+          title: 'CREATE',
           children: [
             _RibbonButton(
               icon: Icons.show_chart,
+              label: 'Plot',
+              isLarge: true,
+              onPressed: () {},
+            ),
+            _RibbonButton(
+              icon: Icons.bar_chart,
+              label: 'Bar',
+              onPressed: () {},
+            ),
+            _RibbonButton(
+              icon: Icons.pie_chart_outline,
+              label: 'Pie',
+              onPressed: () {},
+            ),
+            _RibbonButton(
+              icon: Icons.scatter_plot,
+              label: 'Scatter',
+              onPressed: () {},
+            ),
+          ],
+        ),
+        _RibbonGroup(
+          title: 'MANAGE',
+          children: [
+            _RibbonButton(
+              icon: Icons.add_to_photos_outlined,
               label: 'New Figure',
               onPressed: () {},
-              isLarge: true,
             ),
             _RibbonButton(
-              icon: Icons.refresh,
-              label: 'Refresh',
+              icon: Icons.grid_on,
+              label: 'Grid',
               onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.delete_sweep,
-              label: 'Clear All',
+              icon: Icons.legend_toggle,
+              label: 'Legend',
               onPressed: () {},
             ),
           ],
@@ -246,18 +258,13 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           title: 'EXPORT',
           children: [
             _RibbonButton(
-              icon: Icons.image,
-              label: 'PNG',
+              icon: Icons.image_outlined,
+              label: 'PNG/JPG',
               onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.image,
+              icon: Icons.picture_as_pdf_outlined,
               label: 'PDF',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.insert_chart,
-              label: 'SVG',
               onPressed: () {},
             ),
           ],
@@ -268,6 +275,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
 
   Widget _buildEditorTab(BuildContext context, AppProvider appProvider) {
     return ListView(
+      primary: false,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
@@ -293,37 +301,41 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           ],
         ),
         _RibbonGroup(
-          title: 'FIND & REPLACE',
+          title: 'NAVIGATE',
           children: [
             _RibbonButton(
-              icon: Icons.search,
+              icon: Icons.find_in_page_outlined,
               label: 'Find',
               onPressed: () {},
             ),
             _RibbonButton(
               icon: Icons.find_replace,
               label: 'Replace',
-              isLarge: true,
+              onPressed: () {},
+            ),
+            _RibbonButton(
+              icon: Icons.redo,
+              label: 'Go To Line',
               onPressed: () {},
             ),
           ],
         ),
         _RibbonGroup(
-          title: 'FORMAT',
+          title: 'CODE',
           children: [
+            _RibbonButton(
+              icon: Icons.comment_outlined,
+              label: 'Comment',
+              onPressed: () {},
+            ),
             _RibbonButton(
               icon: Icons.format_indent_increase,
               label: 'Indent',
               onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.format_indent_decrease,
-              label: 'Dedent',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.comment,
-              label: 'Comment',
+              icon: Icons.auto_awesome,
+              label: 'Smart Fix',
               onPressed: () {},
             ),
           ],
@@ -332,42 +344,39 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildToolsTab(BuildContext context, AppProvider appProvider) {
+  Widget _buildAnalyzeTab(BuildContext context, AppProvider appProvider) {
     return ListView(
+      primary: false,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
         _RibbonGroup(
-          title: 'ENVIRONMENT',
+          title: 'CHECK',
           children: [
             _RibbonButton(
-              icon: Icons.settings,
-              label: 'Settings',
+              icon: Icons.bug_report_outlined,
+              label: 'Analyze',
               isLarge: true,
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                );
-              },
+              onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.terminal,
-              label: 'Terminal',
+              icon: Icons.spellcheck,
+              label: 'Check Code',
               onPressed: () {},
             ),
           ],
         ),
         _RibbonGroup(
-          title: 'ANALYZE',
+          title: 'PERFORMANCE',
           children: [
             _RibbonButton(
-              icon: Icons.analytics,
-              label: 'Profiler',
+              icon: Icons.speed,
+              label: 'Run Time',
               onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.bug_report,
-              label: 'Lint',
+              icon: Icons.timer_outlined,
+              label: 'Profiler',
               onPressed: () {},
             ),
           ],
@@ -378,6 +387,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
 
   Widget _buildViewTab(BuildContext context, AppProvider appProvider) {
     return ListView(
+      primary: false,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
@@ -385,44 +395,36 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           title: 'PANELS',
           children: [
             _RibbonButton(
-              icon: Icons.folder,
+              icon: Icons.folder_outlined,
               label: 'Files',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.dashboard,
-              label: 'Workspace',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.terminal,
-              label: 'Console',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.search,
-              label: 'Search',
-              onPressed: () {},
-            ),
-          ],
-        ),
-        _RibbonGroup(
-          title: 'APPEARANCE',
-          children: [
-            _RibbonButton(
-              icon: Icons.dark_mode,
-              label: 'Dark Mode',
               onPressed: () {},
               isActive: true,
             ),
             _RibbonButton(
-              icon: Icons.zoom_in,
-              label: 'Zoom In',
+              icon: Icons.grid_view,
+              label: 'Workspace',
+              onPressed: () {},
+              isActive: true,
+            ),
+            _RibbonButton(
+              icon: Icons.terminal_outlined,
+              label: 'Console',
+              onPressed: () {},
+              isActive: true,
+            ),
+          ],
+        ),
+        _RibbonGroup(
+          title: 'LAYOUT',
+          children: [
+            _RibbonButton(
+              icon: Icons.view_quilt_outlined,
+              label: 'Default',
               onPressed: () {},
             ),
             _RibbonButton(
-              icon: Icons.zoom_out,
-              label: 'Zoom Out',
+              icon: Icons.fullscreen_exit,
+              label: 'Minimize All',
               onPressed: () {},
             ),
           ],
@@ -430,6 +432,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
       ],
     );
   }
+
 
   Widget _buildQuickActionButton(
     BuildContext context,
@@ -545,7 +548,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
       child: GestureDetector(
         onTap: widget.onPressed,
         child: Container(
-          width: widget.isLarge ? 48 : 42,
+          width: widget.isLarge ? 64 : 54,
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
           decoration: BoxDecoration(
             color: _isHovered || widget.isActive
@@ -565,17 +568,18 @@ class _RibbonButtonState extends State<_RibbonButton> {
             children: [
               Icon(
                 widget.icon,
-                size: widget.isLarge ? 18 : 12,
-                color: widget.iconColor ?? (widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFCCCCCC)),
+                size: widget.isLarge ? 20 : 16,
+                color: widget.iconColor ?? (widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFCCCCCC).withValues(alpha: 0.8)),
               ),
-              const SizedBox(height: 1),
+              const SizedBox(height: 2),
               Flexible(
                 child: Text(
                   widget.label,
                   style: TextStyle(
-                    fontSize: 8,
-                    color: widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFCCCCCC),
-                    height: 1.0,
+                    fontFamily: 'Inter',
+                    fontSize: 10,
+                    color: widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFFFFFFF).withValues(alpha: 0.7),
+                    height: 1.1,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 1,

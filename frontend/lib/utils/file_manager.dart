@@ -2,11 +2,11 @@ import 'dart:io';
 
 class UniLabFileManager {
   static Future<List<File>> getSamples() async {
-    // In development, the samples are in ../sample relative to the executable usually.
-    // But for now, let's look at the current working directory's 'sample' folder.
-    final directory = Directory('sample');
+    // In development, the samples are in ../sample relative to the frontend directory
+    final directory = Directory('../sample');
     if (await directory.exists()) {
-      return directory.listSync()
+      return directory
+          .listSync()
           .whereType<File>()
           .where((f) => f.path.endsWith('.m'))
           .toList();

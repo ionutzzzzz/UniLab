@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.1.2
+  flutter_riverpod: ^2.4.0
+  riverpod_annotation: ^2.3.0
   multi_split_view: ^3.1.0
   flutter_code_editor: ^0.3.5
   google_fonts: ^6.2.1
@@ -29,11 +31,21 @@ dependencies:
   window_manager: ^0.5.1
   desktop_drop: ^0.7.1
   fuzzy: ^0.5.1
+  pluto_grid: ^8.1.0
+  undo: ^1.2.3
+  watcher: ^1.2.1
+  flutter_fancy_tree_view: ^1.6.0
+  flutter_awesome_context_menu: ^0.1.1
+  lucide_icons_flutter: ^3.1.14+2
+  xterm: ^4.0.0
+  flutter_pty: ^0.4.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  build_runner: ^2.4.0
+  riverpod_generator: ^2.3.0
 
 flutter:
   uses-material-design: true

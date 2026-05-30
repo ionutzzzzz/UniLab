@@ -85,7 +85,7 @@ class _MainLayoutState extends State<MainLayout> {
               color: Theme.of(context).dividerColor,
               highlightedColor: Theme.of(context).primaryColor,
             ),
-            dividerThickness: 4,
+            dividerThickness: 1.0,
           ),
           child: MultiSplitView(
             axis: Axis.vertical,
@@ -106,7 +106,7 @@ class _MainLayoutState extends State<MainLayout> {
               color: Theme.of(context).dividerColor,
               highlightedColor: Theme.of(context).primaryColor,
             ),
-            dividerThickness: 4,
+            dividerThickness: 1.0,
           ),
           child: MultiSplitView(
             controller: _mainController,

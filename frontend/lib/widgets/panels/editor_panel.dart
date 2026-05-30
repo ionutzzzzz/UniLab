@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
+import 'package:flutter_highlight/themes/vs2015.dart';
 import 'package:highlight/languages/matlab.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../models/models.dart';
 
 class EditorPanel extends StatefulWidget {
   const EditorPanel({super.key});
@@ -13,17 +15,17 @@ class EditorPanel extends StatefulWidget {
 }
 
 class _EditorPanelState extends State<EditorPanel> {
-  final Map<int, CodeController> _codeControllers = {};
+  final Map<String, CodeController> _codeControllers = {};
+  final ScrollController _tabsScrollController = ScrollController();
 
-  CodeController _getOrCreateController(String content) {
-    final hash = content.hashCode;
-    if (!_codeControllers.containsKey(hash)) {
-      _codeControllers[hash] = CodeController(
+  CodeController _getOrCreateController(UniLabFile file) {
+    if (!_codeControllers.containsKey(file.path)) {
+      _codeControllers[file.path] = CodeController(
         language: matlab,
-        text: content,
+        text: file.content,
       );
     }
-    return _codeControllers[hash]!;
+    return _codeControllers[file.path]!;
   }
 
   @override
@@ -31,6 +33,7 @@ class _EditorPanelState extends State<EditorPanel> {
     for (final controller in _codeControllers.values) {
       controller.dispose();
     }
+    _tabsScrollController.dispose();
     super.dispose();
   }
 
@@ -44,9 +47,9 @@ class _EditorPanelState extends State<EditorPanel> {
           children: [
             // Tab Bar
             Container(
-              height: 36,
+              height: 32,
               decoration: BoxDecoration(
-                color: Theme.of(context).canvasColor,
+                color: Theme.of(context).cardColor,
                 border: Border(
                   bottom: BorderSide(
                     color: Theme.of(context).dividerColor,
@@ -54,131 +57,140 @@ class _EditorPanelState extends State<EditorPanel> {
                   ),
                 ),
               ),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: appProvider.openFiles.length + 1,
-                itemBuilder: (context, index) {
-                  // Add File Button
-                  if (index == appProvider.openFiles.length) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: IconButton(
-                        icon: const Icon(Icons.add, size: 16),
-                        onPressed: () {
-                          appProvider.addNewFile();
-                        },
-                        tooltip: 'New File',
-                        iconSize: 16,
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
-                      ),
-                    );
-                  }
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _tabsScrollController,
+                      primary: false,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: appProvider.openFiles.length,
+                      itemBuilder: (context, index) {
+                        final file = appProvider.openFiles[index];
+                        final isActive = index == appProvider.activeFileIndex;
 
-                  final file = appProvider.openFiles[index];
-                  final isActive = index == appProvider.activeFileIndex;
-
-                  return GestureDetector(
-                    onTap: () {
-                      appProvider.setActiveFile(index);
-                    },
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 100, maxWidth: 200),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? Theme.of(context).scaffoldBackgroundColor
-                            : Colors.transparent,
-                        border: Border(
-                          right: BorderSide(
-                            color: Theme.of(context).dividerColor,
-                            width: 1,
-                          ),
-                          bottom: BorderSide(
-                            color: isActive
-                                ? Theme.of(context).primaryColor
-                                : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              file.name,
-                              style:
-                                  Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight:
-                                    isActive ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (file.isModified)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: Icon(
-                                Icons.circle,
-                                size: 6,
-                                color: Theme.of(context).primaryColor,
+                        return GestureDetector(
+                          onTap: () {
+                            appProvider.setActiveFile(index);
+                          },
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 120, maxWidth: 220),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? Theme.of(context).scaffoldBackgroundColor
+                                  : Colors.transparent,
+                              border: Border(
+                                right: BorderSide(
+                                  color: Theme.of(context).dividerColor,
+                                  width: 1,
+                                ),
+                                top: BorderSide(
+                                  color: isActive
+                                      ? Theme.of(context).primaryColor
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
                               ),
                             ),
-                          GestureDetector(
-                            onTap: () {
-                              appProvider.closeFile(index);
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Icon(
-                                Icons.close,
-                                size: 12,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.color
-                                    ?.withValues(alpha: 0.7),
-                              ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.description_outlined,
+                                  size: 14,
+                                  color: isActive ? Theme.of(context).primaryColor : const Color(0xFF858585),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    file.name,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                                      color: isActive ? Colors.white : const Color(0xFF858585),
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (file.isModified)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4),
+                                    child: Icon(
+                                      Icons.circle,
+                                      size: 6,
+                                      color: Theme.of(context).primaryColor,
+                                    ),
+                                  ),
+                                const SizedBox(width: 8),
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      appProvider.closeFile(index);
+                                    },
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: const Color(0xFF858585).withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                  // Add File Button
+                  IconButton(
+                    icon: const Icon(Icons.add, size: 16),
+                    onPressed: () => appProvider.addNewFile(),
+                    tooltip: 'New File',
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
               ),
             ),
             // Code Editor
             Expanded(
               child: activeFile != null
-                  ? SingleChildScrollView(
-                      child: CodeField(
-                        controller: _getOrCreateController(activeFile.content),
-                        textStyle: TextStyle(
-                          fontFamily: 'JetBrains Mono',
-                          fontSize: settingsProvider.settings.fontSize,
-                          color: const Color(0xFFCCCCCC),
-                          height: 1.5,
-                        ),
-                        onChanged: (code) {
-                          appProvider.updateActiveFileContent(code);
-                        },
-                        cursorColor: Theme.of(context).primaryColor,
-                        gutterStyle: GutterStyle(
-                          width: 50,
-                          textAlign: TextAlign.right,
+                  ? Theme(
+                      data: Theme.of(context).copyWith(
+                        hoverColor: Colors.transparent,
+                      ),
+                      child: CodeTheme(
+                        data: CodeThemeData(styles: vs2015Theme),
+                        child: CodeField(
+                          controller: _getOrCreateController(activeFile),
+                          expands: true,
                           textStyle: TextStyle(
-                            color: const Color(0xFF858585),
-                            fontSize: settingsProvider.settings.fontSize - 2,
                             fontFamily: 'JetBrains Mono',
+                            fontSize: settingsProvider.settings.fontSize,
+                            color: const Color(0xFFCCCCCC),
+                            height: 1.5,
+                          ),
+                          onChanged: (code) {
+                            appProvider.updateActiveFileContent(code);
+                          },
+                          cursorColor: Colors.white,
+                          gutterStyle: GutterStyle(
+                            background: const Color(0xFF1E1E1E),
+                            textStyle: TextStyle(
+                              color: const Color(0xFF858585),
+                              fontSize: settingsProvider.settings.fontSize - 2,
+                              fontFamily: 'JetBrains Mono',
+                            ),
+                            textAlign: TextAlign.right,
+                            width: 60,
+                            showLineNumbers: true,
                           ),
                         ),
                       ),
                     )
+
                   : Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
