@@ -1,5 +1,5 @@
 import unittest
-from backend.core.core import UniLabTranspiler
+from backend.core.transpiler_core import UniLabTranspiler
 
 class TestUniLabTranspilerAdvanced(unittest.TestCase):
     def setUp(self):

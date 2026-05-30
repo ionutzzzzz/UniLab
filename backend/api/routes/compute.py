@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from backend.api.dependencies import get_core
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/compute", tags=["compute"])
 

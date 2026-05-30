@@ -92,7 +92,9 @@ def update_m_file_cache():
             m_files.add(p.stem)
         
         # Scan libraries
-        libs_dir = pathlib.Path(__file__).resolve().parent / "libraries"
+        current_file_dir = pathlib.Path(__file__).resolve().parent
+        # backend/cli/app.py -> backend/stdlib/libraries
+        libs_dir = current_file_dir.parent / "stdlib" / "libraries"
         if libs_dir.exists():
             for p in libs_dir.rglob('*.m'):
                 m_files.add(p.stem)
@@ -137,24 +139,17 @@ def unilab_completer(text, state):
 
 # Setup paths to ensure we can import core modules
 current_dir = pathlib.Path(__file__).resolve().parent
-project_root = current_dir.parent if (current_dir / "core").exists() else current_dir
-sys.path.insert(0, str(project_root))
+project_root = current_dir.parent.parent # Project root is two levels up from backend/cli/app.py
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 try:
     import readline
 except ImportError:
     readline = None
 
-try:
-    from backend.core.main import UniLabCore, BackendConfig
-except ImportError:
-    try:
-        from core.main import UniLabCore, BackendConfig
-    except ImportError as e:
-        print(f"Error: Could not import UniLabCore. Ensure you are in the project root.")
-        print(f"Details: {e}")
-        print("Please ensure all requirements are installed: pip install -r backend/requirements.txt")
-        sys.exit(1)
+from backend.core.unilab_core import UniLabCore
+from backend.core.models import BackendConfig
 
 async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
     path = pathlib.Path(script_path)
@@ -468,7 +463,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
         if is_tty:
             print("\nConsole closed.")
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="UniLab: Scientific Simulation & Modeling Platform")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
@@ -480,6 +475,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) == 1:
         args = parser.parse_args(["console"])
+    elif sys.argv[0].endswith("__main__.py") or "backend" in sys.argv[0]:
+        # Handle python -m backend case
+        args = parser.parse_args()
     else:
         args = parser.parse_args()
 
@@ -496,3 +494,6 @@ if __name__ == "__main__":
     except Exception as e:
         print_error(f"Fatal error: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    main()

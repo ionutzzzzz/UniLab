@@ -3,7 +3,7 @@ import asyncio
 import pathlib
 import shutil
 import numpy as np
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 
 class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

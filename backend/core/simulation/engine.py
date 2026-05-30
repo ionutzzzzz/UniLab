@@ -51,7 +51,7 @@ from PyQt5.QtGui import QPalette, QColor
 
 # Try importing ML package
 try:
-    from backend.packages import ml
+    from backend.stdlib.packages import ml
 except ImportError:
     ml = None
 
@@ -1358,7 +1358,7 @@ class SVMSimulator(BaseSimulator):
         
     def update_plot(self):
         self.ax.clear()
-        from backend.packages.ml import SVM
+        from backend.stdlib.packages.ml import SVM
         model = SVM(epochs=2000, lambda_param=1.0/self.C)
         model.fit(self.X, self.y)
         
@@ -1460,7 +1460,7 @@ class TreeSimulator(BaseSimulator):
     def update_depth(self, v): self.depth = v; self.update_plot()
     def update_plot(self):
         self.ax.clear()
-        from backend.packages.ml import DecisionTree
+        from backend.stdlib.packages.ml import DecisionTree
         model = DecisionTree(max_depth=self.depth)
         model.fit(self.X, self.y)
         

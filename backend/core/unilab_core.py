@@ -146,7 +146,7 @@ class UniLabCore:
         export_dir.mkdir(parents=True, exist_ok=True)
         output_path = export_dir / filename
         
-        from backend.exporters import CSVExporter, JSONExporter
+        from backend.utils.exporters import CSVExporter, JSONExporter
         if format.lower() == "csv":
             exporter = CSVExporter()
         else:

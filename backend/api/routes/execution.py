@@ -13,7 +13,7 @@ from backend.api.schemas import (
     BatchExecuteResponse, TranspileRequest, TranspileResponse,
     DebugRequest, DebugResponse, ProfileRequest, ProfileResponse
 )
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["execution"])
 logger = logging.getLogger("api.execution")

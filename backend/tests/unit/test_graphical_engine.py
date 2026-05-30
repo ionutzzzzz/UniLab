@@ -8,7 +8,7 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 
 @pytest.mark.asyncio
 async def test_graphical_engine():

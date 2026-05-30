@@ -7,7 +7,7 @@ from backend.api.dependencies import get_core
 from backend.api.schemas import (
     HealthResponse, MetricsResponse, SettingsResponse, SystemInfoResponse
 )
-from backend.core.main import UniLabCore
+from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/api/v1", tags=["system"])
 

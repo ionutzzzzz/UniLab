@@ -3,7 +3,7 @@ import asyncio
 import pathlib
 import shutil
 import time
-from backend.core.main import UniLabCore, BackendConfig
+from backend.core.unilab_core import UniLabCore, BackendConfig
 
 @pytest.fixture
 def workspace_root():
