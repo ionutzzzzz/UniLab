@@ -8,6 +8,7 @@ import '../../../core/commands/command.dart';
 import '../../../core/commands/commands_registration.dart';
 import '../../../theme/plot_colormaps.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../providers/app_provider.dart';
 import 'ribbon_tab_bar.dart';
 import 'ribbon_body.dart';
 import 'ribbon_group.dart';
@@ -105,6 +106,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final registry = ref.watch(commandRegistryProvider);
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
     
     final cmdRun = registry.get('run.run');
     final cmdStop = registry.get('run.stop');
@@ -125,7 +127,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Open Folder',
               icon: LucideIcons.folderInput,
-              onTap: () {},
+              onTap: () => appProvider.openFolderPicker(),
             ),
             RibbonButton(
               label: 'Import Data',
@@ -333,7 +335,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
                           letterSpacing: 0.8,
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down, size: 14, color: Colors.black54),
+                        Icon(LucideIcons.chevronDown, size: 14, color: Colors.black54),
                       ],
                     ),
                   ),

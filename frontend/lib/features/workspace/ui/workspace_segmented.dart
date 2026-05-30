@@ -24,7 +24,7 @@ class WorkspaceSegmented extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.xs),
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,
-        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+        border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5), width: 0.5),
       ),
       child: Container(
         decoration: BoxDecoration(

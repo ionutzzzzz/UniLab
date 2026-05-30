@@ -92,5 +92,96 @@ class SyntaxHighlightTheme {
         Color(0xFF94E2D5), // Type
       ],
     ),
+    SyntaxHighlightTheme(
+      name: 'Monokai',
+      backgroundColor: Color(0xFF272822),
+      foregroundColor: Color(0xFFF8F8F2),
+      colors: [
+        Color(0xFFF92672), // Keyword
+        Color(0xFFE6DB74), // String
+        Color(0xFFAE81FF), // Number
+        Color(0xFFA6E22E), // Function
+        Color(0xFFFD971F), // Variable
+        Color(0xFF66D9EF), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Nord',
+      backgroundColor: Color(0xFF2E3440),
+      foregroundColor: Color(0xFFD8DEE9),
+      colors: [
+        Color(0xFF81A1C1), // Keyword
+        Color(0xFFA3BE8C), // String
+        Color(0xFFB48EAD), // Number
+        Color(0xFF88C0D0), // Function
+        Color(0xFFD8DEE9), // Variable
+        Color(0xFF8FBCBB), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Solarized Dark',
+      backgroundColor: Color(0xFF002B36),
+      foregroundColor: Color(0xFF839496),
+      colors: [
+        Color(0xFF859900), // Keyword
+        Color(0xFF2AA198), // String
+        Color(0xFFD33682), // Number
+        Color(0xFF268BD2), // Function
+        Color(0xFFB58900), // Variable
+        Color(0xFFCB4B16), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'GitHub Dark',
+      backgroundColor: Color(0xFF0D1117),
+      foregroundColor: Color(0xFFC9D1D9),
+      colors: [
+        Color(0xFFFF7B72), // Keyword
+        Color(0xFFA5D6FF), // String
+        Color(0xFF79C0FF), // Number
+        Color(0xFFD2A8FF), // Function
+        Color(0xFFFFA657), // Variable
+        Color(0xFF7EE787), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Night Owl',
+      backgroundColor: Color(0xFF011627),
+      foregroundColor: Color(0xFFD6DEEB),
+      colors: [
+        Color(0xFFC792EA), // Keyword
+        Color(0xFFECC48D), // String
+        Color(0xFFF78C6C), // Number
+        Color(0xFF82AAFF), // Function
+        Color(0xFFD6DEEB), // Variable
+        Color(0xFFADDB67), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Gruvbox Dark',
+      backgroundColor: Color(0xFF282828),
+      foregroundColor: Color(0xFFEBDBB2),
+      colors: [
+        Color(0xFFFB4934), // Keyword
+        Color(0xFFB8BB26), // String
+        Color(0xFFD3869B), // Number
+        Color(0xFFFABD2F), // Function
+        Color(0xFF83A598), // Variable
+        Color(0xFF8EC07C), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Material Palenight',
+      backgroundColor: Color(0xFF292D3E),
+      foregroundColor: Color(0xFFA6ACCD),
+      colors: [
+        Color(0xFFC792EA), // Keyword
+        Color(0xFFC3E88D), // String
+        Color(0xFFF78C6C), // Number
+        Color(0xFF82AAFF), // Function
+        Color(0xFFF07178), // Variable
+        Color(0xFFFFCB6B), // Type
+      ],
+    ),
   ];
 }

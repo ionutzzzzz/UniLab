@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../domain/status_bar_slot.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
+import '../domain/status_bar_slot.dart';
 
 final statusBarSlotsProvider = Provider<List<StatusBarSlot>>((ref) {
   return [
     const StatusBarSlot(id: 'status', label: 'Ready', alignment: StatusBarSlotAlignment.left, priority: 100),
-    const StatusBarSlot(id: 'branch', label: 'main', icon: Icons.account_tree_outlined, alignment: StatusBarSlotAlignment.left, priority: 90),
+    const StatusBarSlot(id: 'branch', label: 'main', icon: LucideIcons.gitBranch, alignment: StatusBarSlotAlignment.left, priority: 90),
     const StatusBarSlot(id: 'cpu', label: 'CPU: 12%', alignment: StatusBarSlotAlignment.right, priority: 85),
     const StatusBarSlot(id: 'ram', label: 'RAM: 1.2GB', alignment: StatusBarSlotAlignment.right, priority: 80),
     const StatusBarSlot(id: 'cursor', label: 'Ln 1, Col 1', alignment: StatusBarSlotAlignment.right, priority: 100),
@@ -66,7 +67,7 @@ class AppStatusBar extends ConsumerWidget {
               children: [
                 ...rightSlots.map((s) => _SlotWidget(slot: s)),
                 SizedBox(width: ui.spacing.sm),
-                Icon(Icons.notifications_none, size: 14, color: ui.colors.textMuted),
+                Icon(LucideIcons.bell, size: 14, color: ui.colors.textMuted),
               ],
             ),
           ],

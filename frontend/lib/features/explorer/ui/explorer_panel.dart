@@ -1,11 +1,13 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart' as p;
+import 'package:path/path.dart' as path_utils;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
-import '../state/explorer_providers.dart';
-import '../domain/file_node.dart';
+import '../../../providers/app_provider.dart';
 
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
@@ -15,7 +17,7 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 }
 
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
-  final Set<String> _expandedPaths = {'/', '/src'};
+  final Set<String> _expandedPaths = {};
 
   void _toggleExpand(String path) {
     setState(() {
@@ -30,7 +32,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final rootAsync = ref.watch(explorerRootProvider);
+    final appProvider = p.Provider.of<AppProvider>(context);
 
     return Container(
       color: ui.colors.panel,
@@ -62,11 +64,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 ),
                 Row(
                   children: [
-                    UiIconButton(icon: LucideIcons.filePlus, tooltip: 'New File', size: 24, iconSize: 14),
+                    UiIconButton(icon: LucideIcons.filePlus, tooltip: 'New File', size: 24, iconSize: 14, onPressed: () => appProvider.addNewFile()),
                     SizedBox(width: ui.spacing.xs),
-                    UiIconButton(icon: LucideIcons.folderPlus, tooltip: 'New Folder', size: 24, iconSize: 14),
-                    SizedBox(width: ui.spacing.xs),
-                    UiIconButton(icon: LucideIcons.refreshCcw, tooltip: 'Refresh', size: 24, iconSize: 14),
+                    UiIconButton(icon: LucideIcons.refreshCcw, tooltip: 'Refresh', size: 24, iconSize: 14, onPressed: () => appProvider.refreshProjectFiles()),
                   ],
                 ),
               ],
@@ -74,45 +74,15 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
           // Tree View
           Expanded(
-            child: rootAsync.when(
-              data: (root) {
-                final recentFiles = ref.watch(recentFilesProvider);
-                return ListView(
-                  padding: EdgeInsets.symmetric(vertical: ui.spacing.xs),
-                  children: [
-                    if (recentFiles.isNotEmpty) ...[
-                      _buildSectionHeader(ui, 'RECENT'),
-                      ...recentFiles.map((file) => _FileTreeRow(
-                        node: file,
-                        depth: 1,
-                        isExpanded: false,
-                        onToggle: () {},
-                        isRecent: true,
-                      )),
-                      SizedBox(height: ui.spacing.sm),
-                    ],
-                    _buildSectionHeader(ui, 'PROJECT'),
-                    if (root.children.isEmpty)
-                      _buildEmptyState(ui)
-                    else
-                      ..._buildTree(root, 0, ui),
-                  ],
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              error: (err, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(LucideIcons.alertCircle, color: ui.colors.danger, size: 32),
-                      const SizedBox(height: 12),
-                      UiText(text: 'Failed to load files', color: ui.colors.textMuted, textAlign: TextAlign.center),
-                    ],
-                  ),
-                ),
-              ),
+            child: ListView(
+              padding: EdgeInsets.symmetric(vertical: ui.spacing.xs),
+              children: [
+                _buildSectionHeader(ui, 'PROJECT'),
+                if (appProvider.projectFiles.isEmpty)
+                  _buildEmptyState(ui)
+                else
+                  ..._buildProjectTree(appProvider.projectFiles, 0, ui, appProvider),
+              ],
             ),
           ),
         ],
@@ -120,13 +90,51 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
+  List<Widget> _buildProjectTree(List<dynamic> entities, int depth, UiTheme ui, AppProvider appProvider) {
+    List<Widget> items = [];
+    
+    for (var entity in entities) {
+      final isDir = entity is io.Directory;
+      final path = entity.path;
+      final name = path_utils.basename(path);
+      final isExpanded = _expandedPaths.contains(path);
+
+      items.add(_FileTreeRow(
+        name: name,
+        path: path,
+        isDir: isDir,
+        depth: depth,
+        isExpanded: isExpanded,
+        onToggle: () {
+          if (isDir) {
+            _toggleExpand(path);
+          } else {
+            appProvider.openFile(entity);
+          }
+        },
+      ));
+
+      if (isDir && isExpanded) {
+        // This is a simplified version. Ideally AppProvider would have a recursive structure
+        // or we'd list directories on demand. For now, let's assume we can list it.
+        try {
+          final children = entity.listSync();
+          items.addAll(_buildProjectTree(children, depth + 1, ui, appProvider));
+        } catch (e) {
+          // Access denied or other error
+        }
+      }
+    }
+    
+    return items;
+  }
+
   Widget _buildSectionHeader(UiTheme ui, String title) {
-    IconData headerIcon = title == 'RECENT' ? LucideIcons.clock : LucideIcons.files;
     return Padding(
       padding: EdgeInsets.only(left: ui.spacing.md, top: ui.spacing.sm, bottom: ui.spacing.xxs),
       child: Row(
         children: [
-          Icon(headerIcon, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.4)),
+          Icon(LucideIcons.files, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.4)),
           const SizedBox(width: 8),
           UiText(
             text: title,
@@ -150,70 +158,36 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: ui.colors.panelHeader.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(LucideIcons.folderOpen, size: 40, color: ui.colors.textDisabled),
-            ),
-            const SizedBox(height: 20),
+            Icon(LucideIcons.folderOpen, size: 40, color: ui.colors.textDisabled),
+            const SizedBox(height: 16),
             UiText(
-              text: 'No workspace open',
+              text: 'Empty folder',
               variant: UiTextVariant.body,
-              fontWeight: FontWeight.bold,
-              color: ui.colors.textSecondary,
-            ),
-            const SizedBox(height: 8),
-            UiText(
-              text: 'Open a folder or drag one here to begin exploring your projects.',
-              variant: UiTextVariant.label,
               color: ui.colors.textMuted,
-              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
     );
   }
-
-  List<Widget> _buildTree(FileNode node, int depth, UiTheme ui) {
-    List<Widget> items = [];
-    
-    if (depth > 0 || node.path != '/') {
-      items.add(_FileTreeRow(
-        node: node,
-        depth: depth,
-        isExpanded: _expandedPaths.contains(node.path),
-        onToggle: () => _toggleExpand(node.path),
-      ));
-    }
-
-    if (node.isDirectory && (depth == 0 || _expandedPaths.contains(node.path))) {
-      for (var child in node.children) {
-        items.addAll(_buildTree(child, depth == 0 && node.path == '/' ? 0 : depth + 1, ui));
-      }
-    }
-    
-    return items;
-  }
 }
 
 class _FileTreeRow extends StatefulWidget {
   const _FileTreeRow({
-    required this.node,
+    required this.name,
+    required this.path,
+    required this.isDir,
     required this.depth,
     required this.isExpanded,
     required this.onToggle,
-    this.isRecent = false,
   });
 
-  final FileNode node;
+  final String name;
+  final String path;
+  final bool isDir;
   final int depth;
   final bool isExpanded;
   final VoidCallback onToggle;
-  final bool isRecent;
 
   @override
   State<_FileTreeRow> createState() => _FileTreeRowState();
@@ -225,27 +199,24 @@ class _FileTreeRowState extends State<_FileTreeRow> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final double paddingLeft = widget.depth * 14.0 + (widget.isRecent ? ui.spacing.xs : ui.spacing.sm);
+    final double paddingLeft = widget.depth * 12.0 + ui.spacing.sm;
 
     IconData getFileIcon(String name) {
       final lowerName = name.toLowerCase();
-      if (lowerName.endsWith('.m')) return LucideIcons.binary;
+      if (lowerName.endsWith('.m')) return LucideIcons.fileCode2;
       if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return LucideIcons.table2;
       if (lowerName.endsWith('.md')) return LucideIcons.fileText;
-      if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return LucideIcons.settings2;
-      if (lowerName.endsWith('.py') || lowerName.endsWith('.js') || lowerName.endsWith('.ts')) return LucideIcons.code2;
-      if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.svg')) return LucideIcons.image;
+      if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return LucideIcons.fileJson;
+      if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return LucideIcons.fileImage;
+      if (lowerName.endsWith('.pdf')) return LucideIcons.fileText;
+      if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav')) return LucideIcons.fileAudio;
       return LucideIcons.file;
     }
 
     Color getIconColor(String name) {
       final lowerName = name.toLowerCase();
-      if (lowerName.endsWith('.m')) return const Color(0xFFB3CDE3); // Soft Pastel Blue
-      if (lowerName.endsWith('.md')) return const Color(0xFFCCEBC5); // Soft Pastel Green
-      if (lowerName.endsWith('.py') || lowerName.endsWith('.js') || lowerName.endsWith('.ts')) return const Color(0xFFDECBE4); // Soft Pastel Purple
-      if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return const Color(0xFFFED9A6); // Pastel Orange/Tan
-      if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return const Color(0xFFFFFFCC); // Pastel Yellow
-      if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.svg')) return const Color(0xFFFBB4AE); // Pastel Red
+      if (lowerName.endsWith('.m')) return const Color(0xFFB3CDE3);
+      if (lowerName.endsWith('.md')) return const Color(0xFFCCEBC5);
       return ui.colors.icon;
     }
 
@@ -254,53 +225,51 @@ class _FileTreeRowState extends State<_FileTreeRow> {
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.node.isDirectory ? widget.onToggle : () {
-          // Open file
+        onTap: () {
+          if (widget.isDir) {
+            widget.onToggle();
+          } else {
+            // Get AppProvider from context and open the file
+            final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+            appProvider.openFile(io.File(widget.path));
+          }
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
-          height: 26,
+          height: 24,
           padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.selected.withValues(alpha: 0.3) : Colors.transparent,
-            borderRadius: ui.spacing.radiusSm,
-            border: Border.all(
-              color: _isHovered ? ui.colors.accent.withValues(alpha: 0.1) : Colors.transparent,
-              width: 0.5,
-            ),
+            color: _isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent,
           ),
           child: Row(
             children: [
-              if (widget.node.isDirectory)
+              if (widget.isDir)
                 Icon(
                   widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
                   size: 12,
-                  color: _isHovered ? ui.colors.textPrimary : ui.colors.textMuted,
+                  color: ui.colors.textMuted,
                 )
-              else if (!widget.isRecent)
+              else
                 const SizedBox(width: 12),
               const SizedBox(width: 6),
               Icon(
-                widget.node.isDirectory 
+                widget.isDir 
                   ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
-                  : getFileIcon(widget.node.name),
+                  : getFileIcon(widget.name),
                 size: 14,
-                color: widget.node.isDirectory ? const Color(0xFFB3CDE3) : getIconColor(widget.node.name),
+                color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: UiText(
-                  text: widget.node.name,
+                  text: widget.name,
                   variant: UiTextVariant.body,
                   fontSize: 12,
-                  fontWeight: _isHovered ? FontWeight.w500 : FontWeight.w400,
-                  color: _isHovered ? ui.colors.textPrimary : (widget.isRecent ? ui.colors.textMuted : ui.colors.textSecondary),
+                  color: _isHovered ? ui.colors.textPrimary : ui.colors.textSecondary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (widget.isRecent && _isHovered)
-                Icon(LucideIcons.history, size: 12, color: ui.colors.textMuted.withValues(alpha: 0.5)),
             ],
           ),
         ),

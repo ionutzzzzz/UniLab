@@ -87,18 +87,11 @@ class _RibbonTabState extends State<_RibbonTab> {
                 : (_isHovered
                     ? ui.colors.hover.withValues(alpha: 0.5)
                     : Colors.transparent),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-            border: widget.isActive
-                ? Border(
-                    top: BorderSide(color: ui.colors.divider),
-                    left: BorderSide(color: ui.colors.divider),
-                    right: BorderSide(color: ui.colors.divider),
-                  )
-                : Border(
-                    top: BorderSide(color: Colors.transparent),
-                    left: BorderSide(color: Colors.transparent),
-                    right: BorderSide(color: Colors.transparent),
-                  ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+            border: Border.all(
+              color: widget.isActive ? ui.colors.divider : Colors.transparent,
+              width: 1.0,
+            ),
           ),
           child: UiText(
             text: widget.title,

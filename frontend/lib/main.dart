@@ -8,6 +8,7 @@ import 'providers/app_provider.dart';
 import 'providers/settings_provider.dart';
 import 'shell/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Provider;
+import 'package:provider/provider.dart' as p;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +47,7 @@ class UniLabApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settingsProvider = p.Provider.of<SettingsProvider>(context);
     final settings = settingsProvider.settings;
 
     final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
