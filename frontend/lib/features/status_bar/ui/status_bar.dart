@@ -34,13 +34,13 @@ class AppStatusBar extends ConsumerWidget {
         color: ui.colors.panelHeader,
         border: Border(
           top: BorderSide(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             width: 1.0,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.02),
+            color: Colors.white.withValues(alpha: 0.02),
             offset: const Offset(0, -1),
             blurRadius: 0,
           ),
@@ -64,7 +64,7 @@ class AppStatusBar extends ConsumerWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ...rightSlots.map((s) => _SlotWidget(slot: s)).toList(),
+                ...rightSlots.map((s) => _SlotWidget(slot: s)),
                 SizedBox(width: ui.spacing.sm),
                 Icon(Icons.notifications_none, size: 14, color: ui.colors.textMuted),
               ],
@@ -108,7 +108,7 @@ class _SlotWidgetState extends State<_SlotWidget> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: ui.colors.success.withOpacity(0.5),
+                    color: ui.colors.success.withValues(alpha: 0.5),
                     blurRadius: 4,
                   ),
                 ],
@@ -148,7 +148,7 @@ class _SlotWidgetState extends State<_SlotWidget> {
           onTap: widget.slot.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            color: _isHovered ? ui.colors.hover.withOpacity(0.5) : Colors.transparent,
+            color: _isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent,
             child: content,
           ),
         ),
@@ -190,7 +190,7 @@ class _MetricIndicator extends StatelessWidget {
           width: 30,
           height: 4,
           decoration: BoxDecoration(
-            color: ui.colors.divider.withOpacity(0.3),
+            color: ui.colors.divider.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
           child: FractionallySizedBox(
@@ -198,7 +198,7 @@ class _MetricIndicator extends StatelessWidget {
             widthFactor: value / 100,
             child: Container(
               decoration: BoxDecoration(
-                color: value > 80 ? ui.colors.danger : ui.colors.accent.withOpacity(0.7),
+                color: value > 80 ? ui.colors.danger : ui.colors.accent.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

@@ -140,7 +140,7 @@ class _EditorPanelState extends State<EditorPanel> {
                                       child: Icon(
                                         Icons.close,
                                         size: 14,
-                                        color: ui.colors.textMuted.withOpacity(0.5),
+                                        color: ui.colors.textMuted.withValues(alpha: 0.5),
                                       ),
                                     ),
                                   ),
@@ -210,7 +210,7 @@ class _EditorPanelState extends State<EditorPanel> {
                             Icon(
                               Icons.description_outlined,
                               size: 48,
-                              color: ui.colors.textMuted.withOpacity(0.3),
+                              color: ui.colors.textMuted.withValues(alpha: 0.3),
                             ),
                             const SizedBox(height: 16),
                             Text(

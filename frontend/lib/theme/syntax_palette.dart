@@ -41,4 +41,18 @@ class SyntaxPalette {
         errorUnder: Color(0xFFF14C4C),
         warnUnder: Color(0xFFE5E510),
       );
+
+  factory SyntaxPalette.lightPlus() => const SyntaxPalette(
+        keyword: Color(0xFF0000FF),
+        type: Color(0xFF267F99),
+        string: Color(0xFFA31515),
+        number: Color(0xFF098658),
+        comment: Color(0xFF008000),
+        function: Color(0xFF795E26),
+        variable: Color(0xFF001080),
+        operatorColor: Color(0xFF000000),
+        constant: Color(0xFF0000FF),
+        errorUnder: Color(0xFFCD3131),
+        warnUnder: Color(0xFFE5E510),
+      );
 }

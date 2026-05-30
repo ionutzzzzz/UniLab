@@ -33,7 +33,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
       decoration: BoxDecoration(
         color: ui.colors.panel,
         borderRadius: ui.spacing.radiusMd,
-        border: Border.all(color: ui.colors.divider.withOpacity(0.5)),
+        border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
         boxShadow: ui.colors.shadowMd,
       ),
       child: Column(
@@ -95,9 +95,9 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: isActive ? ui.colors.accent.withOpacity(0.2) : Colors.transparent,
+            color: isActive ? ui.colors.accent.withValues(alpha: 0.2) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
-            border: Border.all(color: isActive ? ui.colors.accent.withOpacity(0.5) : Colors.transparent),
+            border: Border.all(color: isActive ? ui.colors.accent.withValues(alpha: 0.5) : Colors.transparent),
           ),
           child: Icon(icon, size: 16, color: isActive ? ui.colors.accent : ui.colors.textMuted),
         ),
@@ -111,7 +111,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
       decoration: BoxDecoration(
         color: ui.colors.canvas,
         borderRadius: ui.spacing.radiusSm,
-        border: Border.all(color: ui.colors.divider.withOpacity(0.3)),
+        border: Border.all(color: ui.colors.divider.withValues(alpha: 0.3)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: TextField(

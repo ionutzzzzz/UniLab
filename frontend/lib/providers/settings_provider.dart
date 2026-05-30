@@ -16,15 +16,12 @@ class SettingsProvider with ChangeNotifier {
     
     final themeIndex = prefs.getInt('themeMode') ?? ThemeMode.system.index;
     final fontSize = prefs.getDouble('fontSize') ?? 14.0;
-    var fontFamily = prefs.getString('fontFamily') ?? 'JetBrains Mono';
-    if (fontFamily == 'RobotoMono' || fontFamily == 'Roboto Mono') {
-      fontFamily = 'JetBrains Mono';
-    }
+    final fontFamily = prefs.getString('fontFamily') ?? 'JetBrains Mono';
+    
     final primaryColorValue = prefs.getInt('primaryColor') ?? 0xFF007ACC;
-    final accentColorValue = prefs.getInt('accentColor') ?? 0xFF00A4EF;
+    final accentColorValue = prefs.getInt('accentColor') ?? 0xFF4AA3FF;
     final editorTheme = prefs.getString('editorTheme') ?? 'monokai';
     
-    // Load new settings
     final uiScale = prefs.getDouble('uiScale') ?? 1.0;
     final animationEnabled = prefs.getBool('animationEnabled') ?? true;
     final rememberLayout = prefs.getBool('rememberLayout') ?? true;
@@ -32,6 +29,31 @@ class SettingsProvider with ChangeNotifier {
     final showLineNumbers = prefs.getBool('showLineNumbers') ?? true;
     final wordWrap = prefs.getBool('wordWrap') ?? true;
     final showMinimap = prefs.getBool('showMinimap') ?? false;
+
+    final autoSave = prefs.getBool('autoSave') ?? true;
+    final bracketMatching = prefs.getBool('bracketMatching') ?? true;
+    final showHiddenFiles = prefs.getBool('showHiddenFiles') ?? false;
+    final autoRefreshExplorer = prefs.getBool('autoRefreshExplorer') ?? true;
+    final realTimeInspector = prefs.getBool('realTimeInspector') ?? true;
+    final restrictedExecution = prefs.getBool('restrictedExecution') ?? true;
+    final networkAccess = prefs.getBool('networkAccess') ?? false;
+    final telemetry = prefs.getBool('telemetry') ?? true;
+    final kernelAddress = prefs.getString('kernelAddress') ?? 'http://localhost:8000';
+    final connectionTimeout = prefs.getInt('connectionTimeout') ?? 30;
+    final showWhitespace = prefs.getBool('showWhitespace') ?? false;
+    final enableAutocomplete = prefs.getBool('enableAutocomplete') ?? true;
+    final defaultProjectPath = prefs.getString('defaultProjectPath') ?? '';
+    final plotColormap = prefs.getString('plotColormap') ?? 'Blues';
+    String syntaxHighlightTheme = prefs.getString('syntaxHighlightTheme') ?? 'Dracula';
+    
+    // Validate that the loaded theme actually exists in our new theme list
+    final availableThemes = ['Dracula', 'VS Code Dark+', 'JetBrains Darcula', 'One Dark Pro', 'Tokyo Night', 'Catppuccin Mocha'];
+    if (!availableThemes.contains(syntaxHighlightTheme)) {
+      syntaxHighlightTheme = 'Dracula';
+    }
+    
+    final showToolbar = prefs.getBool('showToolbar') ?? true;
+    final showStatusBar = prefs.getBool('showStatusBar') ?? true;
     
     Map<String, bool> panelVisibility = {
       'fileExplorer': prefs.getBool('panel_fileExplorer') ?? true,
@@ -60,6 +82,23 @@ class SettingsProvider with ChangeNotifier {
       showLineNumbers: showLineNumbers,
       wordWrap: wordWrap,
       showMinimap: showMinimap,
+      autoSave: autoSave,
+      bracketMatching: bracketMatching,
+      showHiddenFiles: showHiddenFiles,
+      autoRefreshExplorer: autoRefreshExplorer,
+      realTimeInspector: realTimeInspector,
+      restrictedExecution: restrictedExecution,
+      networkAccess: networkAccess,
+      telemetry: telemetry,
+      kernelAddress: kernelAddress,
+      connectionTimeout: connectionTimeout,
+      showWhitespace: showWhitespace,
+      enableAutocomplete: enableAutocomplete,
+      defaultProjectPath: defaultProjectPath,
+      plotColormap: plotColormap,
+      syntaxHighlightTheme: syntaxHighlightTheme,
+      showToolbar: showToolbar,
+      showStatusBar: showStatusBar,
     );
     notifyListeners();
   }
@@ -76,7 +115,6 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setInt('accentColor', _settings.accentColor.toARGB32());
     await prefs.setString('editorTheme', _settings.editorTheme);
     
-    // Save new settings
     await prefs.setDouble('uiScale', _settings.uiScale);
     await prefs.setBool('animationEnabled', _settings.animationEnabled);
     await prefs.setBool('rememberLayout', _settings.rememberLayout);
@@ -84,6 +122,23 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setBool('showLineNumbers', _settings.showLineNumbers);
     await prefs.setBool('wordWrap', _settings.wordWrap);
     await prefs.setBool('showMinimap', _settings.showMinimap);
+
+    await prefs.setBool('autoSave', _settings.autoSave);
+    await prefs.setBool('bracketMatching', _settings.bracketMatching);
+    await prefs.setBool('showHiddenFiles', _settings.showHiddenFiles);
+    await prefs.setBool('autoRefreshExplorer', _settings.autoRefreshExplorer);
+    await prefs.setBool('realTimeInspector', _settings.realTimeInspector);
+    await prefs.setBool('restrictedExecution', _settings.restrictedExecution);
+    await prefs.setBool('networkAccess', _settings.networkAccess);
+    await prefs.setBool('telemetry', _settings.telemetry);
+    await prefs.setString('kernelAddress', _settings.kernelAddress);
+    await prefs.setInt('connectionTimeout', _settings.connectionTimeout);
+    await prefs.setBool('showWhitespace', _settings.showWhitespace);
+    await prefs.setBool('enableAutocomplete', _settings.enableAutocomplete);
+    await prefs.setString('defaultProjectPath', _settings.defaultProjectPath);
+    await prefs.setString('plotColormap', _settings.plotColormap);
+    await prefs.setString('syntaxHighlightTheme', _settings.syntaxHighlightTheme);
+    await prefs.setBool('showToolbar', _settings.showToolbar);
     
     // Save panel visibility
     for (final entry in _settings.panelVisibility.entries) {
@@ -94,5 +149,11 @@ class SettingsProvider with ChangeNotifier {
     for (final entry in _settings.panelSizes.entries) {
       await prefs.setDouble('panelSize_${entry.key}', entry.value);
     }
+  }
+
+  Future<void> resetToDefaults() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    await _loadSettings();
   }
 }

@@ -1,5 +1,3 @@
-import 'package:flutter/widgets.dart';
-
 class ShellBreakpoints {
   static const double compact = 760;
   static const double medium = 960;

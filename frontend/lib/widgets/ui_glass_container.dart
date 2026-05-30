@@ -6,6 +6,8 @@ class UiGlassContainer extends StatelessWidget {
   const UiGlassContainer({
     super.key,
     required this.child,
+    this.width,
+    this.height,
     this.borderRadius,
     this.padding,
     this.margin,
@@ -14,6 +16,8 @@ class UiGlassContainer extends StatelessWidget {
   });
 
   final Widget child;
+  final double? width;
+  final double? height;
   final BorderRadius? borderRadius;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
@@ -26,6 +30,8 @@ class UiGlassContainer extends StatelessWidget {
     final effectiveRadius = borderRadius ?? ui.spacing.radiusMd;
 
     return Container(
+      width: width,
+      height: height,
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: effectiveRadius,
@@ -38,7 +44,7 @@ class UiGlassContainer extends StatelessWidget {
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: ui.colors.glassBackground.withOpacity(opacity),
+              color: ui.colors.glassBackground.withValues(alpha: opacity),
               borderRadius: effectiveRadius,
               border: Border.all(
                 color: ui.colors.glassBorder,

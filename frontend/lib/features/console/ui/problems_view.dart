@@ -40,7 +40,7 @@ class ProblemsView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.checkCircle2, size: 40, color: ui.colors.success.withOpacity(0.5)),
+            Icon(LucideIcons.checkCircle2, size: 40, color: ui.colors.success.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             UiText(
               text: 'No problems detected in your workspace.',
@@ -58,7 +58,7 @@ class ProblemsView extends StatelessWidget {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 4),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
           ),
           child: Row(
             children: [
@@ -146,8 +146,8 @@ class _ProblemRowState extends State<_ProblemRow> {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.hover.withOpacity(0.5) : Colors.transparent,
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.1))),
+            color: _isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent,
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.1))),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,7 +178,7 @@ class _ProblemRowState extends State<_ProblemRow> {
                           text: '${widget.problem.line}:${widget.problem.column}',
                           variant: UiTextVariant.label,
                           fontSize: 11,
-                          color: ui.colors.textMuted.withOpacity(0.7),
+                          color: ui.colors.textMuted.withValues(alpha: 0.7),
                           fontFamily: 'JetBrains Mono',
                         ),
                       ],
@@ -202,13 +202,12 @@ class _FilterPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = UiTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

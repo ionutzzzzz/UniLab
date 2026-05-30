@@ -155,7 +155,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                         Icon(
                           Icons.inventory_2_outlined,
                           size: 40,
-                          color: ui.colors.textMuted.withOpacity(0.3),
+                          color: ui.colors.textMuted.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 12),
                         Text(

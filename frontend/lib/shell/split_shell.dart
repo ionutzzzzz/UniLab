@@ -27,28 +27,50 @@ class SplitShell extends ConsumerStatefulWidget {
 }
 
 class _SplitShellState extends ConsumerState<SplitShell> {
-  late MultiSplitViewController _horizontalController;
-  late MultiSplitViewController _verticalController;
+  MultiSplitViewController? _horizontalController;
+  MultiSplitViewController? _verticalController;
 
   @override
   void initState() {
     super.initState();
-    _horizontalController = MultiSplitViewController(areas: [
-      Area(flex: 0.2, min: 150, data: 'left'),
-      Area(flex: 0.6, min: 300, data: 'center'),
-      Area(flex: 0.2, min: 200, data: 'right'),
-    ]);
-    
+    _initControllers();
+  }
+
+  void _initControllers() {
+    _horizontalController = MultiSplitViewController(areas: _buildHorizontalAreas());
     _verticalController = MultiSplitViewController(areas: [
-      Area(flex: 0.7, min: 200, data: 'main'),
-      Area(flex: 0.3, min: 100, data: 'bottom'),
+      Area(data: 'main'),
+      Area(data: 'bottom', size: 220, min: 100),
     ]);
+  }
+
+  List<Area> _buildHorizontalAreas() {
+    List<Area> areas = [];
+    if (widget.showLeftPanel) {
+      areas.add(Area(size: 240, min: 150, data: 'left'));
+    }
+    areas.add(Area(data: 'center'));
+    if (widget.showRightPanel) {
+      areas.add(Area(size: 280, min: 200, data: 'right'));
+    }
+    return areas;
+  }
+
+  @override
+  void didUpdateWidget(SplitShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showLeftPanel != widget.showLeftPanel || 
+        oldWidget.showRightPanel != widget.showRightPanel) {
+      setState(() {
+         _horizontalController?.areas = _buildHorizontalAreas();
+      });
+    }
   }
 
   @override
   void dispose() {
-    _horizontalController.dispose();
-    _verticalController.dispose();
+    _horizontalController?.dispose();
+    _verticalController?.dispose();
     super.dispose();
   }
 
@@ -57,50 +79,23 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     final ui = UiTheme.of(context);
     final layoutState = ref.watch(shellLayoutProvider);
 
-    // Update horizontal controller areas based on visibility
-    List<Area> horizAreas = [];
-    if (widget.showLeftPanel) horizAreas.add(Area(flex: 0.2, min: 150, data: 'left'));
-    horizAreas.add(Area(flex: 0.6, min: 300, data: 'center'));
-    if (widget.showRightPanel) horizAreas.add(Area(flex: 0.2, min: 200, data: 'right'));
-    
-    // NOTE: In a real app we'd preserve sizes instead of resetting flex.
-    // For now we just recreate the controller when visibility changes (or modify areas).
-    // The simple way is to pass a new controller if we want to change areas dynamically
-    // but multi_split_view might allow modifying areas.
-    
     Widget mainHorizontalSplit = MultiSplitView(
-      controller: MultiSplitViewController(areas: horizAreas),
+      controller: _horizontalController,
       builder: (context, area) {
         if (area.data == 'left') return widget.leftPanel;
         if (area.data == 'center') return widget.centerPanel;
         if (area.data == 'right') return widget.rightPanel;
         return const SizedBox.shrink();
       },
-      dividerBuilder: (axis, index, resizable, dragging, highlighted, themeData) {
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          color: dragging || highlighted 
-              ? ui.colors.accent.withOpacity(0.8) 
-              : ui.colors.divider.withOpacity(0.4),
-          child: Center(
-            child: Container(
-              width: axis == Axis.vertical ? 24 : 1,
-              height: axis == Axis.vertical ? 1 : 24,
-              decoration: BoxDecoration(
-                color: dragging || highlighted 
-                    ? Colors.white.withOpacity(0.5) 
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ),
-        );
-      },
     );
 
     MultiSplitViewTheme mainTheme = MultiSplitViewTheme(
       data: MultiSplitViewThemeData(
-        dividerThickness: 4, // Slightly thicker for easier grabbing, but thin visual line
+        dividerThickness: 8, // Increased for much better hit area
+        dividerPainter: DividerPainters.background(
+          color: ui.colors.divider,
+          highlightedColor: ui.colors.accent,
+        ),
       ),
       child: mainHorizontalSplit,
     );
@@ -111,7 +106,11 @@ class _SplitShellState extends ConsumerState<SplitShell> {
 
     return MultiSplitViewTheme(
       data: MultiSplitViewThemeData(
-        dividerThickness: 4,
+        dividerThickness: 8,
+        dividerPainter: DividerPainters.background(
+          color: ui.colors.divider,
+          highlightedColor: ui.colors.accent,
+        ),
       ),
       child: MultiSplitView(
         axis: Axis.vertical,
@@ -120,26 +119,6 @@ class _SplitShellState extends ConsumerState<SplitShell> {
           if (area.data == 'main') return mainTheme;
           if (area.data == 'bottom') return widget.bottomPanel;
           return const SizedBox.shrink();
-        },
-        dividerBuilder: (axis, index, resizable, dragging, highlighted, themeData) {
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            color: dragging || highlighted 
-                ? ui.colors.accent.withOpacity(0.8) 
-                : ui.colors.divider.withOpacity(0.4),
-            child: Center(
-              child: Container(
-                width: axis == Axis.vertical ? 24 : 1,
-                height: axis == Axis.vertical ? 1 : 24,
-                decoration: BoxDecoration(
-                  color: dragging || highlighted 
-                      ? Colors.white.withOpacity(0.5) 
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-            ),
-          );
         },
       ),
     );

@@ -326,7 +326,7 @@ class _ToggleButton extends StatelessWidget {
                 width: 1.0,
               ),
               color:
-                  isSelected ? AppTheme.darkAccentColor.withOpacity(0.2) : null,
+                  isSelected ? AppTheme.darkAccentColor.withValues(alpha: 0.2) : null,
             ),
             child: Center(
               child: Text(

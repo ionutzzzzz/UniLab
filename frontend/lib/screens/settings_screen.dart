@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
 import '../providers/settings_provider.dart';
 import '../theme/ui_theme.dart';
+import '../theme/plot_colormaps.dart';
+import '../theme/syntax_themes.dart';
 import '../widgets/ui_text.dart';
 import '../widgets/ui_button.dart';
-import '../widgets/ui_glass_container.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,6 +18,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   int _selectedIndex = 0;
+  final TextEditingController _hexController = TextEditingController();
 
   final List<Map<String, dynamic>> _categories = [
     {'title': 'Appearance', 'icon': LucideIcons.palette},
@@ -23,7 +26,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'title': 'Workspace', 'icon': LucideIcons.layoutGrid},
     {'title': 'Shortcuts', 'icon': LucideIcons.keyboard},
     {'title': 'Network', 'icon': LucideIcons.network},
+    {'title': 'Security', 'icon': LucideIcons.shieldCheck},
   ];
+
+  @override
+  void dispose() {
+    _hexController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               color: ui.colors.panel,
               border: Border(
-                right: BorderSide(color: ui.colors.divider.withOpacity(0.5)),
+                right: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5)),
               ),
             ),
             child: Column(
@@ -72,12 +82,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 _buildContentHeader(ui),
                 Expanded(
-                  child: Container(
+                  child: SingleChildScrollView(
                     padding: EdgeInsets.all(ui.spacing.xl),
                     child: _buildCategoryContent(ui, settingsProvider),
                   ),
                 ),
-                _buildContentFooter(ui),
+                _buildContentFooter(ui, settingsProvider),
               ],
             ),
           ),
@@ -121,7 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       height: 48,
       padding: EdgeInsets.symmetric(horizontal: ui.spacing.xl),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
       ),
       child: Row(
         children: [
@@ -136,11 +146,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildContentFooter(UiTheme ui) {
+  Widget _buildContentFooter(UiTheme ui, SettingsProvider provider) {
     return Container(
       padding: EdgeInsets.all(ui.spacing.lg),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+        border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -148,11 +158,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           UiButton(
             label: 'Restore Defaults',
             variant: UiButtonVariant.secondary,
-            onPressed: () {},
+            onPressed: () => provider.resetToDefaults(),
           ),
           SizedBox(width: ui.spacing.md),
           UiButton(
-            label: 'Apply Changes',
+            label: 'Done',
             variant: UiButtonVariant.primary,
             onPressed: () => Navigator.pop(context),
           ),
@@ -165,13 +175,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     switch (_selectedIndex) {
       case 0: return _buildAppearanceSettings(ui, settingsProvider);
       case 1: return _buildEditorSettings(ui, settingsProvider);
+      case 2: return _buildWorkspaceSettings(ui, settingsProvider);
+      case 3: return _buildShortcutsSettings(ui, settingsProvider);
+      case 4: return _buildNetworkSettings(ui, settingsProvider);
+      case 5: return _buildSecuritySettings(ui, settingsProvider);
       default: return _buildComingSoon(ui);
     }
   }
 
   Widget _buildAppearanceSettings(UiTheme ui, SettingsProvider settingsProvider) {
     final settings = settingsProvider.settings;
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(ui, 'Theme Selection'),
         _buildSettingItem(
@@ -200,12 +215,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ui,
           'Accent Color',
           'Primary color used for buttons, links, and highlights.',
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-               _colorCircle(ui, const Color(0xFF4AA3FF), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF4AA3FF))),
-               _colorCircle(ui, const Color(0xFF23D18B), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF23D18B))),
-               _colorCircle(ui, const Color(0xFFF14C4C), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFF14C4C))),
-               _colorCircle(ui, const Color(0xFFE5E510), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFE5E510))),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                   _colorCircle(ui, const Color(0xFF4AA3FF), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF4AA3FF))),
+                   _colorCircle(ui, const Color(0xFF23D18B), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF23D18B))),
+                   _colorCircle(ui, const Color(0xFFF14C4C), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFF14C4C))),
+                   _colorCircle(ui, const Color(0xFFE5E510), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFE5E510))),
+                   _colorCircle(ui, const Color(0xFFA44AFF), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFA44AFF))),
+                   _colorCircle(ui, const Color(0xFFFF8C42), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFFF8C42))),
+                   _colorCircle(ui, const Color(0xFF70C1B3), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF70C1B3))),
+                   _colorCircle(ui, const Color(0xFFE9724C), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFE9724C))),
+                   _colorCircle(ui, const Color(0xFF255C99), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFF255C99))),
+                   _colorCircle(ui, const Color(0xFFC33C54), settings.accentColor, () => _updateAccent(settingsProvider, const Color(0xFFC33C54))),
+                ],
+              ),
+              const SizedBox(height: 12),
+              UiButton(
+                label: 'Choose Custom Color',
+                size: UiButtonSize.sm,
+                variant: UiButtonVariant.secondary,
+                icon: LucideIcons.pipette,
+                onPressed: () => _showColorPicker(context, settingsProvider),
+              ),
+            ],
+          ),
+        ),
+        _buildSettingItem(
+          ui,
+          'UI Scale',
+          'Adjust the overall size of the user interface elements.',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 150,
+                child: Slider(
+                  value: settings.uiScale,
+                  min: 0.8,
+                  max: 1.4,
+                  divisions: 6,
+                  activeColor: ui.colors.accent,
+                  onChanged: (val) => settingsProvider.updateSettings(settings.copyWith(uiScale: val)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              UiText(text: '${(settings.uiScale * 100).toInt()}%', variant: UiTextVariant.label),
             ],
           ),
         ),
@@ -222,11 +281,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ui,
           'Smooth Animations',
           'Enable interface transitions and micro-animations.',
-          true,
-          (val) {},
+          settings.animationEnabled,
+          (val) => settingsProvider.updateSettings(settings.copyWith(animationEnabled: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Remember Layout',
+          'Persist panel sizes and visibility across sessions.',
+          settings.rememberLayout,
+          (val) => settingsProvider.updateSettings(settings.copyWith(rememberLayout: val)),
+        ),
+        SizedBox(height: ui.spacing.xl),
+        _buildSectionHeader(ui, 'Shell Visibility'),
+        _buildSettingToggle(
+          ui,
+          'Show Toolbar',
+          'Display the top ribbon navigation bar.',
+          settings.showToolbar,
+          (val) => settingsProvider.updateSettings(settings.copyWith(showToolbar: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Show Status Bar',
+          'Display the bottom application status bar.',
+          settings.showStatusBar,
+          (val) => settingsProvider.updateSettings(settings.copyWith(showStatusBar: val)),
         ),
       ],
     );
+  }
+
+  Future<void> _showColorPicker(BuildContext context, SettingsProvider provider) async {
+    final ui = UiTheme.of(context);
+    Color colorBeforeDialog = provider.settings.accentColor;
+    
+    if (await ColorPicker(
+      color: provider.settings.accentColor,
+      onColorChanged: (Color color) => _updateAccent(provider, color),
+      width: 40,
+      height: 40,
+      borderRadius: 4,
+      spacing: 5,
+      runSpacing: 5,
+      wheelDiameter: 155,
+      heading: UiText(text: 'Select Accent Color', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+      subheading: UiText(text: 'Select color shade', variant: UiTextVariant.label),
+      wheelSubheading: UiText(text: 'Selected color and its shades', variant: UiTextVariant.label),
+      showColorName: true,
+      showColorCode: true,
+      copyPasteBehavior: const ColorPickerCopyPasteBehavior(
+        longPressMenu: true,
+      ),
+      materialNameTextStyle: Theme.of(context).textTheme.bodySmall,
+      colorNameTextStyle: Theme.of(context).textTheme.bodySmall,
+      colorCodeTextStyle: Theme.of(context).textTheme.bodySmall,
+      pickerTypeLabels: const <ColorPickerType, String>{
+        ColorPickerType.primary: 'Primary',
+        ColorPickerType.accent: 'Accent',
+      },
+    ).showPickerDialog(
+      context,
+      constraints: const BoxConstraints(minWidth: 480, minHeight: 480, maxWidth: 480, maxHeight: 600),
+    )) {
+      // Picked
+    } else {
+      _updateAccent(provider, colorBeforeDialog);
+    }
   }
 
   void _updateAccent(SettingsProvider provider, Color color) {
@@ -238,14 +358,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(right: 12),
-        width: 20,
-        height: 20,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
-          boxShadow: isSelected ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 8)] : null,
+          border: isSelected ? Border.all(color: Colors.white, width: 2) : Border.all(color: Colors.white24, width: 1),
+          boxShadow: isSelected ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 8)] : null,
         ),
       ),
     );
@@ -253,16 +372,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildEditorSettings(UiTheme ui, SettingsProvider settingsProvider) {
     final settings = settingsProvider.settings;
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(ui, 'Code Aesthetics'),
+        _buildSettingItem(
+          ui,
+          'Font Family',
+          'The typeface used for code display.',
+          DropdownButton<String>(
+            value: settings.fontFamily,
+            dropdownColor: ui.colors.panel,
+            style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
+            underline: Container(),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                settingsProvider.updateSettings(settings.copyWith(fontFamily: newValue));
+              }
+            },
+            items: ['JetBrains Mono', 'Roboto Mono', 'Fira Code', 'Source Code Pro'].map((font) {
+              return DropdownMenuItem(
+                value: font, 
+                child: Text(font, style: const TextStyle(fontSize: 11)),
+              );
+            }).toList(),
+          ),
+        ),
         _buildSettingItem(
           ui,
           'Font Size',
           'Adjust the text size for the primary editor surface.',
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
+              SizedBox(
+                width: 150,
                 child: Slider(
                   value: settings.fontSize,
                   min: 10,
@@ -291,6 +435,283 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Display a code overview on the right side of the editor.',
           settings.showMinimap,
           (val) => settingsProvider.updateSettings(settings.copyWith(showMinimap: val)),
+        ),
+        _buildSettingItem(
+          ui,
+          'Highlight Theme',
+          'Theme colors used for code syntax highlighting.',
+          DropdownButton<String>(
+            value: SyntaxHighlightTheme.all.any((m) => m.name == settings.syntaxHighlightTheme)
+                ? settings.syntaxHighlightTheme
+                : SyntaxHighlightTheme.all.first.name,
+            dropdownColor: ui.colors.panel,
+            style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
+            underline: Container(),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                settingsProvider.updateSettings(settings.copyWith(syntaxHighlightTheme: newValue));
+              }
+            },
+            items: SyntaxHighlightTheme.all.map((map) {
+              return DropdownMenuItem(
+                value: map.name, 
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: map.backgroundColor,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(map.name, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(width: 12),
+                    Row(
+                      children: map.colors.take(4).map((c) => Container(width: 6, height: 6, color: c)).toList(),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Show Whitespace',
+          'Display visible characters for spaces and tabs.',
+          settings.showWhitespace,
+          (val) => settingsProvider.updateSettings(settings.copyWith(showWhitespace: val)),
+        ),
+        SizedBox(height: ui.spacing.xl),
+        _buildSectionHeader(ui, 'Behavior'),
+        _buildSettingToggle(
+          ui,
+          'Enable Autocomplete',
+          'Show intelligent code suggestions as you type.',
+          settings.enableAutocomplete,
+          (val) => settingsProvider.updateSettings(settings.copyWith(enableAutocomplete: val)),
+        ),
+        _buildSettingItem(
+          ui,
+          'Tab Size',
+          'Number of spaces per indentation level.',
+          DropdownButton<int>(
+            value: settings.tabSize,
+            dropdownColor: ui.colors.panel,
+            style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
+            underline: Container(),
+            onChanged: (int? newValue) {
+              if (newValue != null) {
+                settingsProvider.updateSettings(settings.copyWith(tabSize: newValue));
+              }
+            },
+            items: [2, 4, 8].map((size) {
+              return DropdownMenuItem(
+                value: size, 
+                child: Text('$size Spaces', style: const TextStyle(fontSize: 11)),
+              );
+            }).toList(),
+          ),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Auto-save',
+          'Automatically save changes to disk after a short delay.',
+          settings.autoSave,
+          (val) => settingsProvider.updateSettings(settings.copyWith(autoSave: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Word Wrap',
+          'Force long lines to wrap within the editor width.',
+          settings.wordWrap,
+          (val) => settingsProvider.updateSettings(settings.copyWith(wordWrap: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Bracket Matching',
+          'Highlight matching brackets when the cursor is near one.',
+          settings.bracketMatching,
+          (val) => settingsProvider.updateSettings(settings.copyWith(bracketMatching: val)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkspaceSettings(UiTheme ui, SettingsProvider settingsProvider) {
+    final settings = settingsProvider.settings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(ui, 'Project Management'),
+        _buildSettingItem(
+          ui,
+          'Default Project Path',
+          'Initial directory loaded when no project is specified.',
+          SizedBox(
+            width: 250,
+            child: TextField(
+              controller: TextEditingController(text: settings.defaultProjectPath),
+              onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: val)),
+              decoration: const InputDecoration(
+                hintText: '/home/user/unilab_projects',
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Auto-refresh Explorer',
+          'Listen for file system changes and update the sidebar automatically.',
+          settings.autoRefreshExplorer,
+          (val) => settingsProvider.updateSettings(settings.copyWith(autoRefreshExplorer: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Show Hidden Files',
+          'Display dotfiles and hidden system entries in the explorer.',
+          settings.showHiddenFiles,
+          (val) => settingsProvider.updateSettings(settings.copyWith(showHiddenFiles: val)),
+        ),
+        SizedBox(height: ui.spacing.xl),
+        _buildSectionHeader(ui, 'Data Display'),
+        _buildSettingToggle(
+          ui,
+          'Real-time Inspector',
+          'Update property inspector while simulation is running.',
+          settings.realTimeInspector,
+          (val) => settingsProvider.updateSettings(settings.copyWith(realTimeInspector: val)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShortcutsSettings(UiTheme ui, SettingsProvider settingsProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(ui, 'Keyboard Mapping'),
+        _buildShortcutItem(ui, 'Execute Script', 'F5'),
+        _buildShortcutItem(ui, 'Command Palette', 'Ctrl+Shift+P'),
+        _buildShortcutItem(ui, 'Find in File', 'Ctrl+F'),
+        _buildShortcutItem(ui, 'Save All', 'Ctrl+S'),
+        _buildShortcutItem(ui, 'Toggle Sidebar', 'Ctrl+B'),
+        _buildShortcutItem(ui, 'Toggle Console', 'Ctrl+J'),
+        SizedBox(height: ui.spacing.lg),
+        Center(
+          child: UiButton(
+            label: 'Customize All Shortcuts',
+            variant: UiButtonVariant.secondary,
+            onPressed: () {},
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShortcutItem(UiTheme ui, String action, String key) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: ui.spacing.md),
+      child: Row(
+        children: [
+          Expanded(child: UiText(text: action, variant: UiTextVariant.body)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: ui.colors.panelHeader,
+              borderRadius: ui.spacing.radiusSm,
+              border: Border.all(color: ui.colors.divider),
+            ),
+            child: UiText(
+              text: key,
+              variant: UiTextVariant.codeBody,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: ui.colors.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNetworkSettings(UiTheme ui, SettingsProvider settingsProvider) {
+    final settings = settingsProvider.settings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(ui, 'Backend Connectivity'),
+        _buildSettingItem(
+          ui,
+          'Kernel Address',
+          'Endpoint URL for the UniLab computation engine.',
+          SizedBox(
+            width: 200,
+            child: TextField(
+              controller: TextEditingController(text: settings.kernelAddress),
+              onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(kernelAddress: val)),
+              decoration: const InputDecoration(
+                hintText: 'http://localhost:8000',
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
+        ),
+        _buildSettingItem(
+          ui,
+          'Connection Timeout',
+          'Seconds to wait before aborting a request.',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Slider(
+                value: settings.connectionTimeout.toDouble(), 
+                min: 5, 
+                max: 120, 
+                divisions: 23,
+                onChanged: (v) => settingsProvider.updateSettings(settings.copyWith(connectionTimeout: v.toInt())),
+              ),
+              UiText(text: '${settings.connectionTimeout}s', variant: UiTextVariant.label),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSecuritySettings(UiTheme ui, SettingsProvider settingsProvider) {
+    final settings = settingsProvider.settings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(ui, 'Sandbox & Privacy'),
+        _buildSettingToggle(
+          ui,
+          'Restricted Execution',
+          'Prevent scripts from accessing system paths outside project root.',
+          settings.restrictedExecution,
+          (val) => settingsProvider.updateSettings(settings.copyWith(restrictedExecution: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Network Access',
+          'Allow user scripts to make outbound network requests.',
+          settings.networkAccess,
+          (val) => settingsProvider.updateSettings(settings.copyWith(networkAccess: val)),
+        ),
+        _buildSettingToggle(
+          ui,
+          'Telemetry',
+          'Send anonymous usage data to improve UniLab.',
+          settings.telemetry,
+          (val) => settingsProvider.updateSettings(settings.copyWith(telemetry: val)),
         ),
       ],
     );
@@ -346,7 +767,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(width: 32),
-          SizedBox(width: 220, child: Align(alignment: Alignment.centerRight, child: control)),
+          Align(alignment: Alignment.centerRight, child: control),
         ],
       ),
     );
@@ -401,8 +822,8 @@ class _CategoryItemState extends State<_CategoryItem> {
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
           decoration: BoxDecoration(
             color: widget.isSelected 
-                ? ui.colors.accent.withOpacity(0.15) 
-                : (_isHovered ? ui.colors.hover.withOpacity(0.5) : Colors.transparent),
+                ? ui.colors.accent.withValues(alpha: 0.15) 
+                : (_isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent),
             borderRadius: ui.spacing.radiusMd,
           ),
           child: Row(

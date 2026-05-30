@@ -6,6 +6,7 @@ import 'workspace_segmented.dart';
 import 'variables_grid.dart';
 import 'plots_gallery.dart';
 import 'property_inspector.dart';
+import 'help_view.dart';
 
 class WorkspacePanel extends StatefulWidget {
   const WorkspacePanel({super.key});
@@ -34,7 +35,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
         activeView = const PlotsGallery();
         break;
       case 'Help':
-        activeView = Center(child: UiText(text: 'Help Pane', color: ui.colors.textMuted));
+        activeView = const HelpView();
         break;
       default:
         activeView = const SizedBox.shrink();
@@ -45,12 +46,12 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
       child: Column(
         children: [
           Container(
-            height: 38,
+            height: 44,
             padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

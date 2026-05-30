@@ -20,17 +20,17 @@ class WorkspaceSegmented extends StatelessWidget {
     final ui = UiTheme.of(context);
     
     return Container(
-      height: 38,
-      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.sm),
+      height: 48,
+      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.xs),
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,
-        border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: ui.colors.canvas.withOpacity(0.5),
+          color: ui.colors.canvas.withValues(alpha: 0.5),
           borderRadius: ui.spacing.radiusMd,
-          border: Border.all(color: ui.colors.divider.withOpacity(0.5)),
+          border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
         ),
         child: Row(
           children: segments.map((segment) {
@@ -63,28 +63,32 @@ class WorkspaceSegmented extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: isActive ? activeColor.withOpacity(0.9) : Colors.transparent,
+                      color: isActive ? activeColor.withValues(alpha: 0.9) : Colors.transparent,
                       borderRadius: ui.spacing.radiusMd,
                       boxShadow: isActive ? [
                         BoxShadow(
-                          color: activeColor.withOpacity(0.3),
+                          color: activeColor.withValues(alpha: 0.3),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         )
                       ] : null,
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(icon, size: 12, color: isActive ? Colors.black87 : ui.colors.textMuted),
+                        Icon(icon, size: 14, color: isActive ? Colors.black87 : ui.colors.textMuted),
                         const SizedBox(width: 6),
-                        UiText(
-                          text: segment,
-                          variant: UiTextVariant.label,
-                          fontSize: 10,
-                          fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                          color: isActive ? Colors.black87 : ui.colors.textMuted,
-                          letterSpacing: 0.2,
+                        Flexible(
+                          child: UiText(
+                            text: segment,
+                            variant: UiTextVariant.label,
+                            fontSize: 11,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                            color: isActive ? Colors.black87 : ui.colors.textMuted,
+                            letterSpacing: 0.1,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),

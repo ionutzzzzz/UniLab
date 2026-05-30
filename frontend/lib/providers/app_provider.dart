@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:watcher/watcher.dart';
+import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../utils/backend_client.dart';
 import '../utils/file_manager.dart';
@@ -23,7 +23,7 @@ class AppProvider with ChangeNotifier {
   String _consoleOutput = '';
 
   Map<String, dynamic> _workspaceVariables = {};
-  List<Map<String, dynamic>> _generatedPlots = [];
+  final List<Map<String, dynamic>> _generatedPlots = [];
   bool _isExecuting = false;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
@@ -128,6 +128,7 @@ class AppProvider with ChangeNotifier {
 
   void addNewFile() {
     final newFile = UniLabFile(
+      id: const Uuid().v4(),
       name: 'Untitled${_openFiles.length + 1}.m',
       path: '',
       content: '',
@@ -139,11 +140,12 @@ class AppProvider with ChangeNotifier {
 
   void loadSample(String name, String content) {
     // Check if file is already open
-    final existingIndex = _openFiles.indexWhere((f) => f.name == name);
+    final existingIndex = _openFiles.indexWhere((f) => f.name == name && f.path == 'sample/$name');
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
       final newFile = UniLabFile(
+        id: const Uuid().v4(),
         name: name,
         path: 'sample/$name',
         content: content,
@@ -168,13 +170,13 @@ class AppProvider with ChangeNotifier {
 
     // Check if file is already open
     final existingIndex = _openFiles.indexWhere(
-      (f) => f.path == path || (f.path == '' && f.name == name),
+      (f) => f.path == path,
     );
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
       final content = await UniLabFileManager.readFile(file);
-      final newFile = UniLabFile(name: name, path: path, content: content);
+      final newFile = UniLabFile(id: const Uuid().v4(), name: name, path: path, content: content);
       _openFiles.add(newFile);
       _activeFileIndex = _openFiles.length - 1;
     }
@@ -190,7 +192,26 @@ class AppProvider with ChangeNotifier {
   }
 
   void setActiveFile(int index) {
+    debugPrint('AppProvider: Setting active file to index $index');
     _activeFileIndex = index;
+    notifyListeners();
+  }
+
+  void reorderOpenFile(int oldIndex, int newIndex) {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final UniLabFile file = _openFiles.removeAt(oldIndex);
+    _openFiles.insert(newIndex, file);
+
+    // Keep active file index consistent
+    if (_activeFileIndex == oldIndex) {
+      _activeFileIndex = newIndex;
+    } else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex) {
+      _activeFileIndex -= 1;
+    } else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex) {
+      _activeFileIndex += 1;
+    }
     notifyListeners();
   }
 
@@ -309,7 +330,7 @@ class AppProvider with ChangeNotifier {
         final name = fileData.name;
         final content = String.fromCharCodes(fileData.bytes!);
         
-        final newFile = UniLabFile(name: name, path: 'web/$name', content: content);
+        final newFile = UniLabFile(id: const Uuid().v4(), name: name, path: 'web/$name', content: content);
         _openFiles.add(newFile);
         _activeFileIndex = _openFiles.length - 1;
         notifyListeners();
