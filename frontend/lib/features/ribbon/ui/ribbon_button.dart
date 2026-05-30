@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_icon.dart';
 import '../../../widgets/ui_text.dart';
+import '../../../providers/settings_provider.dart';
 
 class RibbonButton extends StatefulWidget {
   const RibbonButton({
@@ -31,101 +33,93 @@ class _RibbonButtonState extends State<RibbonButton> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final settings = context.watch<SettingsProvider>().settings;
     final isEnabled = widget.onTap != null;
+    final animDuration = settings.animationEnabled ? const Duration(milliseconds: 150) : Duration.zero;
 
     Color bgColor = Colors.transparent;
     Color fgColor = isEnabled ? ui.colors.icon : ui.colors.textDisabled;
 
-    if (widget.color != null && isEnabled) {
-      bgColor = _isHovered ? widget.color!.withOpacity(0.25) : widget.color!.withOpacity(0.1);
-      fgColor = _isHovered ? widget.color! : widget.color!.withOpacity(0.85);
-    } else if (widget.isPrimary && isEnabled) {
-      bgColor = _isHovered ? ui.colors.accentHover : ui.colors.accent;
+    if (_isHovered && isEnabled) {
+      // On hover, use the custom color or the global accent color
+      bgColor = widget.color ?? ui.colors.accent;
       fgColor = ui.colors.textInverse;
-    } else if (_isHovered && isEnabled) {
-      bgColor = ui.colors.hover.withOpacity(0.8);
-      fgColor = ui.colors.textPrimary;
+    } else if (isEnabled) {
+      // Default state: transparent background, icon color matches custom color if provided
+      fgColor = widget.color ?? ui.colors.icon;
     }
 
-    final double width = widget.isLarge ? 84 : 96; // Adjusted for full text display
-    final double height = widget.isLarge ? 68 : 34;
+    // All buttons now have the same professional height for consistency
+    final double minWidth = widget.isLarge ? 56 : 48;
+    const double height = 68;
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: AnimatedScale(
-            scale: _isHovered && isEnabled ? 1.02 : 1.0,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.symmetric(
-                horizontal: ui.spacing.xs,
-                vertical: ui.spacing.xxs,
-              ),
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: ui.spacing.radiusMd,
-                border: Border.all(
-                  color: widget.color != null && isEnabled
-                    ? widget.color!.withOpacity(0.3)
-                    : (_isHovered && isEnabled ? ui.colors.border.withOpacity(0.3) : Colors.transparent),
-                  width: 1.0,
+    return IntrinsicWidth(
+      child: Container(
+        constraints: BoxConstraints(
+          minWidth: minWidth,
+          minHeight: height,
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 1.0),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: AnimatedScale(
+              scale: _isHovered && isEnabled ? 1.02 : 1.0,
+              duration: animDuration,
+              curve: Curves.easeOutCubic,
+              child: AnimatedContainer(
+                duration: animDuration,
+                curve: Curves.easeOut,
+                padding: EdgeInsets.symmetric(
+                  horizontal: ui.spacing.sm, // Increased padding to ensure text doesn't overlap
+                  vertical: ui.spacing.xxs,
                 ),
-                boxShadow: _isHovered && isEnabled ? ui.colors.shadowSm : null,
-              ),
-              child: widget.isLarge
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        transform: Matrix4.identity()..translate(0.0, _isHovered ? -1.0 : 0.0),
-                        child: UiIcon(
-                          widget.icon,
-                          size: 26,
-                          color: fgColor,
-                        ),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: ui.spacing.radiusMd, // 6px-8px for desktop polish
+                  border: Border.all(
+                    color: widget.color != null && isEnabled
+                      ? widget.color!.withValues(alpha: 0.3)
+                      : (_isHovered && isEnabled ? ui.colors.border.withValues(alpha: 0.3) : Colors.transparent),
+                    width: 1.0,
+                  ),
+                  boxShadow: _isHovered && isEnabled ? ui.colors.shadowSm : null,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: animDuration,
+                      transform: Matrix4.identity()..translate(0.0, _isHovered ? -1.0 : 0.0),
+                      child: UiIcon(
+                        widget.icon,
+                        size: widget.isLarge ? 24 : 18, // Slightly smaller icon for standard buttons
+                        color: fgColor,
                       ),
-                      const SizedBox(height: 6),
-                      UiText(
+                    ),
+                    const SizedBox(height: 4),
+                    Flexible(
+                      child: UiText(
                         text: widget.label,
                         variant: UiTextVariant.label,
                         fontSize: 10,
                         fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
                         color: fgColor,
                         textAlign: TextAlign.center,
+                        overflow: TextOverflow.visible,
                       ),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      UiIcon(
-                        widget.icon,
-                        size: 18,
-                        color: fgColor,
-                      ),
-                      const SizedBox(width: 8),
-                      UiText(
-                        text: widget.label,
-                        variant: UiTextVariant.label,
-                        fontSize: 10,
-                        fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
-                        color: fgColor,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }

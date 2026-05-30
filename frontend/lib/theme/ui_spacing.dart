@@ -32,20 +32,18 @@ class UiSpacing {
   final double strokeHair;
   final double focusRing;
 
-  factory UiSpacing.standard() => const UiSpacing(
-        xxs: 2.0,
-        xs: 4.0,
-        sm: 8.0,
-        md: 12.0,
-        lg: 16.0,
-        xl: 24.0,
+  factory UiSpacing.standard({double scale = 1.0}) => UiSpacing(
+        xxs: 2.0 * scale,
+        xs: 4.0 * scale,
+        sm: 8.0 * scale,
+        md: 12.0 * scale,
+        lg: 16.0 * scale,
+        xl: 24.0 * scale,
         radiusNone: BorderRadius.zero,
-        radiusSm: BorderRadius.all(Radius.circular(6.0)),
-        radiusMd: BorderRadius.all(Radius.circular(8.0)),
-        radiusLg: BorderRadius.all(Radius.circular(10.0)),
+        radiusSm: BorderRadius.all(Radius.circular(6.0 * scale)),
+        radiusMd: BorderRadius.all(Radius.circular(8.0 * scale)),
+        radiusLg: BorderRadius.all(Radius.circular(10.0 * scale)),
         strokeHair: 1.0,
-        focusRing: 2.0,
+        focusRing: 2.0 * scale,
       );
-
-
 }

@@ -43,7 +43,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -126,7 +126,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       padding: EdgeInsets.only(left: ui.spacing.md, top: ui.spacing.sm, bottom: ui.spacing.xxs),
       child: Row(
         children: [
-          Icon(headerIcon, size: 10, color: ui.colors.textMuted.withOpacity(0.4)),
+          Icon(headerIcon, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.4)),
           const SizedBox(width: 8),
           UiText(
             text: title,
@@ -134,10 +134,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             fontSize: 9,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.0,
-            color: ui.colors.textMuted.withOpacity(0.6),
+            color: ui.colors.textMuted.withValues(alpha: 0.6),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Divider(color: ui.colors.divider.withOpacity(0.2), height: 1)),
+          Expanded(child: Divider(color: ui.colors.divider.withValues(alpha: 0.2), height: 1)),
         ],
       ),
     );
@@ -153,7 +153,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: ui.colors.panelHeader.withOpacity(0.5),
+                color: ui.colors.panelHeader.withValues(alpha: 0.5),
                 shape: BoxShape.circle,
               ),
               child: Icon(LucideIcons.folderOpen, size: 40, color: ui.colors.textDisabled),
@@ -262,10 +262,10 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           height: 26,
           padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.selected.withOpacity(0.3) : Colors.transparent,
+            color: _isHovered ? ui.colors.selected.withValues(alpha: 0.3) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
             border: Border.all(
-              color: _isHovered ? ui.colors.accent.withOpacity(0.1) : Colors.transparent,
+              color: _isHovered ? ui.colors.accent.withValues(alpha: 0.1) : Colors.transparent,
               width: 0.5,
             ),
           ),
@@ -300,7 +300,7 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                 ),
               ),
               if (widget.isRecent && _isHovered)
-                Icon(LucideIcons.history, size: 12, color: ui.colors.textMuted.withOpacity(0.5)),
+                Icon(LucideIcons.history, size: 12, color: ui.colors.textMuted.withValues(alpha: 0.5)),
             ],
           ),
         ),

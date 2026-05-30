@@ -15,7 +15,7 @@ class ShellDecorations {
         bottom: BorderSide(color: theme.colors.border, width: 1.0),
         // Beveled inner top-highlight using the Pastel Blue
         top: BorderSide(
-          color: theme.colors.accent.withOpacity(0.3), 
+          color: theme.colors.accent.withValues(alpha: 0.3), 
           width: 1.0,
         ),
       ),

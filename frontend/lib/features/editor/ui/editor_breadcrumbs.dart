@@ -19,7 +19,7 @@ class EditorBreadcrumbs extends StatelessWidget {
       height: 24,
       decoration: BoxDecoration(
         color: ui.colors.canvas,
-        border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
       ),
       padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
       child: Row(
@@ -30,7 +30,7 @@ class EditorBreadcrumbs extends StatelessWidget {
             if (i > 0)
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: ui.spacing.xxs),
-                child: UiIcon(LucideIcons.chevronRight, size: 10, color: ui.colors.textMuted.withOpacity(0.5)),
+                child: UiIcon(LucideIcons.chevronRight, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.5)),
               ),
             _BreadcrumbSegment(
               label: pathSegments[i],
@@ -71,7 +71,7 @@ class _BreadcrumbSegmentState extends State<_BreadcrumbSegment> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.hover.withOpacity(0.5) : Colors.transparent,
+            color: _isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
           ),
           child: UiText(
@@ -110,7 +110,7 @@ class _FunctionNavigatorState extends State<_FunctionNavigator> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.accent.withOpacity(0.15) : Colors.transparent,
+            color: _isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
           ),
           child: Row(

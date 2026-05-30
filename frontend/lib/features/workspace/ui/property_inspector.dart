@@ -27,8 +27,8 @@ class PropertyInspector extends StatelessWidget {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 6),
           decoration: BoxDecoration(
-            color: ui.colors.tan.withOpacity(0.1),
-            border: Border(bottom: BorderSide(color: ui.colors.tan.withOpacity(0.3))),
+            color: ui.colors.tan.withValues(alpha: 0.1),
+            border: Border(bottom: BorderSide(color: ui.colors.tan.withValues(alpha: 0.3))),
           ),
           child: Row(
             children: [
@@ -92,9 +92,9 @@ class _PropertyRowState extends State<_PropertyRow> {
         padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
         decoration: BoxDecoration(
           color: _isHovered 
-              ? ui.colors.hover.withOpacity(0.5) 
-              : (widget.isEven ? Colors.transparent : ui.colors.panelHeader.withOpacity(0.2)),
-          border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.1))),
+              ? ui.colors.hover.withValues(alpha: 0.5) 
+              : (widget.isEven ? Colors.transparent : ui.colors.panelHeader.withValues(alpha: 0.2)),
+          border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.1))),
         ),
         child: Row(
           children: [

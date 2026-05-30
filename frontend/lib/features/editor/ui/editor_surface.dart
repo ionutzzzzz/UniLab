@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
+import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
+import '../../../theme/syntax_themes.dart';
+import '../../../providers/settings_provider.dart';
 import 'package:context_menus/context_menus.dart';
 
 class EditorSurface extends StatefulWidget {
@@ -21,22 +24,37 @@ class _EditorSurfaceState extends State<EditorSurface> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final settings = context.watch<SettingsProvider>().settings;
 
-    // Custom "Deep Pastel" Syntax Theme using Matplotlib Palette
+    // Get selected syntax theme colors
+    final highlightTheme = SyntaxHighlightTheme.all.firstWhere(
+      (m) => m.name == settings.syntaxHighlightTheme,
+      orElse: () => SyntaxHighlightTheme.all.first,
+    );
+    final colors = highlightTheme.colors;
+    final editorBg = highlightTheme.backgroundColor;
+    final editorFg = highlightTheme.foregroundColor;
+
+    // Custom Syntax Theme using Common IDE Palettes
     final Map<String, TextStyle> customSyntaxTheme = {
-      'root': TextStyle(color: ui.colors.textPrimary, backgroundColor: ui.colors.canvas),
-      'keyword': TextStyle(color: ui.colors.accent, fontWeight: FontWeight.bold), // Pastel Blue
-      'string': TextStyle(color: ui.colors.success), // Pastel Green
-      'number': TextStyle(color: ui.colors.warning), // Pastel Orange
-      'comment': TextStyle(color: ui.colors.textDisabled, fontStyle: FontStyle.italic),
-      'function': TextStyle(color: ui.colors.info), // Pastel Purple
-      'params': TextStyle(color: ui.colors.textSecondary),
-      'builtin': TextStyle(color: ui.colors.info.withOpacity(0.8)),
-      'literal': TextStyle(color: ui.colors.warning),
-      'title': TextStyle(color: ui.colors.accent, fontWeight: FontWeight.bold),
-      'attr': TextStyle(color: ui.colors.textSecondary),
-      'variable': TextStyle(color: ui.colors.textPrimary),
-      'operator': TextStyle(color: ui.colors.textMuted),
+      'root': TextStyle(
+        color: editorFg, 
+        backgroundColor: editorBg,
+        fontSize: settings.fontSize,
+        fontFamily: settings.fontFamily,
+      ),
+      'keyword': TextStyle(color: colors[0], fontWeight: FontWeight.bold),
+      'string': TextStyle(color: colors[1]),
+      'number': TextStyle(color: colors[2]),
+      'comment': TextStyle(color: editorFg.withValues(alpha: 0.5), fontStyle: FontStyle.italic),
+      'function': TextStyle(color: colors[3]),
+      'params': TextStyle(color: editorFg.withValues(alpha: 0.8)),
+      'builtin': TextStyle(color: colors[5].withValues(alpha: 0.9)),
+      'literal': TextStyle(color: colors[4]),
+      'title': TextStyle(color: colors[5], fontWeight: FontWeight.bold),
+      'attr': TextStyle(color: editorFg.withValues(alpha: 0.8)),
+      'variable': TextStyle(color: editorFg),
+      'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
     };
 
     return ContextMenuRegion(
@@ -52,25 +70,28 @@ class _EditorSurfaceState extends State<EditorSurface> {
       child: CodeTheme(
         data: CodeThemeData(styles: customSyntaxTheme),
         child: Container(
-          color: ui.colors.canvas,
+          color: editorBg,
           child: CodeField(
             controller: widget.controller,
             focusNode: widget.focusNode,
+            wrap: settings.wordWrap,
             textStyle: ui.typography.codeBody.copyWith(
-              color: ui.colors.textPrimary,
+              color: editorFg,
               height: 1.5,
-              fontSize: 13,
+              fontSize: settings.fontSize,
+              fontFamily: settings.fontFamily,
             ),
-            background: ui.colors.canvas,
-            cursorColor: ui.colors.accent,
-            lineNumberStyle: LineNumberStyle(
+            background: editorBg,
+            cursorColor: colors[0], // Use keyword color as cursor
+            gutterStyle: GutterStyle(
+              showLineNumbers: settings.showLineNumbers,
               width: 52,
               margin: 12,
               textAlign: TextAlign.right,
               textStyle: ui.typography.label.copyWith(
-                color: ui.colors.textMuted.withOpacity(0.4),
+                color: editorFg.withValues(alpha: 0.3),
                 fontSize: 11,
-                fontFamily: 'JetBrains Mono',
+                fontFamily: settings.fontFamily,
               ),
             ),
           ),

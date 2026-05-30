@@ -72,6 +72,72 @@ class UiColors {
   final Color glassBackground;
   final Color glassBorder;
 
+  UiColors copyWith({
+    Color? canvas,
+    Color? panel,
+    Color? panelHeader,
+    Color? ribbonTabs,
+    Color? overlay,
+    Color? hover,
+    Color? selected,
+    Color? selectedMuted,
+    Color? divider,
+    Color? border,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? textMuted,
+    Color? textDisabled,
+    Color? textInverse,
+    Color? accent,
+    Color? accentHover,
+    Color? accentMuted,
+    Color? success,
+    Color? warning,
+    Color? danger,
+    Color? info,
+    Color? tan,
+    Color? yellow,
+    Color? icon,
+    List<BoxShadow>? shadowSm,
+    List<BoxShadow>? shadowMd,
+    List<BoxShadow>? shadowLg,
+    Color? glassBackground,
+    Color? glassBorder,
+  }) {
+    return UiColors(
+      canvas: canvas ?? this.canvas,
+      panel: panel ?? this.panel,
+      panelHeader: panelHeader ?? this.panelHeader,
+      ribbonTabs: ribbonTabs ?? this.ribbonTabs,
+      overlay: overlay ?? this.overlay,
+      hover: hover ?? this.hover,
+      selected: selected ?? this.selected,
+      selectedMuted: selectedMuted ?? this.selectedMuted,
+      divider: divider ?? this.divider,
+      border: border ?? this.border,
+      textPrimary: textPrimary ?? this.textPrimary,
+      textSecondary: textSecondary ?? this.textSecondary,
+      textMuted: textMuted ?? this.textMuted,
+      textDisabled: textDisabled ?? this.textDisabled,
+      textInverse: textInverse ?? this.textInverse,
+      accent: accent ?? this.accent,
+      accentHover: accentHover ?? this.accentHover,
+      accentMuted: accentMuted ?? this.accentMuted,
+      success: success ?? this.success,
+      warning: warning ?? this.warning,
+      danger: danger ?? this.danger,
+      info: info ?? this.info,
+      tan: tan ?? this.tan,
+      yellow: yellow ?? this.yellow,
+      icon: icon ?? this.icon,
+      shadowSm: shadowSm ?? this.shadowSm,
+      shadowMd: shadowMd ?? this.shadowMd,
+      shadowLg: shadowLg ?? this.shadowLg,
+      glassBackground: glassBackground ?? this.glassBackground,
+      glassBorder: glassBorder ?? this.glassBorder,
+    );
+  }
+
   factory UiColors.dark() => UiColors(
         canvas: const Color(0xFF0F1115),
         panel: const Color(0xFF16191E),
@@ -102,21 +168,21 @@ class UiColors {
         glassBorder: const Color(0x26B3CDE3), // Subtle accent edge for glass
         shadowSm: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
         shadowMd: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 8),
           ),
         ],
         shadowLg: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 30,
             offset: const Offset(0, 15),
             spreadRadius: -5,
@@ -154,21 +220,21 @@ class UiColors {
         glassBorder: const Color(0x33000000),
         shadowSm: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 2,
             offset: const Offset(0, 1),
           ),
         ],
         shadowMd: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
         ],
         shadowLg: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),

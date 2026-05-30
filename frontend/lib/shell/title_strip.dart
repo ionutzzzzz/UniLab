@@ -22,20 +22,20 @@ class TitleStrip extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                ui.colors.canvas.withOpacity(0.8),
+                ui.colors.canvas.withValues(alpha: 0.8),
                 ui.colors.canvas,
               ],
             ),
             borderRadius: BorderRadius.circular(8), // Slightly more square for professional look
-            border: Border.all(color: ui.colors.border.withOpacity(0.4)),
+            border: Border.all(color: ui.colors.border.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 3,
                 offset: const Offset(0, 1),
               ),
               BoxShadow(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 blurRadius: 0,
                 offset: const Offset(0, 1),
                 spreadRadius: 0,
@@ -78,7 +78,7 @@ class TitleStrip extends StatelessWidget {
             UiText(
               text: 'unilab_workspaces/default',
               variant: UiTextVariant.label,
-              color: ui.colors.textMuted.withOpacity(0.8),
+              color: ui.colors.textMuted.withValues(alpha: 0.8),
               letterSpacing: 0.1,
             ),
           ],
@@ -91,12 +91,12 @@ class TitleStrip extends StatelessWidget {
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,
         border: Border(
-          bottom: BorderSide(color: Colors.black.withOpacity(0.4), width: 1.0),
+          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.4), width: 1.0),
         ),
         boxShadow: [
           // Inner top highlight
           BoxShadow(
-            color: Colors.white.withOpacity(0.03),
+            color: Colors.white.withValues(alpha: 0.03),
             offset: const Offset(0, 1),
             blurRadius: 0,
           ),
@@ -105,7 +105,7 @@ class TitleStrip extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            ui.colors.panelHeader.withOpacity(0.9),
+            ui.colors.panelHeader.withValues(alpha: 0.9),
             ui.colors.panelHeader,
           ],
         ),
@@ -150,7 +150,7 @@ class WindowButtons extends StatelessWidget {
         _WindowButton(
           icon: Icons.close,
           onTap: () => windowManager.close(),
-          hoverColor: ui.colors.danger.withOpacity(0.8),
+          hoverColor: ui.colors.danger.withValues(alpha: 0.8),
           isClose: true,
         ),
       ],

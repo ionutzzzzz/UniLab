@@ -7,7 +7,7 @@ import 'theme/app_theme.dart';
 import 'providers/app_provider.dart';
 import 'providers/settings_provider.dart';
 import 'shell/main_shell.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Provider;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,13 +46,16 @@ class UniLabApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final darkTheme = AppTheme.createDarkTheme();
-    final lightTheme = AppTheme.createLightTheme();
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settings = settingsProvider.settings;
+
+    final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
+    final lightTheme = AppTheme.createTheme(settings, Brightness.light);
 
     return MaterialApp(
       title: 'UniLab',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
+      themeMode: settings.themeMode,
       theme: lightTheme,
       darkTheme: darkTheme,
       home: ContextMenuOverlay(child: const MainShell()),

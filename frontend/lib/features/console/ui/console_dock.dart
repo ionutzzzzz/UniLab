@@ -46,7 +46,7 @@ class _ConsoleDockState extends State<ConsoleDock> {
             height: 34,
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
             ),
             child: Row(
               children: [
@@ -177,8 +177,8 @@ class _ConsoleViewState extends State<_ConsoleView> {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
           decoration: BoxDecoration(
-            color: ui.colors.panelHeader.withOpacity(0.5),
-            border: Border(top: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+            color: ui.colors.panelHeader.withValues(alpha: 0.5),
+            border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
           ),
           child: Row(
             children: [

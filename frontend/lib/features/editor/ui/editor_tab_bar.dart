@@ -103,17 +103,17 @@ class _EditorTabState extends State<_EditorTab> {
           height: 30,
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
           decoration: BoxDecoration(
-            color: widget.tab.isActive ? ui.colors.canvas : (_isHovered ? ui.colors.hover.withOpacity(0.5) : ui.colors.panelHeader),
+            color: widget.tab.isActive ? ui.colors.canvas : (_isHovered ? ui.colors.hover.withValues(alpha: 0.5) : ui.colors.panelHeader),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(6.0)),
             border: Border(
-              right: BorderSide(color: ui.colors.divider.withOpacity(0.5)),
+              right: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5)),
               bottom: widget.tab.isActive 
                   ? BorderSide.none 
-                  : BorderSide(color: ui.colors.divider.withOpacity(0.5)),
+                  : BorderSide(color: ui.colors.divider.withValues(alpha: 0.5)),
             ),
             boxShadow: widget.tab.isActive ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 4,
                 offset: const Offset(0, -2),
               ),
@@ -149,7 +149,7 @@ class _EditorTabState extends State<_EditorTab> {
                       UiIcon(
                         widget.tab.icon!, 
                         size: 14, 
-                        color: widget.tab.isActive ? ui.colors.accent : ui.colors.icon.withOpacity(0.7)
+                        color: widget.tab.isActive ? ui.colors.accent : ui.colors.icon.withValues(alpha: 0.7)
                       ),
                       SizedBox(width: ui.spacing.xs),
                     ],

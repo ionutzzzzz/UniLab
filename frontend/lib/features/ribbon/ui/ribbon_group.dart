@@ -21,7 +21,7 @@ class RibbonGroup extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           right: BorderSide(
-            color: ui.colors.divider.withOpacity(0.5),
+            color: ui.colors.divider.withValues(alpha: 0.5),
             width: ui.spacing.strokeHair,
           ),
         ),
@@ -48,7 +48,7 @@ class RibbonGroup extends StatelessWidget {
             variant: UiTextVariant.label,
             fontSize: 9,
             fontWeight: FontWeight.w600,
-            color: ui.colors.textMuted.withOpacity(0.7),
+            color: ui.colors.textMuted.withValues(alpha: 0.7),
             letterSpacing: 0.8,
           ),
           const SizedBox(height: 2),

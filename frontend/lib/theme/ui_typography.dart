@@ -20,53 +20,53 @@ class UiTypography {
   final TextStyle codeGutter;
   final TextStyle consoleBody;
 
-  factory UiTypography.base(Color textPrimary, Color textMuted) {
+  factory UiTypography.base(Color textPrimary, Color textMuted, {double scale = 1.0}) {
     return UiTypography(
       title: TextStyle(
         fontFamily: 'Inter',
-        fontSize: 13,
+        fontSize: 13 * scale,
         fontWeight: FontWeight.w600,
         height: 1.3,
         color: textPrimary,
       ),
       body: TextStyle(
         fontFamily: 'Inter',
-        fontSize: 12,
+        fontSize: 12 * scale,
         fontWeight: FontWeight.w400,
         height: 1.4,
         color: textPrimary,
       ),
       label: TextStyle(
         fontFamily: 'Inter',
-        fontSize: 11,
+        fontSize: 11 * scale,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: textPrimary,
       ),
       caption: TextStyle(
         fontFamily: 'Inter',
-        fontSize: 10,
+        fontSize: 10 * scale,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: textMuted,
       ),
       codeBody: TextStyle(
         fontFamily: 'JetBrains Mono',
-        fontSize: 13,
+        fontSize: 13 * scale,
         fontWeight: FontWeight.w400,
         height: 1.55,
         color: textPrimary,
       ),
       codeGutter: TextStyle(
         fontFamily: 'JetBrains Mono',
-        fontSize: 12,
+        fontSize: 12 * scale,
         fontWeight: FontWeight.w400,
         height: 1.55,
         color: textMuted,
       ),
       consoleBody: TextStyle(
         fontFamily: 'JetBrains Mono',
-        fontSize: 12,
+        fontSize: 12 * scale,
         fontWeight: FontWeight.w400,
         height: 1.5,
         color: textPrimary,

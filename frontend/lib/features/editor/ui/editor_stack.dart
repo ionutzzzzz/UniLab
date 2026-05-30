@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
-import 'package:flutter_highlight/themes/monokai-sublime.dart';
 import 'package:highlight/languages/matlab.dart';
+import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
+import '../../../providers/settings_provider.dart';
+import '../../../providers/app_provider.dart';
 import 'editor_tab_bar.dart';
 import 'editor_breadcrumbs.dart';
 import 'editor_surface.dart';
@@ -19,6 +22,7 @@ class _EditorStackState extends State<EditorStack> {
   late CodeController _controller;
   final FocusNode _focusNode = FocusNode();
   bool _showFindReplace = false;
+  Timer? _autoSaveTimer;
 
   final List<EditorTabModel> _tabs = [
     const EditorTabModel(id: '1', title: 'untitled.m', isActive: true),
@@ -33,10 +37,23 @@ class _EditorStackState extends State<EditorStack> {
       text: 'function y = step(t, a)\n    y = a .* (1 - exp(-t));\nend\n',
       language: matlab,
     );
+    _controller.addListener(_onCodeChanged);
+  }
+
+  void _onCodeChanged() {
+    final settings = context.read<SettingsProvider>().settings;
+    if (settings.autoSave) {
+      _autoSaveTimer?.cancel();
+      _autoSaveTimer = Timer(const Duration(seconds: 2), () {
+        context.read<AppProvider>().saveActiveFile();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
+    _controller.removeListener(_onCodeChanged);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -51,6 +68,8 @@ class _EditorStackState extends State<EditorStack> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final settings = context.watch<SettingsProvider>().settings;
+
     return Container(
       color: ui.colors.canvas,
       child: Column(
@@ -90,7 +109,8 @@ class _EditorStackState extends State<EditorStack> {
                   ),
                 ),
                 // Minimap Placeholder
-                _EditorMinimap(controller: _controller),
+                if (settings.showMinimap)
+                  _EditorMinimap(controller: _controller),
               ],
             ),
           ),
@@ -111,7 +131,7 @@ class _EditorMinimap extends StatelessWidget {
       width: 60,
       decoration: BoxDecoration(
         color: ui.colors.canvas,
-        border: Border(left: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+        border: Border(left: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
       ),
       child: Opacity(
         opacity: 0.3,

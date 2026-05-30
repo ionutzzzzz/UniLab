@@ -19,7 +19,6 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final ui = UiTheme.of(context);
     columns = [
       PlutoColumn(
         title: 'Name',
@@ -77,7 +76,7 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: ui.colors.panelHeader.withOpacity(0.5),
+                      color: ui.colors.panelHeader.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),

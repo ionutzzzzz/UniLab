@@ -45,7 +45,7 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: ui.colors.panelHeader.withOpacity(0.5),
+                  color: ui.colors.panelHeader.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(LucideIcons.lineChart, size: 40, color: ui.colors.textDisabled),
@@ -76,7 +76,7 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.xs),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
           ),
           child: Row(
             children: [
@@ -138,7 +138,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
             color: ui.colors.canvas,
             borderRadius: ui.spacing.radiusMd,
             border: Border.all(
-              color: _isHovered ? ui.colors.accent.withOpacity(0.5) : ui.colors.divider.withOpacity(0.5),
+              color: _isHovered ? ui.colors.accent.withValues(alpha: 0.5) : ui.colors.divider.withValues(alpha: 0.5),
               width: 1.0,
             ),
             boxShadow: _isHovered ? ui.colors.shadowMd : ui.colors.shadowSm,
@@ -150,16 +150,16 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: ui.colors.panelHeader.withOpacity(0.3),
+                    color: ui.colors.panelHeader.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.vertical(top: Radius.circular(ui.spacing.radiusMd.topLeft.x)),
                   ),
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Icon(LucideIcons.image, size: 32, color: ui.colors.textDisabled.withOpacity(0.5)),
+                      Icon(LucideIcons.image, size: 32, color: ui.colors.textDisabled.withValues(alpha: 0.5)),
                       if (_isHovered)
                         Container(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           child: Center(
                             child: Container(
                               padding: const EdgeInsets.all(8),
@@ -180,7 +180,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+                  border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

@@ -154,7 +154,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
                                     variant: UiTextVariant.caption,
                                     color: isSelected
                                         ? ui.colors.textInverse
-                                            .withOpacity(0.7)
+                                            .withValues(alpha: 0.7)
                                         : ui.colors.textMuted,
                                   ),
                               ],

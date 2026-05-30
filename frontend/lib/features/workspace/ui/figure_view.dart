@@ -25,7 +25,7 @@ class FigureView extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm, vertical: 4),
           decoration: BoxDecoration(
             color: ui.colors.panelHeader,
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.5))),
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
           ),
           child: Row(
             children: [
@@ -62,8 +62,8 @@ class FigureView extends StatelessWidget {
           height: 32,
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
           decoration: BoxDecoration(
-            color: ui.colors.panel.withOpacity(0.5),
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withOpacity(0.2))),
+            color: ui.colors.panel.withValues(alpha: 0.5),
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.2))),
           ),
           child: Row(
             children: [
@@ -81,15 +81,15 @@ class FigureView extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
               borderRadius: ui.spacing.radiusLg,
-              border: Border.all(color: ui.colors.divider.withOpacity(0.5)),
+              border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
             ),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(LucideIcons.lineChart, size: 64, color: ui.colors.accent.withOpacity(0.4)),
+                  Icon(LucideIcons.lineChart, size: 64, color: ui.colors.accent.withValues(alpha: 0.4)),
                   const SizedBox(height: 24),
                   UiText(
                     text: 'High-Fidelity Rendering: $title',
@@ -114,13 +114,12 @@ class _FigureChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = UiTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

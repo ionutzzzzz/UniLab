@@ -118,7 +118,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: ui.colors.divider.withOpacity(0.5),
+                      color: ui.colors.divider.withValues(alpha: 0.5),
                       width: 1.0,
                     ),
                   ),
@@ -172,10 +172,10 @@ class _CommandPaletteState extends State<CommandPalette> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: ui.colors.panelHeader.withOpacity(0.4),
+                  color: ui.colors.panelHeader.withValues(alpha: 0.4),
                   border: Border(
                     top: BorderSide(
-                      color: ui.colors.divider.withOpacity(0.5),
+                      color: ui.colors.divider.withValues(alpha: 0.5),
                       width: 1.0,
                     ),
                   ),
@@ -258,10 +258,10 @@ class _CommandItem extends StatelessWidget {
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
           decoration: BoxDecoration(
-            color: isSelected ? ui.colors.accent.withOpacity(0.15) : Colors.transparent,
+            color: isSelected ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent,
             borderRadius: ui.spacing.radiusMd,
             border: Border.all(
-              color: isSelected ? ui.colors.accent.withOpacity(0.2) : Colors.transparent,
+              color: isSelected ? ui.colors.accent.withValues(alpha: 0.2) : Colors.transparent,
               width: 0.5,
             ),
           ),
@@ -273,8 +273,8 @@ class _CommandItem extends StatelessWidget {
                 height: 32,
                 decoration: BoxDecoration(
                   color: isSelected 
-                    ? ui.colors.accent.withOpacity(0.2) 
-                    : ui.colors.panelHeader.withOpacity(0.5),
+                    ? ui.colors.accent.withValues(alpha: 0.2) 
+                    : ui.colors.panelHeader.withValues(alpha: 0.5),
                   borderRadius: ui.spacing.radiusSm,
                 ),
                 child: Icon(
@@ -302,7 +302,7 @@ class _CommandItem extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: ui.colors.divider.withOpacity(0.3),
+                              color: ui.colors.divider.withValues(alpha: 0.3),
                               borderRadius: ui.spacing.radiusSm,
                             ),
                             child: UiText(
@@ -335,9 +335,9 @@ class _CommandItem extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: ui.colors.canvas.withOpacity(0.3),
+                      color: ui.colors.canvas.withValues(alpha: 0.3),
                       borderRadius: ui.spacing.radiusSm,
-                      border: Border.all(color: ui.colors.divider.withOpacity(0.2)),
+                      border: Border.all(color: ui.colors.divider.withValues(alpha: 0.2)),
                     ),
                     child: UiText(
                       text: command.shortcut!,
@@ -361,7 +361,7 @@ class _KeyBindingFooter extends StatelessWidget {
   final String keyName;
   final String description;
 
-  const _KeyBindingFooter(this.keyName, this.description, {super.key});
+  const _KeyBindingFooter(this.keyName, this.description);
 
   @override
   Widget build(BuildContext context) {
@@ -372,10 +372,10 @@ class _KeyBindingFooter extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: ui.colors.canvas.withOpacity(0.3),
+            color: ui.colors.canvas.withValues(alpha: 0.3),
             borderRadius: ui.spacing.radiusSm,
             border: Border.all(
-              color: ui.colors.divider.withOpacity(0.5),
+              color: ui.colors.divider.withValues(alpha: 0.5),
               width: 1.0,
             ),
           ),

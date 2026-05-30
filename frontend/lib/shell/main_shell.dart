@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as p;
 import 'title_strip.dart';
 import 'split_shell.dart';
 import '../theme/ui_theme.dart';
@@ -11,6 +12,7 @@ import '../features/console/ui/console_dock.dart';
 import '../features/explorer/ui/explorer_panel.dart';
 import '../core/layout/shell_breakpoints.dart';
 import '../core/layout/shell_layout_state.dart';
+import '../providers/settings_provider.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key});
@@ -18,6 +20,7 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ui = UiTheme.of(context);
+    final settings = p.Provider.of<SettingsProvider>(context).settings;
     
     return Scaffold(
       backgroundColor: ui.colors.panel,
@@ -33,7 +36,8 @@ class MainShell extends ConsumerWidget {
           return Column(
             children: [
               const TitleStrip(),
-              const AppRibbon(),
+              if (settings.showToolbar)
+                const AppRibbon(),
               Expanded(
                 child: Row(
                   children: [
@@ -62,7 +66,8 @@ class MainShell extends ConsumerWidget {
                   ],
                 ),
               ),
-              const AppStatusBar(),
+              if (settings.showStatusBar)
+                const AppStatusBar(),
             ],
           );
         }
@@ -77,8 +82,8 @@ class MainShell extends ConsumerWidget {
       decoration: BoxDecoration(
         color: ui.colors.panel,
         border: Border(
-          right: tooltip == 'Explorer' ? BorderSide(color: ui.colors.divider.withOpacity(0.3)) : BorderSide.none,
-          left: tooltip == 'Workspace' ? BorderSide(color: ui.colors.divider.withOpacity(0.3)) : BorderSide.none,
+          right: tooltip == 'Explorer' ? BorderSide(color: ui.colors.divider.withValues(alpha: 0.3)) : BorderSide.none,
+          left: tooltip == 'Workspace' ? BorderSide(color: ui.colors.divider.withValues(alpha: 0.3)) : BorderSide.none,
         ),
       ),
       child: Column(
@@ -119,13 +124,13 @@ class _RailIconState extends State<_RailIcon> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: _isHovered ? widget.color.withOpacity(0.15) : Colors.transparent,
+            color: _isHovered ? widget.color.withValues(alpha: 0.15) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
           ),
           child: Icon(
             widget.icon,
             size: 18,
-            color: _isHovered ? widget.color : ui.colors.textMuted.withOpacity(0.7),
+            color: _isHovered ? widget.color : ui.colors.textMuted.withValues(alpha: 0.7),
           ),
         ),
       ),

@@ -5,6 +5,7 @@ import 'ui_typography.dart';
 import 'ui_spacing.dart';
 import 'ui_density.dart';
 import 'syntax_palette.dart';
+import '../models/models.dart';
 
 @immutable
 class UiTheme extends ThemeExtension<UiTheme> {
@@ -48,29 +49,43 @@ class UiTheme extends ThemeExtension<UiTheme> {
   }
 }
 
-// Global accessor for convenience, but context-based lookup is preferred.
-UiTheme createDarkTheme(UiDensity density) {
-  final colors = UiColors.dark();
+UiTheme createUiTheme(UserSettings settings, Brightness brightness) {
+  final isDark = brightness == Brightness.dark;
+  final baseColors = isDark ? UiColors.dark() : UiColors.light();
+  
+  final colors = baseColors.copyWith(
+    accent: settings.accentColor,
+    accentHover: settings.accentColor.withValues(alpha: 0.8),
+  );
+
   return UiTheme(
     colors: colors,
-    typography: UiTypography.base(colors.textPrimary, colors.textMuted),
-    spacing: UiSpacing.standard(),
-    density: density,
-    syntax: SyntaxPalette.darkPlus(),
+    typography: UiTypography.base(colors.textPrimary, colors.textMuted, scale: settings.uiScale),
+    spacing: UiSpacing.standard(scale: settings.uiScale),
+    density: UiDensity.comfortable,
+    syntax: isDark ? SyntaxPalette.darkPlus() : SyntaxPalette.lightPlus(),
   );
 }
 
-ThemeData buildAppThemeData(UiTheme uiTheme) {
+ThemeData buildAppThemeData(UiTheme uiTheme, Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark, // Assuming dark theme for now
-    colorScheme: ColorScheme.dark(
-      surface: uiTheme.colors.panel,
-      primary: uiTheme.colors.accent,
-      onPrimary: uiTheme.colors.textInverse,
-      secondary: uiTheme.colors.accentMuted,
-      error: uiTheme.colors.danger,
-    ),
+    brightness: brightness,
+    colorScheme: brightness == Brightness.dark 
+      ? ColorScheme.dark(
+          surface: uiTheme.colors.panel,
+          primary: uiTheme.colors.accent,
+          onPrimary: uiTheme.colors.textInverse,
+          secondary: uiTheme.colors.accentMuted,
+          error: uiTheme.colors.danger,
+        )
+      : ColorScheme.light(
+          surface: uiTheme.colors.panel,
+          primary: uiTheme.colors.accent,
+          onPrimary: uiTheme.colors.textInverse,
+          secondary: uiTheme.colors.accentMuted,
+          error: uiTheme.colors.danger,
+        ),
     scaffoldBackgroundColor: uiTheme.colors.canvas,
     extensions: <ThemeExtension<dynamic>>[
       uiTheme,

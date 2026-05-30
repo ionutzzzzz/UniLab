@@ -85,7 +85,7 @@ class _RibbonTabState extends State<_RibbonTab> {
             color: widget.isActive
                 ? ui.colors.panelHeader
                 : (_isHovered
-                    ? ui.colors.hover.withOpacity(0.5)
+                    ? ui.colors.hover.withValues(alpha: 0.5)
                     : Colors.transparent),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             border: widget.isActive

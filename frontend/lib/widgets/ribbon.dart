@@ -422,54 +422,57 @@ class _RibbonButtonState extends State<_RibbonButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 1.0),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            // STRICT UNIFORM DIMENSIONS
-            width: 64.0, 
-            height: 72.0, 
-            decoration: BoxDecoration(
-              color: _isHovered ? widget.ui.colors.hover : Colors.transparent,
-              borderRadius: BorderRadius.circular(6.0), // 6px for refined desktop IDE look
-              border: Border.all(
-                color: _isHovered ? widget.ui.colors.border : Colors.transparent,
-                width: 1.0,
+    return IntrinsicWidth(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1.0),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+              constraints: const BoxConstraints(
+                minWidth: 50.0,
+                minHeight: 72.0,
               ),
-              boxShadow: _isHovered ? widget.ui.colors.shadowSm : null,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  widget.icon, 
-                  size: 20, // Uniform icon size
-                  color: widget.iconColor ?? widget.ui.colors.icon
+              decoration: BoxDecoration(
+                color: _isHovered ? widget.ui.colors.hover : Colors.transparent,
+                borderRadius: BorderRadius.circular(6.0),
+                border: Border.all(
+                  color: _isHovered ? widget.ui.colors.border : Colors.transparent,
+                  width: 1.0,
                 ),
-                const SizedBox(height: 6),
-                Flexible(
-                  child: Text(
-                    widget.label, 
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10, 
-                      color: widget.ui.colors.textSecondary, 
-                      height: 1.1,
-                      fontWeight: FontWeight.w500,
-                    )
+                boxShadow: _isHovered ? widget.ui.colors.shadowSm : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    widget.icon, 
+                    size: 20,
+                    color: widget.iconColor ?? widget.ui.colors.icon
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Flexible(
+                    child: Text(
+                      widget.label, 
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10, 
+                        color: widget.ui.colors.textSecondary, 
+                        height: 1.1,
+                        fontWeight: FontWeight.w500,
+                      )
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -477,20 +480,3 @@ class _RibbonButtonState extends State<_RibbonButton> {
     );
   }
 }
-
-ntSize: 10, 
-                      color: widget.ui.colors.textSecondary, 
-                      height: 1.1,
-                      fontWeight: FontWeight.w500,
-                    )
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
