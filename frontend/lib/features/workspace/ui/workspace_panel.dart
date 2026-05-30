@@ -68,7 +68,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                     ),
                   ],
                 ),
-                Icon(LucideIcons.moreVertical, size: 14, color: ui.colors.textMuted),
+                Icon(LucideIcons.moreHorizontal, size: 14, color: ui.colors.textMuted),
               ],
             ),
           ),

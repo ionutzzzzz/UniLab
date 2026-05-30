@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../../../theme/ui_theme.dart';
 import '../../../../widgets/ui_text.dart';
 import '../../../../widgets/ui_button.dart';
+import '../../../../providers/app_provider.dart';
 
 class FileBackstage extends StatefulWidget {
   const FileBackstage({super.key});
@@ -131,6 +133,7 @@ class _FileBackstageState extends State<FileBackstage> {
   }
 
   Widget _buildOpenSection(UiTheme ui) {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -140,7 +143,29 @@ class _FileBackstageState extends State<FileBackstage> {
         _buildRecentItem(ui, 'simulation_data.csv', '~/Downloads/simulation_data.csv'),
         _buildRecentItem(ui, 'plot_utils.m', '~/Documents/UniLab/libs/plot_utils.m'),
         const SizedBox(height: 32),
-        UiButton(label: 'Browse Files...', icon: LucideIcons.folderSearch, variant: UiButtonVariant.primary, onPressed: () {}),
+        Row(
+          children: [
+            UiButton(
+              label: 'Browse Files...', 
+              icon: LucideIcons.fileSearch, 
+              variant: UiButtonVariant.primary, 
+              onPressed: () {
+                appProvider.openFilePicker();
+                Navigator.pop(context);
+              }
+            ),
+            const SizedBox(width: 16),
+            UiButton(
+              label: 'Open Folder...', 
+              icon: LucideIcons.folderSearch, 
+              variant: UiButtonVariant.secondary, 
+              onPressed: () {
+                appProvider.openFolderPicker();
+                Navigator.pop(context);
+              }
+            ),
+          ],
+        ),
       ],
     );
   }

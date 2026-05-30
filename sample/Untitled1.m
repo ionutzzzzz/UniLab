@@ -1,4 +1,12 @@
-===');
+% 01_quantum_mechanics.m
+% UniLab Quantum Physics: 1D Schrodinger Equation & Wavefunction Evolution
+
+clear all;
+close all;
+clc;
+
+disp('⚛️ UniLab Quantum Mechanics Suite');
+disp('===================================');
 
 %% 1. Quantum Harmonic Oscillator (Eigenstates)
 disp('--- 1. Harmonic Oscillator Eigenstates ---');

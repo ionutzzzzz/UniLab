@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/ui_theme.dart';
 import '../widgets/ui_text.dart';
 
@@ -45,6 +46,8 @@ class TitleStrip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(LucideIcons.beaker, size: 14, color: ui.colors.accent),
+              const SizedBox(width: 8),
               const UiText(
                 text: 'UniLab',
                 variant: UiTextVariant.label,
@@ -73,7 +76,7 @@ class TitleStrip extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.terminal, size: 12, color: ui.colors.textMuted),
+            Icon(LucideIcons.terminal, size: 12, color: ui.colors.textMuted),
             const SizedBox(width: 8),
             UiText(
               text: 'unilab_workspaces/default',
@@ -132,12 +135,12 @@ class WindowButtons extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _WindowButton(
-          icon: Icons.remove,
+          icon: LucideIcons.minus,
           onTap: () => windowManager.minimize(),
           hoverColor: ui.colors.hover,
         ),
         _WindowButton(
-          icon: Icons.check_box_outline_blank,
+          icon: LucideIcons.square,
           onTap: () async {
             if (await windowManager.isMaximized()) {
               windowManager.unmaximize();
@@ -148,7 +151,7 @@ class WindowButtons extends StatelessWidget {
           hoverColor: ui.colors.hover,
         ),
         _WindowButton(
-          icon: Icons.close,
+          icon: LucideIcons.x,
           onTap: () => windowManager.close(),
           hoverColor: ui.colors.danger.withValues(alpha: 0.8),
           isClose: true,

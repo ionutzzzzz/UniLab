@@ -35,7 +35,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
     final editorBg = highlightTheme.backgroundColor;
     final editorFg = highlightTheme.foregroundColor;
 
-    // Custom Syntax Theme using Common IDE Palettes
+    // Custom Syntax Theme
     final Map<String, TextStyle> customSyntaxTheme = {
       'root': TextStyle(
         color: editorFg, 
@@ -71,27 +71,31 @@ class _EditorSurfaceState extends State<EditorSurface> {
         data: CodeThemeData(styles: customSyntaxTheme),
         child: Container(
           color: editorBg,
-          child: CodeField(
-            controller: widget.controller,
-            focusNode: widget.focusNode,
-            wrap: settings.wordWrap,
-            textStyle: ui.typography.codeBody.copyWith(
-              color: editorFg,
-              height: 1.5,
-              fontSize: settings.fontSize,
-              fontFamily: settings.fontFamily,
-            ),
-            background: editorBg,
-            cursorColor: colors[0], // Use keyword color as cursor
-            gutterStyle: GutterStyle(
-              showLineNumbers: settings.showLineNumbers,
-              width: 52,
-              margin: 12,
-              textAlign: TextAlign.right,
-              textStyle: ui.typography.label.copyWith(
-                color: editorFg.withValues(alpha: 0.3),
-                fontSize: 11,
-                fontFamily: settings.fontFamily,
+          child: SizedBox.expand(
+            child: SingleChildScrollView(
+              child: CodeField(
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                wrap: settings.wordWrap,
+                textStyle: ui.typography.codeBody.copyWith(
+                  color: editorFg,
+                  height: 1.5,
+                  fontSize: settings.fontSize,
+                  fontFamily: settings.fontFamily,
+                ),
+                background: editorBg,
+                cursorColor: colors[0],
+                gutterStyle: GutterStyle(
+                  showLineNumbers: settings.showLineNumbers,
+                  width: 52,
+                  margin: 12,
+                  textAlign: TextAlign.right,
+                  textStyle: ui.typography.label.copyWith(
+                    color: editorFg.withValues(alpha: 0.3),
+                    fontSize: 11,
+                    fontFamily: settings.fontFamily,
+                  ),
+                ),
               ),
             ),
           ),

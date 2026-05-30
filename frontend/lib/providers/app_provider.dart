@@ -341,6 +341,16 @@ class AppProvider with ChangeNotifier {
     }
   }
 
+  Future<void> openFolderPicker() async {
+    if (kIsWeb) return;
+    
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    
+    if (selectedDirectory != null) {
+      setProjectRoot(selectedDirectory);
+    }
+  }
+
   void clearWorkspace() {
     _workspaceVariables.clear();
     notifyListeners();

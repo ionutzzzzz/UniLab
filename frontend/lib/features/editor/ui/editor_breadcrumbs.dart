@@ -15,31 +15,59 @@ class EditorBreadcrumbs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    
+    // Filter out empty segments and handle root/empty paths
+    final segments = pathSegments.where((s) => s.isNotEmpty && s != '/' && s != '\\').toList();
+    if (segments.isEmpty) {
+      if (pathSegments.isNotEmpty && (pathSegments.first == '/' || pathSegments.first == '\\')) {
+         segments.add('Root');
+      } else {
+         segments.add('Untitled');
+      }
+    }
+
     return Container(
-      height: 24,
+      height: 28, // Slightly taller for better readability
       decoration: BoxDecoration(
-        color: ui.colors.canvas,
-        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
+        color: ui.colors.panelHeader.withValues(alpha: 0.5),
+        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
       ),
-      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+      padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
       child: Row(
         children: [
-          Icon(LucideIcons.folderOpen, size: 12, color: ui.colors.textMuted),
+          SizedBox(width: ui.spacing.xs),
+          Icon(LucideIcons.fileCode, size: 14, color: ui.colors.accent),
           SizedBox(width: ui.spacing.sm),
-          for (int i = 0; i < pathSegments.length; i++) ...[
-            if (i > 0)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui.spacing.xxs),
-                child: UiIcon(LucideIcons.chevronRight, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.5)),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < segments.length; i++) ...[
+                    if (i > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Icon(LucideIcons.chevronRight, size: 12, color: ui.colors.textMuted.withValues(alpha: 0.4)),
+                      ),
+                    _BreadcrumbSegment(
+                      label: segments[i],
+                      isLast: i == segments.length - 1,
+                      icon: i == segments.length - 1 ? null : LucideIcons.folder,
+                    ),
+                  ],
+                ],
               ),
-            _BreadcrumbSegment(
-              label: pathSegments[i],
-              isLast: i == pathSegments.length - 1,
             ),
-          ],
-          const Spacer(),
+          ),
+          
+          const SizedBox(width: 8),
+          Container(width: 1, height: 14, color: ui.colors.divider.withValues(alpha: 0.5)),
+          const SizedBox(width: 8),
+          
           // Function Navigator
-          _FunctionNavigator(),
+          const _FunctionNavigator(),
         ],
       ),
     );
@@ -47,9 +75,15 @@ class EditorBreadcrumbs extends StatelessWidget {
 }
 
 class _BreadcrumbSegment extends StatefulWidget {
-  const _BreadcrumbSegment({required this.label, required this.isLast});
+  const _BreadcrumbSegment({
+    required this.label, 
+    required this.isLast,
+    this.icon,
+  });
+  
   final String label;
   final bool isLast;
+  final IconData? icon;
 
   @override
   State<_BreadcrumbSegment> createState() => _BreadcrumbSegmentState();
@@ -65,22 +99,28 @@ class _BreadcrumbSegmentState extends State<_BreadcrumbSegment> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
-      child: Padding(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent,
-            borderRadius: ui.spacing.radiusSm,
-          ),
-          child: UiText(
-            text: widget.label,
-            variant: UiTextVariant.caption,
-            fontSize: 10,
-            fontWeight: widget.isLast ? FontWeight.w600 : FontWeight.w400,
-            color: widget.isLast ? ui.colors.textSecondary : ui.colors.textMuted,
-          ),
+        decoration: BoxDecoration(
+          color: _isHovered ? ui.colors.hover : Colors.transparent,
+          borderRadius: ui.spacing.radiusSm,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.icon != null) ...[
+              Icon(widget.icon, size: 12, color: ui.colors.textMuted.withValues(alpha: 0.6)),
+              const SizedBox(width: 4),
+            ],
+            UiText(
+              text: widget.label,
+              variant: UiTextVariant.label,
+              fontSize: 11,
+              fontWeight: widget.isLast ? FontWeight.w600 : FontWeight.w400,
+              color: widget.isLast ? ui.colors.textPrimary : ui.colors.textMuted,
+            ),
+          ],
         ),
       ),
     );
@@ -88,6 +128,8 @@ class _BreadcrumbSegmentState extends State<_BreadcrumbSegment> {
 }
 
 class _FunctionNavigator extends StatefulWidget {
+  const _FunctionNavigator();
+
   @override
   State<_FunctionNavigator> createState() => _FunctionNavigatorState();
 }
@@ -104,28 +146,40 @@ class _FunctionNavigatorState extends State<_FunctionNavigator> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () {
-          // Show function list
+          // In a real implementation, this would show a searchable symbol list
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent,
+            color: _isHovered ? ui.colors.accent.withValues(alpha: 0.1) : Colors.transparent,
             borderRadius: ui.spacing.radiusSm,
+            border: Border.all(
+              color: _isHovered ? ui.colors.accent.withValues(alpha: 0.3) : Colors.transparent,
+              width: 0.5,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.functionSquare, size: 12, color: _isHovered ? ui.colors.accent : ui.colors.textMuted),
+              Icon(
+                LucideIcons.functionSquare, 
+                size: 13, 
+                color: _isHovered ? ui.colors.accent : ui.colors.textMuted
+              ),
               const SizedBox(width: 6),
               UiText(
-                text: 'step(t, a)',
-                variant: UiTextVariant.caption,
-                fontSize: 10,
+                text: 'Main Scope',
+                variant: UiTextVariant.label,
+                fontSize: 11,
                 color: _isHovered ? ui.colors.accent : ui.colors.textMuted,
               ),
               const SizedBox(width: 4),
-              Icon(Icons.arrow_drop_down, size: 14, color: _isHovered ? ui.colors.accent : ui.colors.textMuted),
+              Icon(
+                LucideIcons.chevronDown, 
+                size: 12, 
+                color: _isHovered ? ui.colors.accent : ui.colors.textMuted.withValues(alpha: 0.5)
+              ),
             ],
           ),
         ),
