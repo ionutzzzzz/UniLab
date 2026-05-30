@@ -69,10 +69,35 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
       data: (variables) {
         if (variables.isEmpty) {
           return Center(
-            child: UiText(
-              text: 'No variables in workspace yet — run a script.',
-              variant: UiTextVariant.body,
-              color: ui.colors.textMuted,
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: ui.colors.panelHeader.withOpacity(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),
+                  ),
+                  const SizedBox(height: 20),
+                  UiText(
+                    text: 'Workspace is empty',
+                    variant: UiTextVariant.body,
+                    fontWeight: FontWeight.bold,
+                    color: ui.colors.textSecondary,
+                  ),
+                  const SizedBox(height: 8),
+                  UiText(
+                    text: 'Execute a script to see variables and matrices populated here.',
+                    variant: UiTextVariant.label,
+                    color: ui.colors.textMuted,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         }

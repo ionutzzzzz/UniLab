@@ -160,7 +160,7 @@ class _CommandPaletteState extends State<CommandPalette> {
           borderRadius: BorderRadius.zero,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
+              color: Colors.black.withOpacity(0.5),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -205,7 +205,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                     child: ListTile(
                       dense: true,
                       selected: isSelected,
-                      selectedTileColor: Theme.of(context).primaryColor.withValues(alpha: 0.2),
+                      selectedTileColor: Theme.of(context).primaryColor.withOpacity(0.2),
                       leading: Icon(
                         command.icon,
                         color: isSelected 

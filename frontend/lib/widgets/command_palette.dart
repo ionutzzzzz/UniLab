@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
+import '../theme/ui_theme.dart';
+import '../theme/ui_decorations.dart';
+import 'ui_text.dart';
 
 /// Represents a command that can be executed
 class Command {
@@ -94,280 +96,262 @@ class _CommandPaletteState extends State<CommandPalette> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 100),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Search input
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.darkPanelBackground,
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1.0,
-                ),
-              ),
-            ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.darkTextPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Type command name, description, or shortcut...',
-                hintStyle: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.darkTextSecondary,
-                ),
-                border: OutlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Theme.of(context).dividerColor,
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.zero,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                prefixIcon: const Icon(Icons.search, size: 16),
-              ),
-            ),
+      child: ShellDecorations.buildGlassMenu(
+        theme: ui,
+        child: Container(
+          width: 650,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6.0),
           ),
-
-          // Commands list
-          Flexible(
-            child: Container(
-              color: AppTheme.darkCanvasBackground,
-              constraints: const BoxConstraints(maxHeight: 400, minWidth: 600),
-              child: _filteredCommands.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              size: 32,
-                              color: Theme.of(context).dividerColor,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No commands found',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context).dividerColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredCommands.length,
-                      itemBuilder: (context, index) {
-                        final command = _filteredCommands[index];
-                        final isSelected = index == _selectedIndex;
-
-                        return MouseRegion(
-                          onEnter: (_) {
-                            setState(() {
-                              _selectedIndex = index;
-                            });
-                          },
-                          child: GestureDetector(
-                            onTap: () => _executeCommand(command),
-                            child: Container(
-                              color: isSelected
-                                  ? AppTheme.darkHoverColor
-                                  : Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (command.icon != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 12),
-                                      child: Icon(
-                                        command.icon,
-                                        size: 16,
-                                        color: AppTheme.darkAccentColor,
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                command.title,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  color:
-                                                      AppTheme.darkTextPrimary,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            if (command.category != null)
-                                              Container(
-                                                margin: const EdgeInsets.only(
-                                                  left: 12,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      AppTheme.darkBorderColor,
-                                                  borderRadius:
-                                                      BorderRadius.zero,
-                                                ),
-                                                child: Text(
-                                                  command.category!,
-                                                  style: const TextStyle(
-                                                    fontSize: 10,
-                                                    color: AppTheme
-                                                        .darkTextTertiary,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        if (command.description.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 4,
-                                            ),
-                                            child: Text(
-                                              command.description,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color:
-                                                    AppTheme.darkTextSecondary,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (command.shortcut != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 12),
-                                      child: Text(
-                                        command.shortcut!,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.darkTextTertiary,
-                                          fontFamily: 'JetBrains Mono',
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Search input
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: ui.colors.divider.withOpacity(0.5),
+                      width: 1.0,
                     ),
-            ),
-          ),
-
-          // Footer with tips
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.darkPanelBackground,
-              border: Border(
-                top: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1.0,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Showing ${_filteredCommands.length} command${_filteredCommands.length != 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.darkTextTertiary,
                   ),
                 ),
-                Row(
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Type command name, description, or shortcut...',
+                    hintStyle: ui.typography.body.copyWith(color: ui.colors.textMuted),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Icon(Icons.search, size: 18, color: ui.colors.accent),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                  ),
+                ),
+              ),
+
+              // Commands list
+              Flexible(
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 450),
+                  child: _filteredCommands.isEmpty
+                      ? _buildEmptyState(ui)
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _filteredCommands.length,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemBuilder: (context, index) {
+                            final command = _filteredCommands[index];
+                            final isSelected = index == _selectedIndex;
+
+                            return _CommandItem(
+                              command: command,
+                              isSelected: isSelected,
+                              onTap: () => _executeCommand(command),
+                              onHover: () => setState(() => _selectedIndex = index),
+                            );
+                          },
+                        ),
+                ),
+              ),
+
+              // Footer with tips
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: ui.colors.panelHeader.withOpacity(0.4),
+                  border: Border(
+                    top: BorderSide(
+                      color: ui.colors.divider.withOpacity(0.5),
+                      width: 1.0,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _KeyBindingFooter('↑↓', 'Navigate'),
-                    const SizedBox(width: 16),
-                    _KeyBindingFooter('↵', 'Execute'),
-                    const SizedBox(width: 16),
-                    _KeyBindingFooter('Esc', 'Close'),
+                    UiText(
+                      text: 'Showing ${_filteredCommands.length} command${_filteredCommands.length != 1 ? 's' : ''}',
+                      variant: UiTextVariant.label,
+                      color: ui.colors.textMuted,
+                      fontSize: 10,
+                    ),
+                    Row(
+                      children: [
+                        _KeyBindingFooter('↑↓', 'Navigate'),
+                        const SizedBox(width: 20),
+                        _KeyBindingFooter('↵', 'Execute'),
+                        const SizedBox(width: 20),
+                        _KeyBindingFooter('Esc', 'Close'),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(UiTheme ui) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(48.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 48,
+              color: ui.colors.divider,
+            ),
+            const SizedBox(height: 16),
+            UiText(
+              text: 'No commands found matching your search',
+              variant: UiTextVariant.body,
+              color: ui.colors.textMuted,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Key binding display widget
-class KeyBindingDisplay extends StatelessWidget {
-  final String keyName;
-  final String description;
+class _CommandItem extends StatelessWidget {
+  const _CommandItem({
+    required this.command,
+    required this.isSelected,
+    required this.onTap,
+    required this.onHover,
+  });
 
-  const KeyBindingDisplay(this.keyName, this.description);
+  final Command command;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final VoidCallback onHover;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    final ui = UiTheme.of(context);
+
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
           decoration: BoxDecoration(
+            color: isSelected ? ui.colors.accent.withOpacity(0.15) : Colors.transparent,
+            borderRadius: ui.spacing.radiusMd,
             border: Border.all(
-              color: Theme.of(context).dividerColor,
-              width: 1.0,
+              color: isSelected ? ui.colors.accent.withOpacity(0.2) : Colors.transparent,
+              width: 0.5,
             ),
           ),
-          child: Text(
-            keyName,
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppTheme.darkTextTertiary,
-              fontFamily: 'JetBrains Mono',
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isSelected 
+                    ? ui.colors.accent.withOpacity(0.2) 
+                    : ui.colors.panelHeader.withOpacity(0.5),
+                  borderRadius: ui.spacing.radiusSm,
+                ),
+                child: Icon(
+                  command.icon ?? Icons.code,
+                  size: 18,
+                  color: isSelected ? ui.colors.accent : ui.colors.icon,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: UiText(
+                            text: command.title,
+                            variant: UiTextVariant.body,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? ui.colors.textPrimary : ui.colors.textSecondary,
+                          ),
+                        ),
+                        if (command.category != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: ui.colors.divider.withOpacity(0.3),
+                              borderRadius: ui.spacing.radiusSm,
+                            ),
+                            child: UiText(
+                              text: command.category!.toUpperCase(),
+                              variant: UiTextVariant.label,
+                              fontSize: 9,
+                              letterSpacing: 0.5,
+                              color: ui.colors.textMuted,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (command.description.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: UiText(
+                          text: command.description,
+                          variant: UiTextVariant.label,
+                          color: ui.colors.textMuted,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (command.shortcut != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: ui.colors.canvas.withOpacity(0.3),
+                      borderRadius: ui.spacing.radiusSm,
+                      border: Border.all(color: ui.colors.divider.withOpacity(0.2)),
+                    ),
+                    child: UiText(
+                      text: command.shortcut!,
+                      variant: UiTextVariant.label,
+                      fontSize: 10,
+                      color: ui.colors.textMuted,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-        const SizedBox(width: 4),
-        Text(
-          description,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppTheme.darkTextTertiary,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -381,33 +365,34 @@ class _KeyBindingFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
+            color: ui.colors.canvas.withOpacity(0.3),
+            borderRadius: ui.spacing.radiusSm,
             border: Border.all(
-              color: Theme.of(context).dividerColor,
+              color: ui.colors.divider.withOpacity(0.5),
               width: 1.0,
             ),
           ),
-          child: Text(
-            keyName,
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppTheme.darkTextTertiary,
-              fontFamily: 'JetBrains Mono',
-            ),
+          child: UiText(
+            text: keyName,
+            variant: UiTextVariant.label,
+            fontSize: 10,
+            color: ui.colors.textMuted,
+            fontFamily: 'JetBrains Mono',
           ),
         ),
-        const SizedBox(width: 4),
-        Text(
-          description,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppTheme.darkTextTertiary,
-          ),
+        const SizedBox(width: 8),
+        UiText(
+          text: description,
+          variant: UiTextVariant.label,
+          fontSize: 10,
+          color: ui.colors.textMuted,
         ),
       ],
     );

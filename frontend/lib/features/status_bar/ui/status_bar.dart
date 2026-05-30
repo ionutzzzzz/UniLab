@@ -5,9 +5,11 @@ import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 
 final statusBarSlotsProvider = Provider<List<StatusBarSlot>>((ref) {
-  // Hardcode 3 starter slots for now as a mock
   return [
     const StatusBarSlot(id: 'status', label: 'Ready', alignment: StatusBarSlotAlignment.left, priority: 100),
+    const StatusBarSlot(id: 'branch', label: 'main', icon: Icons.account_tree_outlined, alignment: StatusBarSlotAlignment.left, priority: 90),
+    const StatusBarSlot(id: 'cpu', label: 'CPU: 12%', alignment: StatusBarSlotAlignment.right, priority: 85),
+    const StatusBarSlot(id: 'ram', label: 'RAM: 1.2GB', alignment: StatusBarSlotAlignment.right, priority: 80),
     const StatusBarSlot(id: 'cursor', label: 'Ln 1, Col 1', alignment: StatusBarSlotAlignment.right, priority: 100),
     const StatusBarSlot(id: 'encoding', label: 'UTF-8', alignment: StatusBarSlotAlignment.right, priority: 90),
   ];
@@ -27,11 +29,31 @@ class AppStatusBar extends ConsumerWidget {
       ..sort((a, b) => a.priority.compareTo(b.priority));
 
     return Container(
-      height: 22,
-      color: ui.colors.panelHeader,
-      padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
+      height: 24,
+      decoration: BoxDecoration(
+        color: ui.colors.panelHeader,
+        border: Border(
+          top: BorderSide(
+            color: Colors.black.withOpacity(0.4),
+            width: 1.0,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.02),
+            offset: const Offset(0, -1),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
       child: DefaultTextStyle(
-        style: ui.typography.caption.copyWith(color: ui.colors.textMuted),
+        style: ui.typography.label.copyWith(
+          color: ui.colors.textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -41,7 +63,11 @@ class AppStatusBar extends ConsumerWidget {
             ),
             Row(
               mainAxisSize: MainAxisSize.min,
-              children: rightSlots.map((s) => _SlotWidget(slot: s)).toList(),
+              children: [
+                ...rightSlots.map((s) => _SlotWidget(slot: s)).toList(),
+                SizedBox(width: ui.spacing.sm),
+                Icon(Icons.notifications_none, size: 14, color: ui.colors.textMuted),
+              ],
             ),
           ],
         ),
@@ -64,22 +90,51 @@ class _SlotWidgetState extends State<_SlotWidget> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final isClickable = widget.slot.onTap != null;
+    final isClickable = widget.slot.onTap != null || ['cpu', 'ram'].contains(widget.slot.id);
+    final isStatusSlot = widget.slot.id == 'status';
+    final isMetric = ['cpu', 'ram'].contains(widget.slot.id);
 
     Widget content = Padding(
       padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (isStatusSlot) ...[
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: ui.colors.success,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: ui.colors.success.withOpacity(0.5),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: ui.spacing.sm),
+          ],
           if (widget.slot.icon != null) ...[
-            Icon(widget.slot.icon, size: 14, color: _isHovered && isClickable ? ui.colors.textPrimary : ui.colors.textMuted),
+            Icon(widget.slot.icon,
+                size: 12,
+                color: _isHovered && isClickable
+                    ? ui.colors.accent
+                    : ui.colors.textMuted),
             SizedBox(width: ui.spacing.xs),
           ],
-          UiText(
-            text: widget.slot.label,
-            variant: UiTextVariant.caption,
-            color: _isHovered && isClickable ? ui.colors.textPrimary : ui.colors.textMuted,
-          ),
+          if (isMetric) ...[
+            _MetricIndicator(id: widget.slot.id, label: widget.slot.label),
+          ] else
+            UiText(
+              text: widget.slot.label,
+              variant: UiTextVariant.label,
+              fontSize: 10,
+              color: _isHovered && isClickable
+                  ? ui.colors.textPrimary
+                  : ui.colors.textMuted,
+            ),
         ],
       ),
     );
@@ -91,26 +146,65 @@ class _SlotWidgetState extends State<_SlotWidget> {
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.slot.onTap,
-          child: Container(
-            color: _isHovered ? ui.colors.hover : Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            color: _isHovered ? ui.colors.hover.withOpacity(0.5) : Colors.transparent,
             child: content,
           ),
         ),
       );
-    } else {
-      content = Container(
-        color: Colors.transparent,
-        child: content,
-      );
     }
 
-    if (widget.slot.tooltip != null) {
+    if (widget.slot.tooltip != null || isMetric) {
       return Tooltip(
-        message: widget.slot.tooltip!,
+        message: widget.slot.tooltip ?? (widget.slot.id == 'cpu' ? 'CPU Usage' : 'Memory Usage'),
         child: content,
       );
     }
 
     return content;
+  }
+}
+
+class _MetricIndicator extends StatelessWidget {
+  const _MetricIndicator({required this.id, required this.label});
+  final String id;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    final value = id == 'cpu' ? 12 : 35; // Mock values for visual
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        UiText(
+          text: label,
+          variant: UiTextVariant.label,
+          fontSize: 10,
+          color: ui.colors.textMuted,
+        ),
+        SizedBox(width: ui.spacing.xs),
+        Container(
+          width: 30,
+          height: 4,
+          decoration: BoxDecoration(
+            color: ui.colors.divider.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: value / 100,
+            child: Container(
+              decoration: BoxDecoration(
+                color: value > 80 ? ui.colors.danger : ui.colors.accent.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

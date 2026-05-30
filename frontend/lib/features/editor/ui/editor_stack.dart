@@ -61,18 +61,78 @@ class _EditorStackState extends State<EditorStack> {
             onTabClose: (id) {},
             onNewTab: () {},
           ),
-          const EditorBreadcrumbs(
-            pathSegments: ['src', 'control', 'step.m'],
-          ),
-          if (_showFindReplace)
-            FindReplaceBar(onClose: _toggleFindReplace),
           Expanded(
-            child: EditorSurface(
-              controller: _controller,
-              focusNode: _focusNode,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Column(
+                        children: [
+                          const EditorBreadcrumbs(
+                            pathSegments: ['src', 'control', 'step.m'],
+                          ),
+                          Expanded(
+                            child: EditorSurface(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_showFindReplace)
+                        Positioned(
+                          top: 0,
+                          right: 20,
+                          child: FindReplaceBar(onClose: _toggleFindReplace),
+                        ),
+                    ],
+                  ),
+                ),
+                // Minimap Placeholder
+                _EditorMinimap(controller: _controller),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EditorMinimap extends StatelessWidget {
+  const _EditorMinimap({required this.controller});
+  final CodeController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    return Container(
+      width: 60,
+      decoration: BoxDecoration(
+        color: ui.colors.canvas,
+        border: Border(left: BorderSide(color: ui.colors.divider.withOpacity(0.3))),
+      ),
+      child: Opacity(
+        opacity: 0.3,
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: List.generate(100, (index) {
+                final width = (index % 5 == 0) ? 20.0 : (index % 3 == 0 ? 40.0 : 30.0);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 2),
+                  height: 2,
+                  width: width,
+                  color: ui.colors.textMuted,
+                );
+              }),
+            ),
+          ),
+        ),
       ),
     );
   }

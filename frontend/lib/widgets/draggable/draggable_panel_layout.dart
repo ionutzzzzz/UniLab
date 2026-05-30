@@ -82,7 +82,7 @@ class _DraggablePanelLayoutState extends State<DraggablePanelLayout> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withValues(alpha: 0.7),
+                      color: Theme.of(context).primaryColor.withOpacity(0.7),
                       borderRadius: BorderRadius.zero,
                     ),
                     child: Center(

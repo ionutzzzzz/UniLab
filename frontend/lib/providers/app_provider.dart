@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
@@ -8,13 +8,16 @@ import '../models/models.dart';
 import '../utils/backend_client.dart';
 import '../utils/file_manager.dart';
 
+// Use a conditional import to handle dart:io
+import 'dart:io' as io;
+
 class AppProvider with ChangeNotifier {
   final BackendClient _client = BackendClient();
 
   final List<UniLabFile> _openFiles = [];
   int _activeFileIndex = -1;
-  List<File> _availableSamples = [];
-  List<FileSystemEntity> _projectFiles = [];
+  List<dynamic> _availableSamples = [];
+  List<dynamic> _projectFiles = [];
   late String _projectRoot;
   
   String _consoleOutput = '';
@@ -33,8 +36,8 @@ class AppProvider with ChangeNotifier {
   Map<String, dynamic> get workspaceVariables => _workspaceVariables;
   List<Map<String, dynamic>> get generatedPlots => _generatedPlots;
   bool get isExecuting => _isExecuting;
-  List<File> get availableSamples => _availableSamples;
-  List<FileSystemEntity> get projectFiles => _projectFiles;
+  List<dynamic> get availableSamples => _availableSamples;
+  List<dynamic> get projectFiles => _projectFiles;
   String get projectRoot => _projectRoot;
 
   AppProvider() {
@@ -45,26 +48,29 @@ class AppProvider with ChangeNotifier {
   }
 
   String _discoverProjectRoot() {
-    // Start from current working directory
-    Directory current = Directory.current;
-    
-    // Strategy: Look for 'sample' directory in current or parent directories
-    // This handles running from project root or from frontend/ subfolder
-    for (int i = 0; i < 3; i++) {
-      final samplePath = p.join(current.path, 'sample');
-      if (Directory(samplePath).existsSync()) {
-        return samplePath;
+    if (kIsWeb) return '/web-virtual-root';
+
+    try {
+      // Start from current working directory
+      io.Directory current = io.Directory.current;
+      
+      // Strategy: Look for 'sample' directory in current or parent directories
+      for (int i = 0; i < 3; i++) {
+        final samplePath = p.join(current.path, 'sample');
+        if (io.Directory(samplePath).existsSync()) {
+          return samplePath;
+        }
+        // If we are in 'frontend', the 'sample' is likely in the parent
+        final parentSamplePath = p.join(current.parent.path, 'sample');
+        if (io.Directory(parentSamplePath).existsSync()) {
+          return parentSamplePath;
+        }
+        current = current.parent;
       }
-      // If we are in 'frontend', the 'sample' is likely in the parent
-      final parentSamplePath = p.join(current.parent.path, 'sample');
-      if (Directory(parentSamplePath).existsSync()) {
-        return parentSamplePath;
-      }
-      current = current.parent;
+      return p.join(io.Directory.current.path, 'sample');
+    } catch (e) {
+      return 'sample';
     }
-    
-    // Fallback to current directory if not found
-    return p.join(Directory.current.path, 'sample');
   }
 
   @override
@@ -74,11 +80,17 @@ class AppProvider with ChangeNotifier {
   }
 
   void _initWatcher() {
+    if (kIsWeb) return;
+
     _watcherSubscription?.cancel();
-    final watcher = DirectoryWatcher(_projectRoot);
-    _watcherSubscription = watcher.events.listen((event) {
-      refreshProjectFiles();
-    });
+    try {
+      final watcher = DirectoryWatcher(_projectRoot);
+      _watcherSubscription = watcher.events.listen((event) {
+        refreshProjectFiles();
+      });
+    } catch (e) {
+      debugPrint('Watcher error: $e');
+    }
   }
 
   Future<void> _loadAvailableSamples() async {
@@ -87,16 +99,22 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> refreshProjectFiles() async {
-    final dir = Directory(_projectRoot);
-    if (await dir.exists()) {
-      _projectFiles = await UniLabFileManager.listDirectory(_projectRoot);
-      // Sort directories first, then files
-      _projectFiles.sort((a, b) {
-        if (a is Directory && b is! Directory) return -1;
-        if (a is! Directory && b is Directory) return 1;
-        return p.basename(a.path).compareTo(p.basename(b.path));
-      });
-    } else {
+    if (kIsWeb) return;
+
+    try {
+      final dir = io.Directory(_projectRoot);
+      if (await dir.exists()) {
+        _projectFiles = await UniLabFileManager.listDirectory(_projectRoot);
+        // Sort directories first, then files
+        _projectFiles.sort((a, b) {
+          if (a is io.Directory && b is! io.Directory) return -1;
+          if (a is! io.Directory && b is io.Directory) return 1;
+          return p.basename(a.path).compareTo(p.basename(b.path));
+        });
+      } else {
+        _projectFiles = [];
+      }
+    } catch (e) {
       _projectFiles = [];
     }
     notifyListeners();
@@ -136,14 +154,16 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> openSample(File file) async {
-    final name = p.basename(file.path);
+  Future<void> openSample(dynamic file) async {
+    if (kIsWeb) return;
+    final name = p.basename((file as io.File).path);
     final content = await UniLabFileManager.readFile(file);
     loadSample(name, content);
   }
 
-  Future<void> openFile(File file) async {
-    final path = file.path;
+  Future<void> openFile(dynamic file) async {
+    if (kIsWeb) return;
+    final path = (file as io.File).path;
     final name = p.basename(path);
 
     // Check if file is already open
@@ -185,20 +205,20 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> saveActiveFile() async {
-    if (activeFile == null) return;
+    if (activeFile == null || kIsWeb) return;
 
     String savePath = activeFile!.path;
 
-    if (savePath.isEmpty) {
-      final directory = Directory(_projectRoot);
-      if (!await directory.exists()) {
-        await directory.create(recursive: true);
-      }
-      savePath = p.join(_projectRoot, activeFile!.name);
-    }
-
     try {
-      final file = File(savePath);
+      if (savePath.isEmpty) {
+        final directory = io.Directory(_projectRoot);
+        if (!await directory.exists()) {
+          await directory.create(recursive: true);
+        }
+        savePath = p.join(_projectRoot, activeFile!.name);
+      }
+
+      final file = io.File(savePath);
       await file.writeAsString(activeFile!.content);
 
       _openFiles[_activeFileIndex] = activeFile!.copyWith(
@@ -213,13 +233,15 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  Future<void> deleteFile(FileSystemEntity entity) async {
+  Future<void> deleteFile(dynamic entity) async {
+    if (kIsWeb) return;
     try {
-      if (await entity.exists()) {
-        await entity.delete(recursive: true);
+      final ioEntity = entity as io.FileSystemEntity;
+      if (await ioEntity.exists()) {
+        await ioEntity.delete(recursive: true);
 
         // If it was an open file, close it
-        final openIndex = _openFiles.indexWhere((f) => f.path == entity.path);
+        final openIndex = _openFiles.indexWhere((f) => f.path == ioEntity.path);
         if (openIndex != -1) {
           closeFile(openIndex);
         }
@@ -279,9 +301,22 @@ class AppProvider with ChangeNotifier {
       type: FileType.custom,
       allowedExtensions: ['m', 'txt', 'csv', 'json'],
     );
-    if (result != null && result.files.single.path != null) {
-      File file = File(result.files.single.path!);
-      await openFile(file);
+    
+    if (result != null) {
+      if (kIsWeb) {
+        // Handle web file selection
+        final fileData = result.files.single;
+        final name = fileData.name;
+        final content = String.fromCharCodes(fileData.bytes!);
+        
+        final newFile = UniLabFile(name: name, path: 'web/$name', content: content);
+        _openFiles.add(newFile);
+        _activeFileIndex = _openFiles.length - 1;
+        notifyListeners();
+      } else if (result.files.single.path != null) {
+        io.File file = io.File(result.files.single.path!);
+        await openFile(file);
+      }
     }
   }
 

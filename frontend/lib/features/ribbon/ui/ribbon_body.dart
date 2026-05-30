@@ -19,9 +19,14 @@ class RibbonBody extends StatelessWidget {
     final ui = UiTheme.of(context);
     
     return Container(
-      height: 76,
+      height: 92,
       color: ui.colors.panelHeader,
-      padding: EdgeInsets.symmetric(vertical: ui.spacing.xs, horizontal: ui.spacing.sm),
+      padding: EdgeInsets.only(
+        top: ui.spacing.xs,
+        bottom: ui.spacing.xxs,
+        left: ui.spacing.sm,
+        right: ui.spacing.sm,
+      ),
       child: Row(
         children: [
           for (int i = 0; i < groups.length; i++) ...[

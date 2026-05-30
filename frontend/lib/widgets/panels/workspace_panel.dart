@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:context_menus/context_menus.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import '../../providers/app_provider.dart';
+import '../../theme/ui_theme.dart';
+import '../../theme/ui_decorations.dart';
 
 class WorkspacePanel extends StatefulWidget {
   const WorkspacePanel({super.key});
@@ -40,9 +42,9 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
           child: Text(
             rendererContext.cell.value.toString(),
             style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF00A4EF),
-              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              fontFamily: 'JetBrains Mono',
+              color: Color(0xFFB3CDE3), // Pastel Blue Accent
             ),
           ),
         );
@@ -87,18 +89,21 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    
     return Container(
-      color: Theme.of(context).cardColor,
+      decoration: ShellDecorations.panelDecoration(ui),
+      margin: const EdgeInsets.all(2.0), // Give room for the shadow
       child: Column(
         children: [
           // Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Theme.of(context).canvasColor,
+              color: ui.colors.panelHeader,
               border: Border(
                 bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
+                  color: ui.colors.border,
                   width: 1,
                 ),
               ),
@@ -108,7 +113,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
               children: [
                 Text(
                   'WORKSPACE',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: ui.typography.body.copyWith(
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
@@ -116,7 +121,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                 Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.refresh, size: 14),
+                      icon: Icon(Icons.refresh, size: 14, color: ui.colors.icon),
                       onPressed: () => Provider.of<AppProvider>(context, listen: false).refreshProjectFiles(),
                       tooltip: 'Refresh Workspace',
                       iconSize: 14,
@@ -124,7 +129,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_sweep, size: 14),
+                      icon: Icon(Icons.delete_sweep, size: 14, color: ui.colors.icon),
                       onPressed: () => Provider.of<AppProvider>(context, listen: false).clearWorkspace(),
                       tooltip: 'Clear Workspace',
                       iconSize: 14,
@@ -150,13 +155,13 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                         Icon(
                           Icons.inventory_2_outlined,
                           size: 40,
-                          color: const Color(0xFF858585).withValues(alpha: 0.3),
+                          color: ui.colors.textMuted.withOpacity(0.3),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'No variables in workspace',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF858585),
+                          style: ui.typography.label.copyWith(
+                            color: ui.colors.textMuted,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
@@ -198,21 +203,32 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                   rows: rows,
                   configuration: PlutoGridConfiguration(
                     style: PlutoGridStyleConfig(
-                      gridBackgroundColor: Theme.of(context).cardColor,
-                      rowColor: Theme.of(context).cardColor,
-                      columnTextStyle: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF888888),
+                      gridBackgroundColor: ui.colors.panel,
+                      rowColor: ui.colors.panel,
+                      oddRowColor: const Color(0xFF1A1D23),
+                      activatedColor: ui.colors.selected,
+                      activatedBorderColor: ui.colors.accent,
+                      gridBorderColor: ui.colors.border,
+                      borderColor: ui.colors.border,
+                      menuBackgroundColor: ui.colors.panelHeader,
+                      columnTextStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: ui.colors.textMuted,
                       ),
-                      cellTextStyle: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFFCCCCCC),
+                      cellTextStyle: TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'JetBrains Mono',
+                        color: ui.colors.textPrimary,
                       ),
-                      borderColor: Theme.of(context).dividerColor,
-                      gridBorderColor: Theme.of(context).dividerColor,
-                      activatedColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                       enableColumnBorderVertical: true,
+                      rowHeight: 28.0, 
+                      columnHeight: 32.0, 
+                    ),
+                    scrollbar: const PlutoGridScrollbarConfig(
+                      scrollbarThickness: 8,
+                      scrollbarThicknessWhileDragging: 10,
+                      isAlwaysShown: true,
                     ),
                     columnSize: const PlutoGridColumnSizeConfig(
                       autoSizeMode: PlutoAutoSizeMode.none,

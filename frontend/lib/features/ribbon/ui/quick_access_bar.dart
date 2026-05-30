@@ -14,17 +14,28 @@ class QuickAccessBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         UiIconButton(
+          icon: LucideIcons.undo2,
+          tooltip: 'Undo (⌘Z)',
+          onPressed: () {},
+        ),
+        UiIconButton(
+          icon: LucideIcons.redo2,
+          tooltip: 'Redo (⌘Y)',
+          onPressed: () {},
+        ),
+        SizedBox(width: ui.spacing.sm),
+        Container(width: 1, height: 16, color: ui.colors.divider.withOpacity(0.5)),
+        SizedBox(width: ui.spacing.sm),
+        UiIconButton(
           icon: LucideIcons.search,
           tooltip: 'Command Palette (⌘K)',
           onPressed: () {},
         ),
-        SizedBox(width: ui.spacing.xs),
         UiIconButton(
           icon: LucideIcons.settings,
           tooltip: 'Settings',
           onPressed: () {},
         ),
-        SizedBox(width: ui.spacing.xs),
         UiIconButton(
           icon: LucideIcons.user,
           tooltip: 'Account',
