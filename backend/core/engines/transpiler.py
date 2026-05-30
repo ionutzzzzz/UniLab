@@ -12,7 +12,7 @@ import linecache
 import numpy as np
 from typing import Any, Dict, Optional
 from contextlib import redirect_stdout, redirect_stderr
-from ..core import UniLabTranspiler
+from ..transpiler_core import UniLabTranspiler
 from .. import runtime
 from .base import BaseEngine
 from ..models import ExecutionResult, SessionInfo
@@ -71,6 +71,7 @@ class TranspilerEngine(BaseEngine):
         
         # Set initial CWD to sample folder in web mode
         if os.environ.get('UNILAB_WEB_MODE') == '1':
+            # backend/core/engines/transpiler.py -> Project Root
             project_root = pathlib.Path(__file__).resolve().parents[3]
             sample_dir = project_root / 'sample'
             self.cwd = sample_dir if sample_dir.exists() else self.workspace_path
@@ -81,7 +82,7 @@ class TranspilerEngine(BaseEngine):
         
         # Add libraries to search path
         backend_dir = pathlib.Path(__file__).resolve().parents[2]
-        libs_dir = backend_dir / "libraries"
+        libs_dir = backend_dir / "stdlib" / "libraries"
         if libs_dir.exists():
             for lib_subdir in libs_dir.iterdir():
                 if lib_subdir.is_dir() and not lib_subdir.name.startswith("__"):
@@ -119,18 +120,19 @@ class TranspilerEngine(BaseEngine):
         self.globals['xcorr'] = runtime.unilab_xcorr
         self.globals['ode45'] = runtime.ode45
         
-        # Load custom packages from backend/packages
+        # Load custom packages from backend/stdlib/packages
         self._load_custom_packages()
         
-        # Load standard libraries from backend/libraries
+        # Load standard libraries from backend/stdlib/libraries
         self._load_standard_libraries()
         
         # Load persistent workspace if it exists
         self._load_workspace()
 
     def _load_standard_libraries(self):
+        # backend/core/engines/transpiler.py -> backend/stdlib/libraries
         current_dir = pathlib.Path(__file__).parent
-        libs_dir = (current_dir / ".." / ".." / "libraries").resolve()
+        libs_dir = (current_dir / ".." / ".." / "stdlib" / "libraries").resolve()
         
         if not libs_dir.exists():
             return
@@ -151,10 +153,10 @@ class TranspilerEngine(BaseEngine):
             # print(f"Added path: {p}")
 
     def _load_custom_packages(self):
-        # Determine the backend/packages path
+        # Determine the backend/stdlib/packages path
         # Assuming this file is at backend/core/engines/transpiler.py
         current_dir = pathlib.Path(__file__).parent
-        packages_dir = (current_dir / ".." / ".." / "packages").resolve()
+        packages_dir = (current_dir / ".." / ".." / "stdlib" / "packages").resolve()
         
         if not packages_dir.exists():
             return

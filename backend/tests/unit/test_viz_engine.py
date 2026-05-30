@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from backend.core.runtime import unilab_ascii_plot, unilab_ascii_heatmap, isempty
-from backend.core.core import UniLabTranspiler
+from backend.core.transpiler_core import UniLabTranspiler
 
 class TestVizEngine(unittest.TestCase):
     def test_ascii_plot_basic(self):
@@ -97,7 +97,7 @@ class TestMatrixImprovements(unittest.TestCase):
 
 class TestRobustPlotting(unittest.TestCase):
     def test_plot_nn_robustness(self):
-        from backend.ml.visualizers.nn_vis import plot_neural_network
+        from backend.stdlib.packages.ml.visualizers.nn_vis import plot_neural_network
         import matplotlib.pyplot as plt
         # Test with 2D array input (previously caused error)
         layers = np.array([[4, 8, 8, 2]])
