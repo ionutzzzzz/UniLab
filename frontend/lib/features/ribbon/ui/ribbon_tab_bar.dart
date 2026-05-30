@@ -19,38 +19,96 @@ class RibbonTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
+
     return Container(
-      height: 32,
-      color: ui.colors.ribbonTabs,
+      height: 34,
+      decoration: BoxDecoration(
+        color: ui.colors.ribbonTabs,
+        border: Border(
+          bottom: BorderSide(color: ui.colors.divider),
+        ),
+      ),
       padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
       child: Row(
         children: tabs.map((tab) {
           final isActive = tab == activeTab;
-          return GestureDetector(
+          return _RibbonTab(
+            title: tab,
+            isActive: isActive,
             onTap: () => onTabTap(tab),
             onDoubleTap: onDoubleTap,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
-              alignment: Alignment.center,
-              margin: EdgeInsets.only(top: ui.spacing.xs),
-              decoration: BoxDecoration(
-                color: isActive ? ui.colors.panelHeader : Colors.transparent,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                border: isActive ? Border(
-                  top: BorderSide(color: ui.colors.divider),
-                  left: BorderSide(color: ui.colors.divider),
-                  right: BorderSide(color: ui.colors.divider),
-                ) : null,
-              ),
-              child: UiText(
-                text: tab,
-                variant: UiTextVariant.body,
-                color: isActive ? ui.colors.textPrimary : ui.colors.textSecondary,
-              ),
-            ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _RibbonTab extends StatefulWidget {
+  const _RibbonTab({
+    required this.title,
+    required this.isActive,
+    required this.onTap,
+    required this.onDoubleTap,
+  });
+
+  final String title;
+  final bool isActive;
+  final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
+
+  @override
+  State<_RibbonTab> createState() => _RibbonTabState();
+}
+
+class _RibbonTabState extends State<_RibbonTab> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onDoubleTap: widget.onDoubleTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+          alignment: Alignment.center,
+          margin: const EdgeInsets.only(top: 4),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? ui.colors.panelHeader
+                : (_isHovered
+                    ? ui.colors.hover.withOpacity(0.5)
+                    : Colors.transparent),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            border: widget.isActive
+                ? Border(
+                    top: BorderSide(color: ui.colors.divider),
+                    left: BorderSide(color: ui.colors.divider),
+                    right: BorderSide(color: ui.colors.divider),
+                  )
+                : Border(
+                    top: BorderSide(color: Colors.transparent),
+                    left: BorderSide(color: Colors.transparent),
+                    right: BorderSide(color: Colors.transparent),
+                  ),
+          ),
+          child: UiText(
+            text: widget.title,
+            variant: UiTextVariant.label,
+            fontWeight: widget.isActive ? FontWeight.bold : FontWeight.normal,
+            color: widget.isActive
+                ? ui.colors.textPrimary
+                : ( _isHovered ? ui.colors.textPrimary : ui.colors.textSecondary),
+          ),
+        ),
       ),
     );
   }

@@ -12,6 +12,10 @@ class UiText extends StatelessWidget {
     this.maxLines,
     this.overflow,
     this.textAlign,
+    this.fontWeight,
+    this.letterSpacing,
+    this.fontSize,
+    this.fontFamily,
   });
 
   final String text;
@@ -20,6 +24,10 @@ class UiText extends StatelessWidget {
   final int? maxLines;
   final TextOverflow? overflow;
   final TextAlign? textAlign;
+  final FontWeight? fontWeight;
+  final double? letterSpacing;
+  final double? fontSize;
+  final String? fontFamily;
 
   @override
   Widget build(BuildContext context) {
@@ -50,9 +58,13 @@ class UiText extends StatelessWidget {
         break;
     }
 
-    if (color != null) {
-      style = style.copyWith(color: color);
-    }
+    style = style.copyWith(
+      color: color,
+      fontWeight: fontWeight,
+      letterSpacing: letterSpacing,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+    );
 
     return Text(
       text,

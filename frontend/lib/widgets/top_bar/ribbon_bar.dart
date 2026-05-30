@@ -552,12 +552,12 @@ class _RibbonButtonState extends State<_RibbonButton> {
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
           decoration: BoxDecoration(
             color: _isHovered || widget.isActive
-                ? Theme.of(context).hoverColor.withValues(alpha: 0.5)
+                ? Theme.of(context).hoverColor.withOpacity(0.5)
                 : Colors.transparent,
             borderRadius: BorderRadius.zero,
             border: widget.isActive
                 ? Border.all(
-                    color: Theme.of(context).primaryColor.withValues(alpha: 0.5),
+                    color: Theme.of(context).primaryColor.withOpacity(0.5),
                     width: 1,
                   )
                 : null,
@@ -569,7 +569,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
               Icon(
                 widget.icon,
                 size: widget.isLarge ? 20 : 16,
-                color: widget.iconColor ?? (widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFCCCCCC).withValues(alpha: 0.8)),
+                color: widget.iconColor ?? (widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFCCCCCC).withOpacity(0.8)),
               ),
               const SizedBox(height: 2),
               Flexible(
@@ -578,7 +578,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 10,
-                    color: widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFFFFFFF).withValues(alpha: 0.7),
+                    color: widget.isActive ? Theme.of(context).primaryColor : const Color(0xFFFFFFFF).withOpacity(0.7),
                     height: 1.1,
                   ),
                   textAlign: TextAlign.center,

@@ -31,3 +31,11 @@ final explorerRootProvider = FutureProvider<FileNode>((ref) async {
     ],
   );
 });
+
+final recentFilesProvider = StateProvider<List<FileNode>>((ref) {
+  return [
+    const FileNode(path: '/src/main.m', name: 'main.m'),
+    const FileNode(path: '/README.md', name: 'README.md'),
+    const FileNode(path: '/data/dataset.csv', name: 'dataset.csv'),
+  ];
+});

@@ -7,6 +7,7 @@ import '../../../core/commands/commands_registration.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_input_field.dart';
 import '../../../widgets/ui_text.dart';
+import '../../../widgets/ui_glass_container.dart';
 
 class CommandPalette extends ConsumerStatefulWidget {
   const CommandPalette({super.key});
@@ -83,90 +84,98 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
+      elevation: 0,
       insetPadding: const EdgeInsets.only(top: 100),
       alignment: Alignment.topCenter,
-      child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 400),
-        decoration: BoxDecoration(
-          color: ui.colors.overlay,
-          borderRadius: ui.spacing.radiusMd,
-          border: Border.all(color: ui.colors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: EdgeInsets.all(ui.spacing.sm),
-              child: UiInputField(
-                controller: _searchController,
-                hintText: 'Type a command...',
-                prefixIcon: LucideIcons.chevronRight,
-                isDense: false,
+      child: UiGlassContainer(
+        borderRadius: ui.spacing.radiusMd,
+        padding: EdgeInsets.zero,
+        opacity: 0.8,
+        blur: 20.0,
+        child: Container(
+          width: 600,
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: EdgeInsets.all(ui.spacing.sm),
+                child: UiInputField(
+                  controller: _searchController,
+                  hintText: 'Type a command...',
+                  prefixIcon: LucideIcons.chevronRight,
+                  isDense: false,
+                ),
               ),
-            ),
-            if (_filteredCommands.isNotEmpty)
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _filteredCommands.length,
-                  itemBuilder: (context, index) {
-                    final cmd = _filteredCommands[index];
-                    final isSelected = index == _selectedIndex;
+              if (_filteredCommands.isNotEmpty)
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _filteredCommands.length,
+                    itemBuilder: (context, index) {
+                      final cmd = _filteredCommands[index];
+                      final isSelected = index == _selectedIndex;
 
-                    return MouseRegion(
-                      onEnter: (_) => setState(() => _selectedIndex = index),
-                      child: GestureDetector(
-                        onTap: () => _executeCommand(cmd),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.sm),
-                          color: isSelected ? ui.colors.selected : Colors.transparent,
-                          child: Row(
-                            children: [
-                              Icon(
-                                cmd.icon ?? LucideIcons.circle,
-                                size: 16,
-                                color: isSelected ? ui.colors.textInverse : ui.colors.textSecondary,
-                              ),
-                              SizedBox(width: ui.spacing.sm),
-                              Expanded(
-                                child: UiText(
-                                  text: cmd.title,
-                                  variant: UiTextVariant.body,
-                                  color: isSelected ? ui.colors.textInverse : ui.colors.textPrimary,
+                      return MouseRegion(
+                        onEnter: (_) => setState(() => _selectedIndex = index),
+                        child: GestureDetector(
+                          onTap: () => _executeCommand(cmd),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: ui.spacing.md,
+                                vertical: ui.spacing.sm),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? ui.colors.selected
+                                  : Colors.transparent,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  cmd.icon ?? LucideIcons.circle,
+                                  size: 16,
+                                  color: isSelected
+                                      ? ui.colors.textInverse
+                                      : ui.colors.textSecondary,
                                 ),
-                              ),
-                              if (cmd.category != null)
-                                UiText(
-                                  text: cmd.category!,
-                                  variant: UiTextVariant.caption,
-                                  color: isSelected ? ui.colors.textInverse.withOpacity(0.7) : ui.colors.textMuted,
+                                SizedBox(width: ui.spacing.sm),
+                                Expanded(
+                                  child: UiText(
+                                    text: cmd.title,
+                                    variant: UiTextVariant.body,
+                                    color: isSelected
+                                        ? ui.colors.textInverse
+                                        : ui.colors.textPrimary,
+                                  ),
                                 ),
-                            ],
+                                if (cmd.category != null)
+                                  UiText(
+                                    text: cmd.category!,
+                                    variant: UiTextVariant.caption,
+                                    color: isSelected
+                                        ? ui.colors.textInverse
+                                            .withOpacity(0.7)
+                                        : ui.colors.textMuted,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
+                )
+              else
+                Padding(
+                  padding: EdgeInsets.all(ui.spacing.lg),
+                  child: UiText(
+                    text: 'No commands found.',
+                    variant: UiTextVariant.body,
+                    color: ui.colors.textMuted,
+                  ),
                 ),
-              )
-            else
-              Padding(
-                padding: EdgeInsets.all(ui.spacing.lg),
-                child: UiText(
-                  text: 'No commands found.',
-                  variant: UiTextVariant.body,
-                  color: ui.colors.textMuted,
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

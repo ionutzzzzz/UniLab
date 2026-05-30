@@ -73,18 +73,61 @@ class MainShell extends ConsumerWidget {
   Widget _buildCollapsedRail(BuildContext context, String tooltip, IconData icon, VoidCallback onTap) {
     final ui = UiTheme.of(context);
     return Container(
-      width: 48,
-      color: ui.colors.panel,
+      width: 44, // Slightly slimmer
+      decoration: BoxDecoration(
+        color: ui.colors.panel,
+        border: Border(
+          right: tooltip == 'Explorer' ? BorderSide(color: ui.colors.divider.withOpacity(0.3)) : BorderSide.none,
+          left: tooltip == 'Workspace' ? BorderSide(color: ui.colors.divider.withOpacity(0.3)) : BorderSide.none,
+        ),
+      ),
       child: Column(
         children: [
-          SizedBox(height: ui.spacing.sm),
-          IconButton(
-            icon: Icon(icon, size: 20, color: ui.colors.icon),
-            onPressed: onTap,
-            tooltip: tooltip,
-            splashRadius: 20,
+          SizedBox(height: ui.spacing.md),
+          GestureDetector(
+            onTap: onTap,
+            child: _RailIcon(icon: icon, tooltip: tooltip, color: ui.colors.accent),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RailIcon extends StatefulWidget {
+  const _RailIcon({required this.icon, required this.tooltip, required this.color});
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+
+  @override
+  State<_RailIcon> createState() => _RailIconState();
+}
+
+class _RailIconState extends State<_RailIcon> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Tooltip(
+        message: widget.tooltip,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _isHovered ? widget.color.withOpacity(0.15) : Colors.transparent,
+            borderRadius: ui.spacing.radiusSm,
+          ),
+          child: Icon(
+            widget.icon,
+            size: 18,
+            color: _isHovered ? widget.color : ui.colors.textMuted.withOpacity(0.7),
+          ),
+        ),
       ),
     );
   }

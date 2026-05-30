@@ -77,15 +77,30 @@ class _SplitShellState extends ConsumerState<SplitShell> {
         return const SizedBox.shrink();
       },
       dividerBuilder: (axis, index, resizable, dragging, highlighted, themeData) {
-        return Container(
-          color: dragging ? ui.colors.accent : ui.colors.divider,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          color: dragging || highlighted 
+              ? ui.colors.accent.withOpacity(0.8) 
+              : ui.colors.divider.withOpacity(0.4),
+          child: Center(
+            child: Container(
+              width: axis == Axis.vertical ? 24 : 1,
+              height: axis == Axis.vertical ? 1 : 24,
+              decoration: BoxDecoration(
+                color: dragging || highlighted 
+                    ? Colors.white.withOpacity(0.5) 
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ),
         );
       },
     );
 
     MultiSplitViewTheme mainTheme = MultiSplitViewTheme(
       data: MultiSplitViewThemeData(
-        dividerThickness: ui.spacing.strokeHair,
+        dividerThickness: 4, // Slightly thicker for easier grabbing, but thin visual line
       ),
       child: mainHorizontalSplit,
     );
@@ -96,7 +111,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
 
     return MultiSplitViewTheme(
       data: MultiSplitViewThemeData(
-        dividerThickness: ui.spacing.strokeHair,
+        dividerThickness: 4,
       ),
       child: MultiSplitView(
         axis: Axis.vertical,
@@ -107,8 +122,23 @@ class _SplitShellState extends ConsumerState<SplitShell> {
           return const SizedBox.shrink();
         },
         dividerBuilder: (axis, index, resizable, dragging, highlighted, themeData) {
-          return Container(
-            color: dragging ? ui.colors.accent : ui.colors.divider,
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            color: dragging || highlighted 
+                ? ui.colors.accent.withOpacity(0.8) 
+                : ui.colors.divider.withOpacity(0.4),
+            child: Center(
+              child: Container(
+                width: axis == Axis.vertical ? 24 : 1,
+                height: axis == Axis.vertical ? 1 : 24,
+                decoration: BoxDecoration(
+                  color: dragging || highlighted 
+                      ? Colors.white.withOpacity(0.5) 
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
           );
         },
       ),

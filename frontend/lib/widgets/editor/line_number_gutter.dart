@@ -15,7 +15,7 @@ class LineNumberGutter extends StatefulWidget {
     this.textStyle = const TextStyle(
       fontFamily: 'JetBrains Mono',
       fontSize: 13,
-      height: 1.4,
+      height: 1.5,
     ),
     this.backgroundColor = const Color(0xFF1E1E1E),
     this.textColor = const Color(0xFF858585),
@@ -28,8 +28,12 @@ class LineNumberGutter extends StatefulWidget {
 class _LineNumberGutterState extends State<LineNumberGutter> {
   @override
   Widget build(BuildContext context) {
+    final int digits = widget.lineCount.toString().length;
+    final double gutterWidth = 30.0 + (digits * 8.0);
+
     return Container(
-      width: 45.0,
+      constraints: const BoxConstraints(minWidth: 45.0),
+      width: gutterWidth > 45.0 ? gutterWidth : 45.0,
       decoration: BoxDecoration(
         color: widget.backgroundColor,
         border: Border(

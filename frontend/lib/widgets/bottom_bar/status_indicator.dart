@@ -110,7 +110,7 @@ class StatusIndicator extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Container(
         width: 1,
-        color: Colors.white.withValues(alpha: 0.3),
+        color: Colors.white.withOpacity(0.3),
       ),
     );
   }

@@ -102,7 +102,7 @@ class _UiButtonState extends State<UiButton> {
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 90),
+          duration: const Duration(milliseconds: 150), // Standardized to 150ms
           curve: Curves.easeOut,
           height: height,
           padding: padding,
@@ -110,6 +110,9 @@ class _UiButtonState extends State<UiButton> {
             color: bgColor,
             border: Border.fromBorderSide(border),
             borderRadius: ui.spacing.radiusMd,
+            boxShadow: widget.variant == UiButtonVariant.primary && isEnabled 
+                ? (_isHovered ? ui.colors.shadowMd : ui.colors.shadowSm) 
+                : null,
           ),
           alignment: Alignment.center,
           child: content,

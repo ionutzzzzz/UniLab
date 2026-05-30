@@ -1,7 +1,11 @@
-import 'dart:io';
 import 'dart:convert';
-import 'package:flutter_pty/flutter_pty.dart';
+import 'package:flutter/foundation.dart';
 import 'package:xterm/xterm.dart';
+
+// Conditional imports for PTY
+import 'pty_stub.dart' if (dart.library.io) 'package:flutter_pty/flutter_pty.dart';
+// Conditional import for Platform info
+import 'dart:io' if (dart.library.html) 'pty_stub.dart' as platform_impl;
 
 class TerminalSession {
   final String id;
@@ -21,14 +25,13 @@ class TerminalSession {
   }
 
   static String get _shell {
-    if (Platform.isWindows) {
+    if (kIsWeb) return 'web-shell';
+    
+    if (platform_impl.Platform.isWindows) {
       return 'powershell.exe';
-    } else if (Platform.isMacOS) {
-      final env = Platform.environment;
-      return env['SHELL'] ?? 'zsh';
     } else {
-      final env = Platform.environment;
-      return env['SHELL'] ?? 'bash';
+      // For Linux/macOS
+      return 'bash';
     }
   }
 
@@ -45,6 +48,7 @@ class TerminalSession {
       rows: terminal.viewHeight,
     );
 
+    // Only listen if it's not a stub (stub output is empty stream)
     pty.output.cast<List<int>>().listen((data) {
       terminal.write(String.fromCharCodes(data));
     });
