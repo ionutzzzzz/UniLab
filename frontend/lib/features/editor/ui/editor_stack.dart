@@ -8,6 +8,7 @@ import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
+import '../../../utils/file_manager.dart';
 import 'editor_tab_bar.dart';
 import 'editor_breadcrumbs.dart';
 import 'editor_surface.dart';
@@ -44,6 +45,14 @@ class _EditorStackState extends State<EditorStack> {
 
   void _onCodeChanged() {
     final appProvider = context.read<AppProvider>();
+    final activeFile = appProvider.activeFile;
+    if (activeFile == null) return;
+
+    // Only handle changes for text files
+    if (activeFile.path.isNotEmpty && !UniLabFileManager.isTextFile(activeFile.path)) {
+      return;
+    }
+
     appProvider.updateActiveFileContent(_controller.text);
 
     final settings = context.read<SettingsProvider>().settings;
@@ -93,7 +102,6 @@ class _EditorStackState extends State<EditorStack> {
     }
 
     final activeFile = appProvider.activeFile!;
-    final fileName = activeFile.name.toLowerCase();
     
     final tabs = appProvider.openFiles.map((f) => EditorTabModel(
       id: f.id,
@@ -105,13 +113,16 @@ class _EditorStackState extends State<EditorStack> {
     Widget content;
     bool showMinimap = false;
 
-    if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.gif')) {
+    if (UniLabFileManager.isImageFile(activeFile.path)) {
       content = ImageViewer(path: activeFile.path, name: activeFile.name);
-    } else if (fileName.endsWith('.pdf')) {
+    } else if (UniLabFileManager.isPdfFile(activeFile.path)) {
       content = UniLabPdfViewer(path: activeFile.path, name: activeFile.name);
-    } else if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.m4a') || fileName.endsWith('.ogg')) {
+    } else if (UniLabFileManager.isAudioFile(activeFile.path)) {
       content = AudioViewer(path: activeFile.path, name: activeFile.name);
     } else {
+      if (!UniLabFileManager.isTextFile(activeFile.path) && activeFile.path.isNotEmpty) {
+        debugPrint('EditorStack: Unknown or binary file type for path: ${activeFile.path}. Falling back to text editor.');
+      }
       content = EditorSurface(
         controller: _controller,
         focusNode: _focusNode,

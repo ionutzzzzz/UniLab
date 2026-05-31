@@ -165,7 +165,7 @@ class AppProvider with ChangeNotifier {
 
   Future<void> openFile(dynamic file) async {
     if (kIsWeb) return;
-    final path = (file as io.File).path;
+    final path = (file as io.File).absolute.path;
     final name = p.basename(path);
 
     // Check if file is already open
@@ -227,6 +227,12 @@ class AppProvider with ChangeNotifier {
 
   Future<void> saveActiveFile() async {
     if (activeFile == null || kIsWeb) return;
+
+    // Safeguard: Only save text files to prevent corruption of binary files
+    if (activeFile!.path.isNotEmpty && !UniLabFileManager.isTextFile(activeFile!.path)) {
+      debugPrint('AppProvider: Skipping save for binary file: ${activeFile!.path}');
+      return;
+    }
 
     String savePath = activeFile!.path;
 
@@ -320,7 +326,11 @@ class AppProvider with ChangeNotifier {
   Future<void> openFilePicker() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['m', 'txt', 'csv', 'json'],
+      allowedExtensions: [
+        'm', 'txt', 'csv', 'json', 'md', 'py', 'pdf',
+        'png', 'jpg', 'jpeg', 'gif', 'webp',
+        'mp3', 'wav', 'm4a', 'ogg'
+      ],
     );
     
     if (result != null) {
