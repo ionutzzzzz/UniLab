@@ -27,19 +27,19 @@ class PropertyInspector extends StatelessWidget {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 6),
           decoration: BoxDecoration(
-            color: ui.colors.tan.withValues(alpha: 0.1),
-            border: Border(bottom: BorderSide(color: ui.colors.tan.withValues(alpha: 0.3))),
+            color: ui.colors.accent.withValues(alpha: 0.1),
+            border: Border(bottom: BorderSide(color: ui.colors.accent.withValues(alpha: 0.3))),
           ),
           child: Row(
             children: [
-              Icon(LucideIcons.info, size: 14, color: ui.colors.tan),
+              Icon(LucideIcons.info, size: 14, color: ui.colors.accent),
               const SizedBox(width: 8),
               UiText(
                 text: 'PROPERTY INSPECTOR',
                 variant: UiTextVariant.label,
                 fontWeight: FontWeight.bold,
                 fontSize: 10,
-                color: ui.colors.tan,
+                color: ui.colors.accent,
               ),
               const Spacer(),
               Icon(LucideIcons.settings2, size: 14, color: ui.colors.textMuted),
@@ -47,16 +47,19 @@ class PropertyInspector extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: mockProperties.length,
-            itemBuilder: (context, index) {
-              final prop = mockProperties[index];
-              return _PropertyRow(
-                name: prop['name']!,
-                value: prop['value']!,
-                isEven: index % 2 == 0,
-              );
-            },
+          child: Container(
+            color: ui.colors.canvas,
+            child: ListView.builder(
+              itemCount: mockProperties.length,
+              itemBuilder: (context, index) {
+                final prop = mockProperties[index];
+                return _PropertyRow(
+                  name: prop['name']!,
+                  value: prop['value']!,
+                  isEven: index % 2 == 0,
+                );
+              },
+            ),
           ),
         ),
       ],

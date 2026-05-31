@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ui_theme.dart';
 
 /// Find and Replace dialog
 class FindReplaceDialog extends StatefulWidget {
@@ -67,12 +68,14 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkPanelBackground,
+        color: ui.colors.panel,
         border: Border(
           top: BorderSide(
-            color: Theme.of(context).dividerColor,
+            color: theme.dividerColor,
             width: 1.0,
           ),
         ),
@@ -108,13 +111,13 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                   focusNode: _findFocus,
                   decoration: InputDecoration(
                     hintText: 'Find',
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.darkTextSecondary,
+                      color: ui.colors.textSecondary,
                     ),
                     border: OutlineInputBorder(
                       borderSide: BorderSide(
-                        color: Theme.of(context).dividerColor,
+                        color: theme.dividerColor,
                         width: 1.0,
                       ),
                       borderRadius: BorderRadius.zero,
@@ -131,13 +134,13 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                     suffixStyle: TextStyle(
                       fontSize: 11,
                       color: _matchCount > 0
-                          ? AppTheme.darkAccentColor
+                          ? ui.colors.accent
                           : Colors.red,
                     ),
                   ),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.darkTextPrimary,
+                    color: ui.colors.textPrimary,
                   ),
                 ),
               ),
@@ -147,12 +150,14 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                 icon: Icons.arrow_upward,
                 tooltip: 'Previous (Shift+Enter)',
                 onPressed: () {},
+                ui: ui,
               ),
               const SizedBox(width: 4),
               _IconButton(
                 icon: Icons.arrow_downward,
                 tooltip: 'Next (Enter)',
                 onPressed: () {},
+                ui: ui,
               ),
               const SizedBox(width: 8),
               // Options
@@ -165,6 +170,7 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                     _matchCase = value;
                   });
                 },
+                ui: ui,
               ),
               const SizedBox(width: 4),
               _ToggleButton(
@@ -176,12 +182,14 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                     _wholeWord = value;
                   });
                 },
+                ui: ui,
               ),
               const SizedBox(width: 8),
               _IconButton(
                 icon: Icons.close,
                 tooltip: 'Close (Escape)',
                 onPressed: widget.onClose,
+                ui: ui,
               ),
             ],
           ),
@@ -199,13 +207,13 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                       focusNode: _replaceFocus,
                       decoration: InputDecoration(
                         hintText: 'Replace',
-                        hintStyle: const TextStyle(
+                        hintStyle: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.darkTextSecondary,
+                          color: ui.colors.textSecondary,
                         ),
                         border: OutlineInputBorder(
                           borderSide: BorderSide(
-                            color: Theme.of(context).dividerColor,
+                            color: theme.dividerColor,
                             width: 1.0,
                           ),
                           borderRadius: BorderRadius.zero,
@@ -215,9 +223,9 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                           vertical: 6,
                         ),
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.darkTextPrimary,
+                        color: ui.colors.textPrimary,
                       ),
                     ),
                   ),
@@ -233,6 +241,7 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                         wholeWord: _wholeWord,
                       );
                     },
+                    ui: ui,
                   ),
                   const SizedBox(width: 4),
                   _IconButton(
@@ -246,6 +255,7 @@ class _FindReplaceDialogState extends State<FindReplaceDialog> {
                         wholeWord: _wholeWord,
                       );
                     },
+                    ui: ui,
                   ),
                 ],
               ),
@@ -261,11 +271,13 @@ class _IconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
+  final UiTheme ui;
 
   const _IconButton({
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    required this.ui,
   });
 
   @override
@@ -279,11 +291,11 @@ class _IconButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            hoverColor: AppTheme.darkHoverColor,
+            hoverColor: ui.colors.hover,
             child: Icon(
               icon,
               size: 14,
-              color: AppTheme.darkTextPrimary,
+              color: ui.colors.textPrimary,
             ),
           ),
         ),
@@ -298,12 +310,14 @@ class _ToggleButton extends StatelessWidget {
   final String tooltip;
   final bool isSelected;
   final Function(bool) onChanged;
+  final UiTheme ui;
 
   const _ToggleButton({
     required this.label,
     required this.tooltip,
     required this.isSelected,
     required this.onChanged,
+    required this.ui,
   });
 
   @override
@@ -314,26 +328,26 @@ class _ToggleButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => onChanged(!isSelected),
-          hoverColor: AppTheme.darkHoverColor,
+          hoverColor: ui.colors.hover,
           child: Container(
             width: 24,
             height: 24,
             decoration: BoxDecoration(
               border: Border.all(
                 color: isSelected
-                    ? AppTheme.darkAccentColor
+                    ? ui.colors.accent
                     : Theme.of(context).dividerColor,
                 width: 1.0,
               ),
               color:
-                  isSelected ? AppTheme.darkAccentColor.withValues(alpha: 0.2) : null,
+                  isSelected ? ui.colors.accent.withValues(alpha: 0.2) : null,
             ),
             child: Center(
               child: Text(
                 label,
                 style: TextStyle(
                   fontSize: 10,
-                  color: isSelected ? AppTheme.darkAccentColor : Colors.grey,
+                  color: isSelected ? ui.colors.accent : Colors.grey,
                   fontWeight: FontWeight.bold,
                 ),
               ),

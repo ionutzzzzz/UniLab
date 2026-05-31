@@ -80,8 +80,14 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
           ),
           child: Row(
             children: [
-              UiText(text: 'Plot History', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
-              const Spacer(),
+              Expanded(
+                child: UiText(
+                  text: 'Plot History', 
+                  variant: UiTextVariant.label, 
+                  fontWeight: FontWeight.bold,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               UiIconButton(icon: LucideIcons.layoutGrid, tooltip: 'Grid View', size: 24, iconSize: 14),
               SizedBox(width: ui.spacing.xs),
               UiIconButton(icon: LucideIcons.trash2, tooltip: 'Clear All', size: 24, iconSize: 14),
@@ -141,7 +147,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
               color: _isHovered ? ui.colors.accent.withValues(alpha: 0.5) : ui.colors.divider.withValues(alpha: 0.5),
               width: 1.0,
             ),
-            boxShadow: _isHovered ? ui.colors.shadowMd : ui.colors.shadowSm,
+            boxShadow: _isHovered ? ui.colors.shadowMd : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,10 +162,13 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Icon(LucideIcons.image, size: 32, color: ui.colors.textDisabled.withValues(alpha: 0.5)),
+                      Icon(LucideIcons.lineChart, size: 32, color: ui.colors.textDisabled.withValues(alpha: 0.3)),
                       if (_isHovered)
                         Container(
-                          color: Colors.black.withValues(alpha: 0.2),
+                          decoration: BoxDecoration(
+                            color: ui.colors.accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(ui.spacing.radiusMd.topLeft.x)),
+                          ),
                           child: Center(
                             child: Container(
                               padding: const EdgeInsets.all(8),
@@ -168,7 +177,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                                 shape: BoxShape.circle,
                                 boxShadow: ui.colors.shadowSm,
                               ),
-                              child: const Icon(LucideIcons.maximize2, size: 16, color: Colors.black87),
+                              child: Icon(LucideIcons.maximize2, size: 16, color: ui.colors.textInverse),
                             ),
                           ),
                         ),
@@ -178,9 +187,11 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
               ),
               // Caption
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
+                  color: _isHovered ? ui.colors.accent.withValues(alpha: 0.05) : Colors.transparent,
                   border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(ui.spacing.radiusMd.bottomLeft.x)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,6 +201,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                       variant: UiTextVariant.label,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
+                      color: _isHovered ? ui.colors.accent : ui.colors.textPrimary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

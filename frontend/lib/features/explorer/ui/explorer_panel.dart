@@ -11,6 +11,7 @@ import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
 import '../../../providers/app_provider.dart';
 import 'package:flutter/services.dart';
+import '../../../widgets/ui_glass_container.dart';
 
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
@@ -255,8 +256,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       ));
 
       if (isDir && isExpanded) {
-        // This is a simplified version. Ideally AppProvider would have a recursive structure
-        // or we'd list directories on demand. For now, let's assume we can list it.
         try {
           final children = entity.listSync();
           items.addAll(_buildProjectTree(children, depth + 1, ui, appProvider));
@@ -349,25 +348,6 @@ class _FileTreeRowState extends State<_FileTreeRow> {
     final double paddingLeft = widget.depth * 12.0 + ui.spacing.sm;
     final appProvider = p.Provider.of<AppProvider>(context, listen: false);
 
-    IconData getFileIcon(String name) {
-      final lowerName = name.toLowerCase();
-      if (lowerName.endsWith('.m')) return LucideIcons.fileCode2;
-      if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return LucideIcons.table2;
-      if (lowerName.endsWith('.md')) return LucideIcons.fileText;
-      if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return LucideIcons.fileJson;
-      if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return LucideIcons.fileImage;
-      if (lowerName.endsWith('.pdf')) return LucideIcons.fileText;
-      if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav')) return LucideIcons.fileAudio;
-      return LucideIcons.file;
-    }
-
-    Color getIconColor(String name) {
-      final lowerName = name.toLowerCase();
-      if (lowerName.endsWith('.m')) return const Color(0xFFB3CDE3);
-      if (lowerName.endsWith('.md')) return const Color(0xFFCCEBC5);
-      return ui.colors.icon;
-    }
-
     return ContextMenuRegion(
       contextMenu: GenericContextMenu(
         buttonConfigs: [
@@ -408,7 +388,6 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           onWillAcceptWithDetails: (details) {
             final dragPath = details.data;
             if (dragPath == widget.path) return false;
-            // Don't allow dropping a parent into its child
             if (widget.path.startsWith(dragPath + '/')) return false;
             return true;
           },
@@ -418,37 +397,40 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           },
           builder: (context, candidateData, rejectedData) {
             final isDragHovering = candidateData.isNotEmpty;
-            return Draggable<String>(
+            return LongPressDraggable<String>(
               data: widget.path,
+              delay: const Duration(milliseconds: 300),
+              dragAnchorStrategy: pointerDragAnchorStrategy,
               feedback: Material(
+                elevation: 12,
+                borderRadius: ui.spacing.radiusMd,
                 color: Colors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: ui.colors.panelHeader.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: ui.colors.shadowSm,
-                    border: Border.all(color: ui.colors.accent),
-                  ),
+                child: UiGlassContainer(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  opacity: 0.9,
+                  blur: 10,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        widget.isDir ? LucideIcons.folder : getFileIcon(widget.name),
-                        size: 14,
-                        color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
+                        widget.isDir ? LucideIcons.folder : _getFileIcon(widget.name),
+                        size: 16,
+                        color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.name,
-                        style: ui.typography.body.copyWith(
-                          fontSize: 12,
-                          color: ui.colors.textPrimary,
-                        ),
+                      const SizedBox(width: 10),
+                      UiText(
+                        text: widget.name,
+                        variant: UiTextVariant.body,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ],
                   ),
                 ),
+              ),
+              childWhenDragging: Opacity(
+                opacity: 0.3,
+                child: _buildRowContent(ui, paddingLeft, false, false),
               ),
               child: Listener(
                 onPointerDown: (event) {
@@ -464,55 +446,13 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                       if (mounted) widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
                     });
                   } else if (event.buttons == 1) { // Left click
-                     // We handle selection here to get keyboard state, and let onTap handle expand/open
                      widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
                   }
                 },
                 child: GestureDetector(
                   onTap: widget.onToggle,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    height: 24,
-                    padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
-                    decoration: BoxDecoration(
-                      color: isDragHovering 
-                        ? ui.colors.accent.withValues(alpha: 0.3)
-                        : (widget.isSelected 
-                          ? ui.colors.selected
-                          : (_isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent)),
-                    ),
-                    child: Row(
-                      children: [
-                        if (widget.isDir)
-                          Icon(
-                            widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                            size: 12,
-                            color: ui.colors.textMuted,
-                          )
-                        else
-                          const SizedBox(width: 12),
-                        const SizedBox(width: 6),
-                        Icon(
-                          widget.isDir 
-                            ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
-                            : getFileIcon(widget.name),
-                          size: 14,
-                          color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: UiText(
-                            text: widget.name,
-                            variant: UiTextVariant.body,
-                            fontSize: 12,
-                            color: (widget.isSelected || _isHovered || isDragHovering) ? ui.colors.textPrimary : ui.colors.textSecondary,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  behavior: HitTestBehavior.opaque,
+                  child: _buildRowContent(ui, paddingLeft, widget.isSelected, isDragHovering || _isHovered),
                 ),
               ),
             );
@@ -520,6 +460,69 @@ class _FileTreeRowState extends State<_FileTreeRow> {
         ),
       ),
     );
+  }
+
+  Widget _buildRowContent(UiTheme ui, double paddingLeft, bool isSelected, bool isHighlighted) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 100),
+      height: 24,
+      padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
+      decoration: BoxDecoration(
+        color: isSelected 
+          ? ui.colors.selected
+          : (isHighlighted ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent),
+      ),
+      child: Row(
+        children: [
+          if (widget.isDir)
+            Icon(
+              widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+              size: 12,
+              color: ui.colors.textMuted,
+            )
+          else
+            const SizedBox(width: 12),
+          const SizedBox(width: 6),
+          Icon(
+            widget.isDir 
+              ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
+              : _getFileIcon(widget.name),
+            size: 14,
+            color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: UiText(
+              text: widget.name,
+              variant: UiTextVariant.body,
+              fontSize: 12,
+              color: (isSelected || isHighlighted) ? ui.colors.textPrimary : ui.colors.textSecondary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getFileIcon(String name) {
+    final lowerName = name.toLowerCase();
+    if (lowerName.endsWith('.m')) return LucideIcons.fileCode2;
+    if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return LucideIcons.table2;
+    if (lowerName.endsWith('.md')) return LucideIcons.fileText;
+    if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return LucideIcons.fileJson;
+    if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return LucideIcons.fileImage;
+    if (lowerName.endsWith('.pdf')) return LucideIcons.fileText;
+    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav')) return LucideIcons.fileAudio;
+    return LucideIcons.file;
+  }
+
+  Color _getIconColor(String name, UiTheme ui) {
+    final lowerName = name.toLowerCase();
+    if (lowerName.endsWith('.m')) return const Color(0xFFB3CDE3);
+    if (lowerName.endsWith('.md')) return const Color(0xFFCCEBC5);
+    return ui.colors.icon;
   }
 
   void _deleteEntity(BuildContext context, AppProvider appProvider) {
