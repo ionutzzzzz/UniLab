@@ -14,6 +14,7 @@ class RibbonButton extends StatefulWidget {
     this.isPrimary = false,
     this.isLarge = false,
     this.color,
+    this.hasDropdown = false,
   });
 
   final String label;
@@ -22,6 +23,7 @@ class RibbonButton extends StatefulWidget {
   final bool isPrimary;
   final bool isLarge;
   final Color? color;
+  final bool hasDropdown;
 
   @override
   State<RibbonButton> createState() => _RibbonButtonState();
@@ -103,14 +105,23 @@ class _RibbonButtonState extends State<RibbonButton> {
                     ),
                     const SizedBox(height: 4),
                     Flexible(
-                      child: UiText(
-                        text: widget.label,
-                        variant: UiTextVariant.label,
-                        fontSize: 10,
-                        fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
-                        color: fgColor,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.visible,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: UiText(
+                              text: widget.label,
+                              variant: UiTextVariant.label,
+                              fontSize: 10,
+                              fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
+                              color: fgColor,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.visible,
+                            ),
+                          ),
+                          if (widget.hasDropdown)
+                            Icon(Icons.keyboard_arrow_down, size: 12, color: fgColor),
+                        ],
                       ),
                     ),
                   ],

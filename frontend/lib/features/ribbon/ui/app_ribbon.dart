@@ -103,6 +103,114 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
     );
   }
 
+  void _showNewScriptMenu(BuildContext context) {
+    final ui = UiTheme.of(context);
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      color: ui.colors.panel,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: ui.colors.border),
+      ),
+      items: [
+        PopupMenuItem(value: 'Script (.m)', child: Text('Script (.m)', style: TextStyle(color: ui.colors.textPrimary, fontSize: 13))),
+        PopupMenuItem(value: 'Function (.m)', child: Text('Function (.m)', style: TextStyle(color: ui.colors.textPrimary, fontSize: 13))),
+        PopupMenuItem(value: 'Live Script (.mlx)', child: Text('Live Script (.mlx)', style: TextStyle(color: ui.colors.textPrimary, fontSize: 13))),
+      ],
+    ).then((value) {
+      if (value != null) {
+        _showNameDialog(context, value);
+      }
+    });
+  }
+
+  void _showNameDialog(BuildContext context, String selectedType) {
+    final ui = UiTheme.of(context);
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final controller = TextEditingController(text: 'Untitled');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: ui.colors.panel,
+          surfaceTintColor: Colors.transparent,
+          title: UiText(text: 'New $selectedType', variant: UiTextVariant.title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(text: 'Script Name', variant: UiTextVariant.label, color: ui.colors.textMuted),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                style: TextStyle(color: ui.colors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: ui.colors.canvas,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: ui.colors.border),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: ui.colors.border),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: ui.colors.accent),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+            ),
+            TextButton(
+              onPressed: () async {
+                final name = controller.text;
+                if (name.isNotEmpty) {
+                  String ext = selectedType.contains('.mlx') ? '.mlx' : '.m';
+                  String fileName = name.endsWith(ext) ? name : '$name$ext';
+                  String content = '';
+                  if (selectedType.contains('Function')) {
+                     String funcName = fileName.replaceAll(ext, '');
+                     content = 'function [outputArg1,outputArg2] = $funcName(inputArg1,inputArg2)\n% $funcName Summary of this function goes here\n%   Detailed explanation goes here\n\nend';
+                  } else if (selectedType.contains('Live Script')) {
+                     content = '%% Live Script\n% Add your live script content here.\n';
+                  }
+                  
+                  await appProvider.createProjectFile(fileName, content);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                }
+              },
+              child: UiText(text: 'Create', color: ui.colors.accent, fontWeight: FontWeight.bold),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
@@ -119,11 +227,14 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Environment',
           children: [
-            RibbonButton(
-              label: 'New Script',
-              icon: LucideIcons.filePlus2,
-              isLarge: true,
-              onTap: () {},
+            Builder(
+              builder: (context) => RibbonButton(
+                label: 'New Script',
+                icon: LucideIcons.filePlus2,
+                isLarge: true,
+                hasDropdown: true,
+                onTap: () => _showNewScriptMenu(context),
+              ),
             ),
             RibbonButton(
               label: 'Open Folder',

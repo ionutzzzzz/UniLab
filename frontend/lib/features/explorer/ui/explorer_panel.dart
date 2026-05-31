@@ -1,6 +1,8 @@
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:context_menus/context_menus.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
 import 'package:path/path.dart' as path_utils;
@@ -8,6 +10,7 @@ import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
 import '../../../providers/app_provider.dart';
+import 'package:flutter/services.dart';
 
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
@@ -18,6 +21,11 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   final Set<String> _expandedPaths = {};
+  final Set<String> _selectedPaths = {};
+  String? _lastSelectedPath;
+  
+  // Flat list to determine order for shift-click
+  final List<String> _flatVisiblePaths = [];
 
   void _toggleExpand(String path) {
     setState(() {
@@ -29,10 +37,44 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     });
   }
 
+  void _handleSelect(String path, {bool isCtrlPressed = false, bool isShiftPressed = false}) {
+    setState(() {
+      if (isCtrlPressed) {
+        if (_selectedPaths.contains(path)) {
+          _selectedPaths.remove(path);
+        } else {
+          _selectedPaths.add(path);
+        }
+        _lastSelectedPath = path;
+      } else if (isShiftPressed && _lastSelectedPath != null) {
+        final currentIndex = _flatVisiblePaths.indexOf(path);
+        final lastIndex = _flatVisiblePaths.indexOf(_lastSelectedPath!);
+        
+        if (currentIndex != -1 && lastIndex != -1) {
+          final start = currentIndex < lastIndex ? currentIndex : lastIndex;
+          final end = currentIndex > lastIndex ? currentIndex : lastIndex;
+          
+          _selectedPaths.clear();
+          for (int i = start; i <= end; i++) {
+            _selectedPaths.add(_flatVisiblePaths[i]);
+          }
+        }
+      } else {
+        _selectedPaths.clear();
+        _selectedPaths.add(path);
+        _lastSelectedPath = path;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = p.Provider.of<AppProvider>(context);
+
+    // Rebuild the flat list for shift-click before building tree
+    _flatVisiblePaths.clear();
+    _buildFlatPaths(appProvider.projectFiles);
 
     return Container(
       color: ui.colors.panel,
@@ -66,6 +108,56 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   children: [
                     UiIconButton(icon: LucideIcons.filePlus, tooltip: 'New File', size: 24, iconSize: 14, onPressed: () => appProvider.addNewFile()),
                     SizedBox(width: ui.spacing.xs),
+                    UiIconButton(
+                      icon: LucideIcons.folderPlus,
+                      tooltip: 'New Folder',
+                      size: 24,
+                      iconSize: 14,
+                      onPressed: () {
+                        if (kIsWeb) return;
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            final controller = TextEditingController();
+                            return AlertDialog(
+                              backgroundColor: ui.colors.panel,
+                              surfaceTintColor: Colors.transparent,
+                              title: UiText(text: 'New Folder', variant: UiTextVariant.title),
+                              content: TextField(
+                                controller: controller,
+                                style: TextStyle(color: ui.colors.textPrimary),
+                                decoration: InputDecoration(
+                                  hintText: 'Folder Name',
+                                  hintStyle: TextStyle(color: ui.colors.textMuted),
+                                ),
+                                autofocus: true,
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    final name = controller.text;
+                                    if (name.isNotEmpty) {
+                                      final path = path_utils.join(appProvider.projectRoot, name);
+                                      await io.Directory(path).create(recursive: true);
+                                      appProvider.refreshProjectFiles();
+                                    }
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                                  child: UiText(text: 'Create', color: ui.colors.accent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    SizedBox(width: ui.spacing.xs),
                     UiIconButton(icon: LucideIcons.refreshCcw, tooltip: 'Refresh', size: 24, iconSize: 14, onPressed: () => appProvider.refreshProjectFiles()),
                   ],
                 ),
@@ -90,6 +182,29 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
+  void _buildFlatPaths(List<dynamic> entities) {
+    for (var entity in entities) {
+      final isDir = entity is io.Directory;
+      final path = entity.path;
+      _flatVisiblePaths.add(path);
+      
+      if (isDir && _expandedPaths.contains(path)) {
+        try {
+          final children = entity.listSync();
+          // Sort to match tree view
+          children.sort((a, b) {
+            if (a is io.Directory && b is! io.Directory) return -1;
+            if (a is! io.Directory && b is io.Directory) return 1;
+            return path_utils.basename(a.path).compareTo(path_utils.basename(b.path));
+          });
+          _buildFlatPaths(children);
+        } catch (e) {
+          // Ignore
+        }
+      }
+    }
+  }
+
   List<Widget> _buildProjectTree(List<dynamic> entities, int depth, UiTheme ui, AppProvider appProvider) {
     List<Widget> items = [];
     
@@ -100,16 +215,41 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       final isExpanded = _expandedPaths.contains(path);
 
       items.add(_FileTreeRow(
+        key: ValueKey(path),
         name: name,
         path: path,
         isDir: isDir,
         depth: depth,
         isExpanded: isExpanded,
+        isSelected: _selectedPaths.contains(path),
+        onSelect: ({bool isCtrlPressed = false, bool isShiftPressed = false}) => 
+            _handleSelect(path, isCtrlPressed: isCtrlPressed, isShiftPressed: isShiftPressed),
         onToggle: () {
+          if (!HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) && 
+              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) &&
+              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) && 
+              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
+            _handleSelect(path);
+          }
           if (isDir) {
             _toggleExpand(path);
           } else {
             appProvider.openFile(entity);
+          }
+        },
+        onMove: (sourcePath, targetPath) async {
+          if (sourcePath == targetPath) return;
+          final sourceEntity = io.FileSystemEntity.isDirectorySync(sourcePath) ? io.Directory(sourcePath) : io.File(sourcePath);
+          final newPath = path_utils.join(targetPath, path_utils.basename(sourcePath));
+          
+          if (sourcePath != newPath) {
+            try {
+              await sourceEntity.rename(newPath);
+              appProvider.refreshProjectFiles();
+              appProvider.updateMovedFilePaths(sourcePath, newPath);
+            } catch (e) {
+              // Handle error if necessary
+            }
           }
         },
       ));
@@ -174,12 +314,16 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
 class _FileTreeRow extends StatefulWidget {
   const _FileTreeRow({
+    super.key,
     required this.name,
     required this.path,
     required this.isDir,
     required this.depth,
     required this.isExpanded,
+    required this.isSelected,
+    required this.onSelect,
     required this.onToggle,
+    required this.onMove,
   });
 
   final String name;
@@ -187,7 +331,10 @@ class _FileTreeRow extends StatefulWidget {
   final bool isDir;
   final int depth;
   final bool isExpanded;
+  final bool isSelected;
+  final void Function({bool isCtrlPressed, bool isShiftPressed}) onSelect;
   final VoidCallback onToggle;
+  final void Function(String sourcePath, String targetPath) onMove;
 
   @override
   State<_FileTreeRow> createState() => _FileTreeRowState();
@@ -200,6 +347,7 @@ class _FileTreeRowState extends State<_FileTreeRow> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final double paddingLeft = widget.depth * 12.0 + ui.spacing.sm;
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
 
     IconData getFileIcon(String name) {
       final lowerName = name.toLowerCase();
@@ -220,59 +368,271 @@ class _FileTreeRowState extends State<_FileTreeRow> {
       return ui.colors.icon;
     }
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () {
-          if (widget.isDir) {
-            widget.onToggle();
-          } else {
-            // Get AppProvider from context and open the file
-            final appProvider = p.Provider.of<AppProvider>(context, listen: false);
-            appProvider.openFile(io.File(widget.path));
-          }
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          height: 24,
-          padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
-          decoration: BoxDecoration(
-            color: _isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent,
+    return ContextMenuRegion(
+      contextMenu: GenericContextMenu(
+        buttonConfigs: [
+          ContextMenuButtonConfig(
+            widget.isDir ? 'Expand/Collapse' : 'Open',
+            onPressed: widget.onToggle,
+            icon: Icon(widget.isDir ? LucideIcons.chevronRight : LucideIcons.fileText, size: 16),
           ),
-          child: Row(
-            children: [
-              if (widget.isDir)
-                Icon(
-                  widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                  size: 12,
-                  color: ui.colors.textMuted,
-                )
-              else
-                const SizedBox(width: 12),
-              const SizedBox(width: 6),
-              Icon(
-                widget.isDir 
-                  ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
-                  : getFileIcon(widget.name),
-                size: 14,
-                color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: UiText(
-                  text: widget.name,
-                  variant: UiTextVariant.body,
-                  fontSize: 12,
-                  color: _isHovered ? ui.colors.textPrimary : ui.colors.textSecondary,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          if (widget.isDir)
+            ContextMenuButtonConfig(
+              'New File',
+              onPressed: () => _createNewEntity(context, appProvider, isFile: true),
+              icon: const Icon(LucideIcons.filePlus, size: 16),
+            ),
+          if (widget.isDir)
+            ContextMenuButtonConfig(
+              'New Folder',
+              onPressed: () => _createNewEntity(context, appProvider, isFile: false),
+              icon: const Icon(LucideIcons.folderPlus, size: 16),
+            ),
+          ContextMenuButtonConfig(
+            'Rename',
+            onPressed: () => _renameEntity(context, appProvider),
+            icon: const Icon(LucideIcons.edit3, size: 16),
+          ),
+          ContextMenuButtonConfig(
+            'Delete',
+            onPressed: () => _deleteEntity(context, appProvider),
+            icon: Icon(LucideIcons.trash2, size: 16, color: ui.colors.danger),
+          ),
+        ],
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: DragTarget<String>(
+          onWillAcceptWithDetails: (details) {
+            final dragPath = details.data;
+            if (dragPath == widget.path) return false;
+            // Don't allow dropping a parent into its child
+            if (widget.path.startsWith(dragPath + '/')) return false;
+            return true;
+          },
+          onAcceptWithDetails: (details) {
+            final targetPath = widget.isDir ? widget.path : path_utils.dirname(widget.path);
+            widget.onMove(details.data, targetPath);
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isDragHovering = candidateData.isNotEmpty;
+            return Draggable<String>(
+              data: widget.path,
+              feedback: Material(
+                color: Colors.transparent,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: ui.colors.panelHeader.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: ui.colors.shadowSm,
+                    border: Border.all(color: ui.colors.accent),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.isDir ? LucideIcons.folder : getFileIcon(widget.name),
+                        size: 14,
+                        color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.name,
+                        style: ui.typography.body.copyWith(
+                          fontSize: 12,
+                          color: ui.colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+              child: Listener(
+                onPointerDown: (event) {
+                  final isCtrl = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
+                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+                  final isShift = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                                  HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight);
+                  
+                  if (event.buttons == 2) { // Right click
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
+                    });
+                  } else if (event.buttons == 1) { // Left click
+                     // We handle selection here to get keyboard state, and let onTap handle expand/open
+                     widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
+                  }
+                },
+                child: GestureDetector(
+                  onTap: widget.onToggle,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 100),
+                    height: 24,
+                    padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
+                    decoration: BoxDecoration(
+                      color: isDragHovering 
+                        ? ui.colors.accent.withValues(alpha: 0.3)
+                        : (widget.isSelected 
+                          ? ui.colors.selected
+                          : (_isHovered ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent)),
+                    ),
+                    child: Row(
+                      children: [
+                        if (widget.isDir)
+                          Icon(
+                            widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                            size: 12,
+                            color: ui.colors.textMuted,
+                          )
+                        else
+                          const SizedBox(width: 12),
+                        const SizedBox(width: 6),
+                        Icon(
+                          widget.isDir 
+                            ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
+                            : getFileIcon(widget.name),
+                          size: 14,
+                          color: widget.isDir ? const Color(0xFFB3CDE3) : getIconColor(widget.name),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: UiText(
+                            text: widget.name,
+                            variant: UiTextVariant.body,
+                            fontSize: 12,
+                            color: (widget.isSelected || _isHovered || isDragHovering) ? ui.colors.textPrimary : ui.colors.textSecondary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
+      ),
+    );
+  }
+
+  void _deleteEntity(BuildContext context, AppProvider appProvider) {
+    final ui = UiTheme.of(context);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: UiText(text: 'Delete', variant: UiTextVariant.title),
+        content: UiText(text: 'Are you sure you want to delete "${widget.name}"?', color: ui.colors.textSecondary),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+          ),
+          TextButton(
+            onPressed: () {
+              final entity = widget.isDir ? io.Directory(widget.path) : io.File(widget.path);
+              appProvider.deleteFile(entity);
+              Navigator.pop(context);
+            },
+            child: UiText(text: 'Delete', color: ui.colors.danger),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _renameEntity(BuildContext context, AppProvider appProvider) {
+    final ui = UiTheme.of(context);
+    final controller = TextEditingController(text: widget.name);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: UiText(text: 'Rename', variant: UiTextVariant.title),
+        content: TextField(
+          controller: controller,
+          style: TextStyle(color: ui.colors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'New Name',
+            hintStyle: TextStyle(color: ui.colors.textMuted),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ui.colors.accent)),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newName = controller.text;
+              if (newName.isNotEmpty && newName != widget.name) {
+                final newPath = path_utils.join(path_utils.dirname(widget.path), newName);
+                final entity = widget.isDir ? io.Directory(widget.path) : io.File(widget.path);
+                await entity.rename(newPath);
+                appProvider.refreshProjectFiles();
+              }
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: UiText(text: 'Rename', color: ui.colors.accent),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _createNewEntity(BuildContext context, AppProvider appProvider, {required bool isFile}) {
+    final ui = UiTheme.of(context);
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: UiText(text: isFile ? 'New File' : 'New Folder', variant: UiTextVariant.title),
+        content: TextField(
+          controller: controller,
+          style: TextStyle(color: ui.colors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Name',
+            hintStyle: TextStyle(color: ui.colors.textMuted),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ui.colors.accent)),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text;
+              if (name.isNotEmpty) {
+                final newPath = path_utils.join(widget.path, name);
+                if (isFile) {
+                  await io.File(newPath).create();
+                  appProvider.openFile(io.File(newPath)); // Auto open new files
+                } else {
+                  await io.Directory(newPath).create();
+                }
+                appProvider.refreshProjectFiles();
+              }
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: UiText(text: 'Create', color: ui.colors.accent),
+          ),
+        ],
       ),
     );
   }
