@@ -16,10 +16,10 @@ class _HelpViewState extends State<HelpView> {
   String? _selectedTopic;
 
   final List<Map<String, dynamic>> _quickLinks = [
-    {'title': 'Language Basics', 'icon': LucideIcons.bookOpen, 'color': Colors.blue},
-    {'title': 'Plotting Data', 'icon': LucideIcons.lineChart, 'color': Colors.green},
-    {'title': 'Linear Algebra', 'icon': LucideIcons.grid, 'color': Colors.orange},
-    {'title': 'Optimization', 'icon': LucideIcons.zap, 'color': Colors.purple},
+    {'title': 'Language Basics', 'icon': LucideIcons.bookOpen},
+    {'title': 'Plotting Data', 'icon': LucideIcons.lineChart},
+    {'title': 'Linear Algebra', 'icon': LucideIcons.grid},
+    {'title': 'Optimization', 'icon': LucideIcons.zap},
   ];
 
   final List<Map<String, String>> _popularFunctions = [
@@ -53,16 +53,18 @@ class _HelpViewState extends State<HelpView> {
               // TODO: Implement search
             },
           ),
-          SizedBox(height: ui.spacing.lg),
+          const SizedBox(height: 20),
 
           // Quick Links Grid
           UiText(
-            text: 'Getting Started',
+            text: 'Getting Started'.toUpperCase(),
             variant: UiTextVariant.label,
-            fontWeight: FontWeight.bold,
-            color: ui.colors.textSecondary,
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+            letterSpacing: 0.5,
+            color: ui.colors.textMuted,
           ),
-          SizedBox(height: ui.spacing.sm),
+          const SizedBox(height: 12),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -70,7 +72,7 @@ class _HelpViewState extends State<HelpView> {
               crossAxisCount: 2,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 2.2,
+              childAspectRatio: 2.5,
             ),
             itemCount: _quickLinks.length,
             itemBuilder: (context, index) {
@@ -78,16 +80,18 @@ class _HelpViewState extends State<HelpView> {
               return _buildQuickLinkCard(ui, link);
             },
           ),
-          SizedBox(height: ui.spacing.lg),
+          const SizedBox(height: 24),
 
           // Popular Functions
           UiText(
-            text: 'Popular Functions',
+            text: 'Popular Functions'.toUpperCase(),
             variant: UiTextVariant.label,
-            fontWeight: FontWeight.bold,
-            color: ui.colors.textSecondary,
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+            letterSpacing: 0.5,
+            color: ui.colors.textMuted,
           ),
-          SizedBox(height: ui.spacing.sm),
+          const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
               color: ui.colors.panel,
@@ -98,7 +102,7 @@ class _HelpViewState extends State<HelpView> {
               children: _popularFunctions.map((func) => _buildFunctionRow(ui, func)).toList(),
             ),
           ),
-          SizedBox(height: ui.spacing.lg),
+          const SizedBox(height: 24),
 
           // Community Section
           _buildCommunityCard(ui),
@@ -119,17 +123,25 @@ class _HelpViewState extends State<HelpView> {
             borderRadius: ui.spacing.radiusMd,
             border: Border.all(color: ui.colors.divider.withValues(alpha: 0.3)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Row(
             children: [
-              Icon(link['icon'], size: 16, color: link['color']),
-              SizedBox(height: ui.spacing.xs),
-              UiText(
-                text: link['title'],
-                variant: UiTextVariant.label,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: ui.colors.accent.withValues(alpha: 0.1),
+                  borderRadius: ui.spacing.radiusSm,
+                ),
+                child: Icon(link['icon'], size: 14, color: ui.colors.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: UiText(
+                  text: link['title'],
+                  variant: UiTextVariant.label,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

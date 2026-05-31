@@ -37,13 +37,16 @@ class FigureView extends StatelessWidget {
                 onPressed: onBack,
               ),
               const SizedBox(width: 8),
-              UiText(
-                text: title,
-                variant: UiTextVariant.label,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
+              Expanded(
+                child: UiText(
+                  text: title,
+                  variant: UiTextVariant.label,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               _FigureChip(icon: LucideIcons.mousePointer2, label: 'Select', color: ui.colors.accent),
               const SizedBox(width: 4),
               _FigureChip(icon: LucideIcons.zoomIn, label: 'Zoom', color: ui.colors.success),
@@ -65,14 +68,17 @@ class FigureView extends StatelessWidget {
             color: ui.colors.panel.withValues(alpha: 0.5),
             border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.2))),
           ),
-          child: Row(
-            children: [
-              _ToolbarAction(icon: LucideIcons.grid3X3, label: 'Grid'),
-              const SizedBox(width: 16),
-              _ToolbarAction(icon: LucideIcons.type, label: 'Labels'),
-              const SizedBox(width: 16),
-              _ToolbarAction(icon: LucideIcons.list, label: 'Legend'),
-            ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ToolbarAction(icon: LucideIcons.grid3X3, label: 'Grid'),
+                const SizedBox(width: 16),
+                _ToolbarAction(icon: LucideIcons.type, label: 'Labels'),
+                const SizedBox(width: 16),
+                _ToolbarAction(icon: LucideIcons.list, label: 'Legend'),
+              ],
+            ),
           ),
         ),
 

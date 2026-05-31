@@ -118,41 +118,52 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
           },
         )).toList();
 
-        return PlutoGrid(
-          columns: columns,
-          rows: rows,
-          onLoaded: (PlutoGridOnLoadedEvent event) {
-            stateManager = event.stateManager;
-            stateManager!.setShowColumnFilter(false);
-          },
-          configuration: PlutoGridConfiguration(
-            columnSize: const PlutoGridColumnSizeConfig(
-              autoSizeMode: PlutoAutoSizeMode.equal, // Distribute width equally
-            ),
-            style: PlutoGridStyleConfig(
-              enableGridBorderShadow: false,
-              gridBackgroundColor: ui.colors.canvas,
-              rowColor: ui.colors.canvas,
-              oddRowColor: ui.colors.canvas,
-              evenRowColor: ui.colors.canvas,
-              activatedColor: ui.colors.hover,
-              checkedColor: ui.colors.selected,
-              cellColorInEditState: ui.colors.canvas,
-              cellColorInReadOnlyState: ui.colors.canvas,
-              columnTextStyle: ui.typography.label.copyWith(color: ui.colors.textSecondary),
-              cellTextStyle: ui.typography.body.copyWith(color: ui.colors.textPrimary),
-              borderColor: ui.colors.divider,
-              gridBorderColor: ui.colors.divider,
-              activatedBorderColor: ui.colors.accent,
-              inactivatedBorderColor: ui.colors.divider,
-              menuBackgroundColor: ui.colors.canvas,
-              columnFilterHeight: 30,
-              rowHeight: 28,
-              columnHeight: 28,
-              enableColumnBorderVertical: true,
-              enableColumnBorderHorizontal: true,
-              enableCellBorderVertical: true,
-              enableCellBorderHorizontal: true,
+        return Container(
+          color: ui.colors.canvas,
+          child: PlutoGrid(
+            columns: columns,
+            rows: rows,
+            onLoaded: (PlutoGridOnLoadedEvent event) {
+              stateManager = event.stateManager;
+              stateManager!.setShowColumnFilter(false);
+            },
+            configuration: PlutoGridConfiguration(
+              columnSize: const PlutoGridColumnSizeConfig(
+                autoSizeMode: PlutoAutoSizeMode.equal, 
+              ),
+              style: PlutoGridStyleConfig(
+                enableGridBorderShadow: false,
+                gridBackgroundColor: ui.colors.canvas,
+                rowColor: ui.colors.canvas,
+                oddRowColor: ui.colors.canvas,
+                evenRowColor: ui.colors.canvas,
+                activatedColor: ui.colors.hover.withValues(alpha: 0.5),
+                checkedColor: ui.colors.selected,
+                cellColorInEditState: ui.colors.canvas,
+                cellColorInReadOnlyState: ui.colors.canvas,
+                columnTextStyle: ui.typography.label.copyWith(
+                  color: ui.colors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                cellTextStyle: ui.typography.body.copyWith(
+                  color: ui.colors.textPrimary,
+                  fontSize: 11,
+                  fontFamily: 'JetBrains Mono',
+                ),
+                borderColor: ui.colors.divider.withValues(alpha: 0.3),
+                gridBorderColor: ui.colors.divider.withValues(alpha: 0.3),
+                activatedBorderColor: ui.colors.accent.withValues(alpha: 0.5),
+                inactivatedBorderColor: ui.colors.divider.withValues(alpha: 0.2),
+                menuBackgroundColor: ui.colors.canvas,
+                columnFilterHeight: 0,
+                rowHeight: 24,
+                columnHeight: 28,
+                enableColumnBorderVertical: true,
+                enableColumnBorderHorizontal: false,
+                enableCellBorderVertical: true,
+                enableCellBorderHorizontal: true,
+              ),
             ),
           ),
         );
