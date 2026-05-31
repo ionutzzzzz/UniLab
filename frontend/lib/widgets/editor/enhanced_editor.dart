@@ -5,9 +5,10 @@ import 'package:flutter_highlight/themes/monokai-sublime.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/ui_theme.dart';
 import '../../models/editor_models.dart';
-import 'line_number_gutter.dart';
 import 'editor_breadcrumbs.dart';
 import 'find_replace_bar.dart';
+import 'line_number_gutter.dart';
+import 'line_number_gutter_painter.dart';
 
 class EnhancedCodeEditor extends ConsumerStatefulWidget {
   final OpenFile file;
@@ -88,28 +89,28 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
         Expanded(
           child: Stack(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  LineNumberGutter(
-                    lineCount: lineCount,
-                    scrollController: _verticalScrollController,
-                    breakpoints: _breakpoints,
-                    activeLine: _activeExecutionLine,
-                    onBreakpointToggle: _onBreakpointToggle,
-                    lineHeight: 18.2, // Match exactly
-                    paddingTop: 8.0, // Match exactly
-                  ),
-                  
-                  Expanded(
-                    child: Container(
-                      color: ui.colors.canvas,
-                      child: CodeTheme(
-                        data: CodeThemeData(styles: monokaiSublimeTheme),
-                        child: SingleChildScrollView(
-                          controller: _verticalScrollController,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+              Container(
+                color: ui.colors.canvas,
+                child: CodeTheme(
+                  data: CodeThemeData(styles: monokaiSublimeTheme),
+                  child: SingleChildScrollView(
+                    controller: _verticalScrollController,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Use the painter-backed gutter to avoid Text wrapping/overlap
+                          LineNumberGutterPainter(
+                            lineCount: lineCount,
+                            scrollController: _verticalScrollController,
+                            breakpoints: _breakpoints,
+                            activeLine: _activeExecutionLine,
+                            onBreakpointToggle: _onBreakpointToggle,
+                            paddingTop: 8.0,
+                          ),
+
+                          Expanded(
                             child: CodeField(
                               controller: _codeController,
                               onChanged: (val) {
@@ -123,19 +124,18 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
                                 color: ui.colors.textPrimary,
                               ),
                               cursorColor: ui.colors.accent,
-                              gutterStyle: GutterStyle.none,
                               background: ui.colors.canvas,
                               // Increased horizontal padding for better spacing
                               padding: const EdgeInsets.symmetric(horizontal: 24),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-              
+
               if (_isFindOpen)
                 Positioned(
                   top: 10,

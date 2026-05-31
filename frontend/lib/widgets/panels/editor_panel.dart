@@ -164,46 +164,67 @@ class _EditorPanelState extends State<EditorPanel> {
               ),
               // Code Editor
               Expanded(
-                child: activeFile != null
-                    ? Container(
-                        color: ui.colors.canvas,
-                        child: Theme(
-                          data: Theme.of(context).copyWith(
-                            hoverColor: Colors.transparent,
-                          ),
-                          child: CodeTheme(
-                            data: CodeThemeData(styles: vs2015Theme),
-                            child: CodeField(
-                              controller: _getOrCreateController(activeFile),
-                              expands: true,
-                              textStyle: TextStyle(
-                                fontFamily: 'JetBrains Mono',
-                                fontSize: settingsProvider.settings.fontSize,
-                                color: ui.colors.textPrimary,
-                                height: 1.5,
-                              ),
-                              onChanged: (code) {
-                                appProvider.updateActiveFileContent(code);
-                              },
-                              cursorColor: ui.colors.accent,
-                              gutterStyle: GutterStyle(
-                                background: ui.colors.canvas,
-                                textStyle: TextStyle(
-                                  color: ui.colors.textMuted,
-                                  fontSize: settingsProvider.settings.fontSize - 2,
-                                  fontFamily: 'JetBrains Mono',
-                                  height: 1.5, // MATCH MAIN EDITOR HEIGHT
-                                ),
-                                textAlign: TextAlign.right,
-                                width: 60, // Standard wide width to prevent wrapping
-                                showLineNumbers: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-
-                    : Center(
+                                      child: activeFile != null
+                                    ? Container(
+                                        color: ui.colors.canvas,
+                                        child: Theme(
+                                          data: Theme.of(context).copyWith(
+                                            hoverColor: Colors.transparent,
+                                          ),
+                                          child: CodeTheme(
+                                            data: CodeThemeData(styles: vs2015Theme),
+                                            child: LayoutBuilder(
+                                              builder: (context, constraints) {
+                                                final codeField = CodeField(
+                                                  controller: _getOrCreateController(activeFile),
+                                                  wrap: settingsProvider.settings.wordWrap,
+                                                  textStyle: TextStyle(
+                                                    fontFamily: 'JetBrains Mono',
+                                                    fontSize: settingsProvider.settings.fontSize,
+                                                    color: ui.colors.textPrimary,
+                                                    height: 1.5,
+                                                  ),
+                                                  onChanged: (code) {
+                                                    appProvider.updateActiveFileContent(code);
+                                                  },
+                                                  cursorColor: ui.colors.accent,
+                                                  gutterStyle: GutterStyle(
+                                                    background: ui.colors.canvas,
+                                                    textStyle: TextStyle(
+                                                      color: ui.colors.textMuted,
+                                                      fontSize: settingsProvider.settings.fontSize - 2,
+                                                      fontFamily: 'JetBrains Mono',
+                                                      height: 1.5,
+                                                    ),
+                                                    textAlign: TextAlign.right,
+                                                    width: 80,
+                                                    showLineNumbers: true,
+                                                  ),
+                                                );
+                
+                                                if (settingsProvider.settings.wordWrap) {
+                                                  return SingleChildScrollView(
+                                                    child: codeField,
+                                                  );
+                                                }
+                
+                                                return SingleChildScrollView(
+                                                  child: SingleChildScrollView(
+                                                    scrollDirection: Axis.horizontal,
+                                                    child: ConstrainedBox(
+                                                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                                                      child: IntrinsicWidth(
+                                                        child: codeField,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [

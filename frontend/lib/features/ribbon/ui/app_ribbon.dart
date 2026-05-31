@@ -133,7 +133,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Import Data',
               icon: LucideIcons.database,
-              onTap: () {},
+              onTap: () => appProvider.openImportDataTab(),
             ),
           ],
         ),
@@ -236,7 +236,11 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Data',
           children: [
-            RibbonButton(label: 'Import Data', icon: LucideIcons.databaseBackup),
+            RibbonButton(
+              label: 'Import Data', 
+              icon: LucideIcons.databaseBackup,
+              onTap: () => appProvider.openImportDataTab(),
+            ),
             RibbonButton(label: 'Variable Stat', icon: LucideIcons.barChart4),
           ],
         ),

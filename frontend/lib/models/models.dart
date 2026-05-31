@@ -54,7 +54,7 @@ class UserSettings {
   bool get rememberLayout => _rememberLayout ?? true;
   int get tabSize => _tabSize ?? 4;
   bool get showLineNumbers => _showLineNumbers ?? true;
-  bool get wordWrap => _wordWrap ?? true;
+  bool get wordWrap => _wordWrap ?? false;
   bool get showMinimap => _showMinimap ?? false;
   bool get autoSave => _autoSave ?? true;
   bool get bracketMatching => _bracketMatching ?? true;
