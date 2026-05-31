@@ -46,11 +46,19 @@ class TerminalSession {
       shell,
       columns: terminal.viewWidth,
       rows: terminal.viewHeight,
+      environment: {
+        'LANG': 'en_US.UTF-8',
+        'LC_ALL': 'en_US.UTF-8',
+        'TERM': 'xterm-256color',
+      },
     );
 
-    // Only listen if it's not a stub (stub output is empty stream)
-    pty.output.cast<List<int>>().listen((data) {
-      terminal.write(String.fromCharCodes(data));
+    // Use a stateful decoder to handle UTF-8 sequences correctly across chunks
+    pty.output
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen((data) {
+      terminal.write(data);
     });
 
     terminal.onOutput = (data) {

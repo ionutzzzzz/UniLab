@@ -9,11 +9,13 @@ class WorkspaceSegmented extends StatelessWidget {
     required this.segments,
     required this.activeSegment,
     required this.onSegmentChanged,
+    this.showLabels = true,
   });
 
   final List<String> segments;
   final String activeSegment;
   final ValueChanged<String> onSegmentChanged;
+  final bool showLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -77,19 +79,21 @@ class WorkspaceSegmented extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(icon, size: 14, color: isActive ? Colors.black87 : ui.colors.textMuted),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: UiText(
-                            text: segment,
-                            variant: UiTextVariant.label,
-                            fontSize: 11,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                            color: isActive ? Colors.black87 : ui.colors.textMuted,
-                            letterSpacing: 0.1,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                        if (showLabels) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: UiText(
+                              text: segment,
+                              variant: UiTextVariant.label,
+                              fontSize: 11,
+                              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                              color: isActive ? Colors.black87 : ui.colors.textMuted,
+                              letterSpacing: 0.1,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

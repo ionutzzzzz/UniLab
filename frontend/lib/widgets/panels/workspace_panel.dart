@@ -202,15 +202,18 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                   columns: columns,
                   rows: rows,
                   configuration: PlutoGridConfiguration(
+                    columnSize: const PlutoGridColumnSizeConfig(
+                      autoSizeMode: PlutoAutoSizeMode.equal,
+                    ),
                     style: PlutoGridStyleConfig(
-                      gridBackgroundColor: ui.colors.panel,
-                      rowColor: ui.colors.panel,
-                      oddRowColor: const Color(0xFF1A1D23),
-                      activatedColor: ui.colors.selected,
+                      gridBackgroundColor: ui.colors.canvas,
+                      rowColor: ui.colors.canvas,
+                      oddRowColor: ui.colors.canvas,
+                      activatedColor: ui.colors.hover,
                       activatedBorderColor: ui.colors.accent,
                       gridBorderColor: ui.colors.border,
                       borderColor: ui.colors.border,
-                      menuBackgroundColor: ui.colors.panelHeader,
+                      menuBackgroundColor: ui.colors.canvas,
                       columnTextStyle: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -229,9 +232,6 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                       scrollbarThickness: 8,
                       scrollbarThicknessWhileDragging: 10,
                       isAlwaysShown: true,
-                    ),
-                    columnSize: const PlutoGridColumnSizeConfig(
-                      autoSizeMode: PlutoAutoSizeMode.none,
                     ),
                   ),
                 );

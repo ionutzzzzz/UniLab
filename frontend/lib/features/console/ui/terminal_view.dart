@@ -45,13 +45,16 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
 
     return Column(
       children: [
-        // Terminal Tab Bar (if multiple sessions)
-        if (sessions.length > 1)
-          Container(
-            height: 28,
+        // Terminal Tab Bar / Toolbar
+        Container(
+          height: 34,
+          decoration: BoxDecoration(
             color: ui.colors.panelHeader,
-            child: Row(
-              children: [
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+          ),
+          child: Row(
+            children: [
+              if (sessions.length > 1)
                 Expanded(
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
@@ -94,21 +97,53 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
                       );
                     },
                   ),
+                )
+              else
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+                  child: UiText(
+                    text: 'TERMINAL',
+                    variant: UiTextVariant.label,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              ],
-            ),
+              
+              const Spacer(),
+              
+              UiIconButton(
+                icon: LucideIcons.plus,
+                tooltip: 'New Terminal',
+                size: 28,
+                iconSize: 14,
+                onPressed: () => ref.read(terminalSessionsProvider.notifier).addSession(),
+              ),
+              UiIconButton(
+                icon: LucideIcons.eraser,
+                tooltip: 'Clear Terminal',
+                size: 28,
+                iconSize: 14,
+                onPressed: () {
+                  // ANSI sequence to clear screen and home cursor
+                  activeSession.terminal.write('\x1b[2J\x1b[H');
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
           ),
+        ),
         
         // Terminal Content
         Expanded(
           child: Container(
-            color: ui.colors.canvas, // Terminal background
-            padding: EdgeInsets.all(ui.spacing.sm),
+            color: ui.colors.canvas,
+            padding: const EdgeInsets.only(left: 8),
             child: TerminalViewWidget(
               activeSession.terminal,
               textStyle: TerminalStyle(
                 fontFamily: ui.typography.codeBody.fontFamily!,
-                fontSize: ui.typography.codeBody.fontSize!,
+                fontSize: 13, // Slightly larger for readability
               ),
               theme: TerminalTheme(
                 cursor: ui.colors.accent,
@@ -116,17 +151,17 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
                 foreground: ui.colors.textPrimary,
                 background: ui.colors.canvas,
                 black: const Color(0XFF1E2127),
-                red: const Color(0XFFF14C4C),
-                green: const Color(0XFF23D18B),
-                yellow: const Color(0XFFE5E510),
-                blue: const Color(0XFF4AA3FF),
+                red: ui.colors.danger,
+                green: ui.colors.success,
+                yellow: ui.colors.yellow,
+                blue: ui.colors.accent,
                 magenta: const Color(0XFFC4B5FD),
                 cyan: const Color(0XFF29B8DB),
                 white: const Color(0XFFE5E7EB),
                 brightBlack: const Color(0XFF6B7280),
-                brightRed: const Color(0XFFF14C4C),
-                brightGreen: const Color(0XFF23D18B),
-                brightYellow: const Color(0XFFF5F543),
+                brightRed: ui.colors.danger,
+                brightGreen: ui.colors.success,
+                brightYellow: ui.colors.yellow,
                 brightBlue: const Color(0XFF6BB1FF),
                 brightMagenta: const Color(0XFFD670D6),
                 brightCyan: const Color(0XFF29B8DB),
@@ -143,7 +178,7 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
   }
 }
 
-// Wrapper for xterm TerminalView to handle focus automatically
+// Wrapper for xterm TerminalView to handle focus and scrolling
 class TerminalViewWidget extends StatefulWidget {
   final Terminal terminal;
   final TerminalStyle textStyle;
@@ -170,6 +205,8 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
       textStyle: widget.textStyle,
       theme: widget.theme,
       autofocus: true,
+      backgroundOpacity: 0,
+      padding: const EdgeInsets.all(4),
     );
   }
 }

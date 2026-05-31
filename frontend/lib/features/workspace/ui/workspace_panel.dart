@@ -41,47 +41,54 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
         activeView = const SizedBox.shrink();
     }
 
-    return Container(
-      color: ui.colors.panel,
-      child: Column(
-        children: [
-          Container(
-            height: 44,
-            padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 200;
+
+        return Container(
+          color: ui.colors.panel,
+          child: Column(
+            children: [
+              Container(
+                height: 44,
+                padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+                alignment: Alignment.centerLeft,
+                decoration: BoxDecoration(
+                  color: ui.colors.panelHeader,
+                  border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    UiText(
-                      text: 'Workspace',
-                      variant: UiTextVariant.body,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        UiText(
+                          text: 'Workspace',
+                          variant: UiTextVariant.body,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
+                        ),
+                      ],
                     ),
+                    Icon(LucideIcons.moreHorizontal, size: 14, color: ui.colors.textMuted),
                   ],
                 ),
-                Icon(LucideIcons.moreHorizontal, size: 14, color: ui.colors.textMuted),
-              ],
-            ),
+              ),
+              WorkspaceSegmented(
+                segments: _segments,
+                activeSegment: _activeSegment,
+                showLabels: !isCompact,
+                onSegmentChanged: (segment) => setState(() => _activeSegment = segment),
+              ),
+              Expanded(
+                child: activeView,
+              ),
+            ],
           ),
-          WorkspaceSegmented(
-            segments: _segments,
-            activeSegment: _activeSegment,
-            onSegmentChanged: (segment) => setState(() => _activeSegment = segment),
-          ),
-          Expanded(
-            child: activeView,
-          ),
-        ],
-      ),
+        );
+      }
     );
   }
 }
