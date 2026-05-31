@@ -99,9 +99,9 @@ class _EditorSurfaceState extends State<EditorSurface> {
         data: CodeThemeData(styles: customSyntaxTheme),
         child: Container(
           color: editorBg,
-          child: SizedBox.expand(
-            child: SingleChildScrollView(
-              child: CodeField(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final codeField = CodeField(
                 controller: widget.controller,
                 focusNode: widget.focusNode,
                 wrap: settings.wordWrap,
@@ -115,17 +115,36 @@ class _EditorSurfaceState extends State<EditorSurface> {
                 cursorColor: colors[0],
                 gutterStyle: GutterStyle(
                   showLineNumbers: settings.showLineNumbers,
-                  width: 52,
-                  margin: 12,
+                  width: 80,
+                  margin: 20,
                   textAlign: TextAlign.right,
                   textStyle: ui.typography.label.copyWith(
                     color: editorFg.withValues(alpha: 0.3),
                     fontSize: 11,
+                    height: 1.5,
                     fontFamily: settings.fontFamily,
                   ),
                 ),
-              ),
-            ),
+              );
+
+              if (settings.wordWrap) {
+                return SingleChildScrollView(
+                  child: codeField,
+                );
+              }
+
+              return SingleChildScrollView(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: IntrinsicWidth(
+                      child: codeField,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

@@ -56,14 +56,22 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     return areas;
   }
 
+  List<Area> _buildVerticalAreas(bool showBottom) {
+    List<Area> areas = [
+      Area(data: 'main'),
+    ];
+    if (showBottom) {
+      areas.add(Area(data: 'bottom', size: 220, min: 100));
+    }
+    return areas;
+  }
+
   @override
   void didUpdateWidget(SplitShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.showLeftPanel != widget.showLeftPanel || 
         oldWidget.showRightPanel != widget.showRightPanel) {
-      setState(() {
-         _horizontalController?.areas = _buildHorizontalAreas();
-      });
+      _horizontalController?.areas = _buildHorizontalAreas();
     }
   }
 
@@ -79,32 +87,12 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     final ui = UiTheme.of(context);
     final layoutState = ref.watch(shellLayoutProvider);
 
-    Widget mainHorizontalSplit = MultiSplitView(
-      controller: _horizontalController,
-      builder: (context, area) {
-        if (area.data == 'left') return widget.leftPanel;
-        if (area.data == 'center') return widget.centerPanel;
-        if (area.data == 'right') return widget.rightPanel;
-        return const SizedBox.shrink();
-      },
-    );
+    // Update vertical areas based on bottom panel visibility
+    _verticalController?.areas = _buildVerticalAreas(layoutState.showBottomPanel);
 
-    MultiSplitViewTheme mainTheme = MultiSplitViewTheme(
-      data: MultiSplitViewThemeData(
-        dividerThickness: 8, // Increased for much better hit area
-        dividerPainter: DividerPainters.background(
-          color: ui.colors.divider,
-          highlightedColor: ui.colors.accent,
-        ),
-      ),
-      child: mainHorizontalSplit,
-    );
-
-    if (!layoutState.showBottomPanel) {
-      return mainTheme;
-    }
-
-    return MultiSplitViewTheme(
+    // Build the center vertical stack (Editor + Console)
+    Widget centerContent = MultiSplitViewTheme(
+      key: const ValueKey('center_vertical_theme'),
       data: MultiSplitViewThemeData(
         dividerThickness: 8,
         dividerPainter: DividerPainters.background(
@@ -113,11 +101,33 @@ class _SplitShellState extends ConsumerState<SplitShell> {
         ),
       ),
       child: MultiSplitView(
+        key: const ValueKey('center_vertical_split'),
         axis: Axis.vertical,
         controller: _verticalController,
         builder: (context, area) {
-          if (area.data == 'main') return mainTheme;
+          if (area.data == 'main') return widget.centerPanel;
           if (area.data == 'bottom') return widget.bottomPanel;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+
+    return MultiSplitViewTheme(
+      key: const ValueKey('main_horizontal_theme'),
+      data: MultiSplitViewThemeData(
+        dividerThickness: 8,
+        dividerPainter: DividerPainters.background(
+          color: ui.colors.divider,
+          highlightedColor: ui.colors.accent,
+        ),
+      ),
+      child: MultiSplitView(
+        key: const ValueKey('main_horizontal_split'),
+        controller: _horizontalController,
+        builder: (context, area) {
+          if (area.data == 'left') return widget.leftPanel;
+          if (area.data == 'center') return centerContent;
+          if (area.data == 'right') return widget.rightPanel;
           return const SizedBox.shrink();
         },
       ),

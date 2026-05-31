@@ -138,6 +138,23 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void openImportDataTab() {
+    final existingIndex = _openFiles.indexWhere((f) => f.path == 'unilab://import-data');
+    if (existingIndex != -1) {
+      _activeFileIndex = existingIndex;
+    } else {
+      final importFile = UniLabFile(
+        id: 'import-data',
+        name: 'Import Data',
+        path: 'unilab://import-data',
+        content: '',
+      );
+      _openFiles.add(importFile);
+      _activeFileIndex = _openFiles.length - 1;
+    }
+    notifyListeners();
+  }
+
   void loadSample(String name, String content) {
     // Check if file is already open
     final existingIndex = _openFiles.indexWhere((f) => f.name == name && f.path == 'sample/$name');

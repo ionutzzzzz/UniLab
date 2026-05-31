@@ -1,7 +1,12 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_badge.dart';
+import '../../../providers/app_provider.dart';
 import 'terminal_view.dart';
 import 'problems_view.dart';
 
@@ -119,6 +124,8 @@ class _ConsoleView extends StatefulWidget {
 
 class _ConsoleViewState extends State<_ConsoleView> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
   final List<String> _history = [
     'UniLab R2026 loaded. Initializing kernel...',
     '>> disp("Welcome to UniLab")',
@@ -128,9 +135,96 @@ class _ConsoleViewState extends State<_ConsoleView> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+        _handleTabKey();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleTabKey() {
+    final text = _controller.text;
+    final selection = _controller.selection;
+
+    if (!selection.isValid || selection.baseOffset == 0) return;
+
+    final beforeCursor = text.substring(0, selection.baseOffset);
+    final lastSpace = beforeCursor.lastIndexOf(' ');
+    final lastWord = beforeCursor.substring(lastSpace + 1);
+
+    if (lastWord.isEmpty) return;
+
+    // 1. Check Commands
+    const commands = [
+      'disp', 'plot', 'clear', 'clc', 'pwd', 'cd', 'dir', 'ls', 'who', 'whos',
+      'linspace', 'sin', 'cos', 'tan', 'exp', 'log', 'abs', 'sqrt', 'help',
+      'import', 'export', 'save', 'load', 'figure', 'grid', 'title', 'xlabel', 'ylabel'
+    ];
+
+    final commandMatch = commands.firstWhere(
+      (c) => c.startsWith(lastWord) && c != lastWord,
+      orElse: () => '',
+    );
+
+    if (commandMatch.isNotEmpty) {
+      _applyCompletion(commandMatch, lastWord);
+      return;
+    }
+
+    // 2. Check Files (via AppProvider)
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    String searchDir = appProvider.projectRoot;
+    String prefix = lastWord;
+
+    if (lastWord.contains('/') || lastWord.contains('\\')) {
+      final lastSlash = lastWord.lastIndexOf(RegExp(r'[/\\]'));
+      final pathPart = lastWord.substring(0, lastSlash);
+      prefix = lastWord.substring(lastSlash + 1);
+      searchDir = p.join(appProvider.projectRoot, pathPart);
+    }
+
+    try {
+      final dir = io.Directory(searchDir);
+      if (dir.existsSync()) {
+        final entities = dir.listSync();
+        for (final entity in entities) {
+          final name = p.basename(entity.path);
+          if (name.startsWith(prefix) && name != prefix) {
+            final completion = lastWord.substring(0, lastWord.length - prefix.length) + name;
+            _applyCompletion(completion, lastWord);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore IO errors
+    }
+  }
+
+  void _applyCompletion(String completion, String lastWord) {
+    final text = _controller.text;
+    final selection = _controller.selection;
+    final offset = selection.baseOffset;
+
+    final newText = text.replaceRange(offset - lastWord.length, offset, completion);
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: offset - lastWord.length + completion.length,
+      ),
+    );
   }
 
   @override
@@ -141,6 +235,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
         // Console History
         Expanded(
           child: ListView.builder(
+            controller: _scrollController,
             padding: EdgeInsets.all(ui.spacing.md),
             itemCount: _history.length,
             itemBuilder: (context, index) {
@@ -190,6 +285,8 @@ class _ConsoleViewState extends State<_ConsoleView> {
               Expanded(
                 child: TextField(
                   controller: _controller,
+                  focusNode: _focusNode,
+                  autofocus: true,
                   style: ui.typography.consoleBody.copyWith(
                     color: ui.colors.textPrimary,
                     fontSize: 12,
@@ -205,7 +302,19 @@ class _ConsoleViewState extends State<_ConsoleView> {
                         _history.add('>> $value');
                         _controller.clear();
                       });
+                      
+                      // Auto-scroll to bottom
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            _scrollController.position.maxScrollExtent,
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
                     }
+                    _focusNode.requestFocus();
                   },
                 ),
               ),

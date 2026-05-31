@@ -28,7 +28,7 @@ class SettingsProvider with ChangeNotifier {
     final rememberLayout = prefs.getBool('rememberLayout') ?? true;
     final tabSize = prefs.getInt('tabSize') ?? 4;
     final showLineNumbers = prefs.getBool('showLineNumbers') ?? true;
-    final wordWrap = prefs.getBool('wordWrap') ?? true;
+    final wordWrap = prefs.getBool('wordWrap') ?? false;
     final showMinimap = prefs.getBool('showMinimap') ?? false;
 
     final autoSave = prefs.getBool('autoSave') ?? true;
