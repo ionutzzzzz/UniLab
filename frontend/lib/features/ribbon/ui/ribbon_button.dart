@@ -38,15 +38,15 @@ class _RibbonButtonState extends State<RibbonButton> {
     final animDuration = settings.animationEnabled ? const Duration(milliseconds: 150) : Duration.zero;
 
     Color bgColor = Colors.transparent;
-    Color fgColor = isEnabled ? ui.colors.icon : ui.colors.textDisabled;
+    // Normal state: use custom color for icon/text if provided, else default text primary color
+    // Replaced textSecondary with textPrimary to ensure it matches the 'FILE' button and active states.
+    Color fgColor = isEnabled ? (widget.color ?? ui.colors.textPrimary) : ui.colors.textDisabled;
 
     if (_isHovered && isEnabled) {
-      // On hover, use the custom color or the global accent color
-      bgColor = widget.color ?? ui.colors.accent;
+      // On hover, all buttons uniformly use the global accent color for background
+      // and inverse color for foreground for maximum legibility.
+      bgColor = ui.colors.accent;
       fgColor = ui.colors.textInverse;
-    } else if (isEnabled) {
-      // Default state: transparent background, icon color matches custom color if provided
-      fgColor = widget.color ?? ui.colors.icon;
     }
 
     // All buttons now have the same professional height for consistency
@@ -81,9 +81,9 @@ class _RibbonButtonState extends State<RibbonButton> {
                   color: bgColor,
                   borderRadius: ui.spacing.radiusMd, // 6px-8px for desktop polish
                   border: Border.all(
-                    color: widget.color != null && isEnabled
-                      ? widget.color!.withValues(alpha: 0.3)
-                      : (_isHovered && isEnabled ? ui.colors.border.withValues(alpha: 0.3) : Colors.transparent),
+                    color: _isHovered && isEnabled
+                      ? ui.colors.border.withValues(alpha: 0.3)
+                      : Colors.transparent,
                     width: 1.0,
                   ),
                   boxShadow: _isHovered && isEnabled ? ui.colors.shadowSm : null,

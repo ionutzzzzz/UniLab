@@ -147,7 +147,6 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
             _RibbonButton(
               icon: LucideIcons.play,
               label: 'Run',
-              iconColor: ui.colors.success, // Soft code-green
               onPressed: () => appProvider.runActiveFile(),
               isLarge: true,
               ui: ui,
@@ -155,7 +154,6 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
             _RibbonButton(
               icon: LucideIcons.square,
               label: 'Stop',
-              iconColor: ui.colors.danger,
               onPressed: () {},
               ui: ui,
             ),
@@ -334,9 +332,7 @@ class _AnimatedRibbonTabState extends State<_AnimatedRibbonTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: widget.isActive 
-                ? widget.ui.colors.panelHeader 
-                : (_isHovered ? widget.ui.colors.hover : Colors.transparent),
+            color: _isHovered ? widget.ui.colors.accent : Colors.transparent,
             border: Border(
               top: BorderSide(
                 color: widget.isActive ? widget.ui.colors.accent : Colors.transparent,
@@ -350,8 +346,10 @@ class _AnimatedRibbonTabState extends State<_AnimatedRibbonTab> {
             widget.title,
             style: TextStyle(
               fontSize: 12.0,
-              fontWeight: widget.isActive ? FontWeight.bold : FontWeight.w500,
-              color: widget.isActive ? widget.ui.colors.textPrimary : widget.ui.colors.textSecondary,
+              fontWeight: (widget.isActive || _isHovered) ? FontWeight.bold : FontWeight.w500,
+              color: _isHovered 
+                  ? widget.ui.colors.textInverse 
+                  : (widget.isActive ? widget.ui.colors.textPrimary : widget.ui.colors.textSecondary),
               letterSpacing: 0.5,
             ),
           ),
@@ -422,6 +420,15 @@ class _RibbonButtonState extends State<_RibbonButton> {
 
   @override
   Widget build(BuildContext context) {
+    // Transparent background by default, accent color on hover
+    final Color bgColor = _isHovered ? widget.ui.colors.accent : Colors.transparent;
+    
+    // Standardize foreground to use textPrimary (high contrast)
+    // On hover, we use textInverse for maximum clarity against the accent color.
+    final Color fgColor = _isHovered 
+        ? widget.ui.colors.textInverse 
+        : (widget.iconColor ?? widget.ui.colors.textPrimary);
+
     return IntrinsicWidth(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1.0),
@@ -439,7 +446,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
                 minHeight: 72.0,
               ),
               decoration: BoxDecoration(
-                color: _isHovered ? widget.ui.colors.hover : Colors.transparent,
+                color: bgColor,
                 borderRadius: BorderRadius.circular(6.0),
                 border: Border.all(
                   color: _isHovered ? widget.ui.colors.border : Colors.transparent,
@@ -454,7 +461,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
                   Icon(
                     widget.icon, 
                     size: 20,
-                    color: widget.iconColor ?? widget.ui.colors.icon
+                    color: fgColor,
                   ),
                   const SizedBox(height: 6),
                   Flexible(
@@ -465,11 +472,11 @@ class _RibbonButtonState extends State<_RibbonButton> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10, 
-                        color: widget.ui.colors.textSecondary, 
+                        color: fgColor, 
                         height: 1.1,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
                       )
-                    ),
+                    ), 
                   ),
                 ],
               ),

@@ -27,6 +27,7 @@ class AppRibbon extends ConsumerStatefulWidget {
 class _AppRibbonState extends ConsumerState<AppRibbon> {
   String _activeTab = 'HOME';
   bool _isCollapsed = false;
+  bool _isFileHovered = false;
 
   void _onTabTap(String tab) {
     if (_isCollapsed && _activeTab == tab) {
@@ -132,7 +133,6 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Import Data',
               icon: LucideIcons.database,
-              color: ui.colors.tan,
               onTap: () {},
             ),
           ],
@@ -143,20 +143,17 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Run Script',
               icon: LucideIcons.playCircle,
-              color: ui.colors.success,
               isLarge: true,
               onTap: cmdRun != null ? () => cmdRun.run(CommandContext(context)) : null,
             ),
             RibbonButton(
               label: 'Debug',
               icon: LucideIcons.bug,
-              color: ui.colors.yellow,
               onTap: () {},
             ),
             RibbonButton(
               label: 'Stop',
               icon: LucideIcons.stopCircle,
-              color: ui.colors.danger,
               onTap: cmdStop != null ? () => cmdStop.run(CommandContext(context)) : null,
             ),
           ],
@@ -177,7 +174,6 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Reset Layout',
               icon: LucideIcons.layoutTemplate,
-              color: ui.colors.tan,
               onTap: () {},
             ),
             RibbonButton(
@@ -200,8 +196,8 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Format',
           children: [
-            RibbonButton(label: 'Auto Indent', icon: LucideIcons.indent, color: ui.colors.tan),
-            RibbonButton(label: 'Comment', icon: LucideIcons.messageSquare, color: ui.colors.accent),
+            RibbonButton(label: 'Auto Indent', icon: LucideIcons.indent),
+            RibbonButton(label: 'Comment', icon: LucideIcons.messageSquare),
           ],
         ),
       ];
@@ -210,20 +206,19 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Export',
           children: [
-            RibbonButton(label: 'Snapshot', icon: LucideIcons.camera, color: ui.colors.success, isLarge: true, onTap: () {}),
-            RibbonButton(label: 'Export PDF', icon: LucideIcons.fileType, color: ui.colors.danger, onTap: () {}),
+            RibbonButton(label: 'Snapshot', icon: LucideIcons.camera, isLarge: true, onTap: () {}),
+            RibbonButton(label: 'Export PDF', icon: LucideIcons.fileType, onTap: () {}),
           ],
         ),
         RibbonGroup(
           title: 'Visuals',
           children: [
-            RibbonButton(label: 'Grid', icon: LucideIcons.grid3X3, color: ui.colors.accent, onTap: () {}),
-            RibbonButton(label: 'Labels', icon: LucideIcons.type, color: ui.colors.tan, onTap: () {}),
-            RibbonButton(label: 'Legend', icon: LucideIcons.list, color: ui.colors.success, onTap: () {}),
+            RibbonButton(label: 'Grid', icon: LucideIcons.grid3X3, onTap: () {}),
+            RibbonButton(label: 'Labels', icon: LucideIcons.type, onTap: () {}),
+            RibbonButton(label: 'Legend', icon: LucideIcons.list, onTap: () {}),
             RibbonButton(
               label: 'Color Theme', 
               icon: LucideIcons.palette, 
-              color: ui.colors.yellow,
               onTap: () => _showColormapPicker(context),
             ),
           ],
@@ -259,8 +254,8 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Window',
           children: [
-            RibbonButton(label: 'Split Editor', icon: LucideIcons.columns, color: ui.colors.accent),
-            RibbonButton(label: 'New Window', icon: LucideIcons.externalLink, color: ui.colors.success),
+            RibbonButton(label: 'Split Editor', icon: LucideIcons.columns),
+            RibbonButton(label: 'New Window', icon: LucideIcons.externalLink),
           ],
         ),
       ];
@@ -269,22 +264,22 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Documentation',
           children: [
-            RibbonButton(label: 'Get Started', icon: LucideIcons.rocket, color: ui.colors.success, isLarge: true),
+            RibbonButton(label: 'Get Started', icon: LucideIcons.rocket, isLarge: true),
             RibbonButton(label: 'User Guide', icon: LucideIcons.bookOpen, isLarge: true),
-            RibbonButton(label: 'Examples', icon: LucideIcons.scrollText, color: ui.colors.tan),
+            RibbonButton(label: 'Examples', icon: LucideIcons.scrollText),
           ],
         ),
         RibbonGroup(
           title: 'Resources',
           children: [
-            RibbonButton(label: 'Forum', icon: LucideIcons.users, color: ui.colors.accent),
-            RibbonButton(label: 'Updates', icon: LucideIcons.refreshCw, color: ui.colors.tan),
+            RibbonButton(label: 'Forum', icon: LucideIcons.users),
+            RibbonButton(label: 'Updates', icon: LucideIcons.refreshCw),
           ],
         ),
         RibbonGroup(
           title: 'UniLab',
           children: [
-            RibbonButton(label: 'About', icon: LucideIcons.info, color: ui.colors.info),
+            RibbonButton(label: 'About', icon: LucideIcons.info),
             RibbonButton(label: 'Licenses', icon: LucideIcons.copyright),
           ],
         ),
@@ -310,32 +305,31 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => FileBackstage.show(context),
-                  child: Container(
+                  onHover: (hovered) => setState(() => _isFileHovered = hovered),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
                     height: 34,
                     padding: EdgeInsets.symmetric(horizontal: ui.spacing.lg),
                     decoration: BoxDecoration(
-                      color: ui.colors.accent.withValues(alpha: 0.9),
-                      boxShadow: [
-                        BoxShadow(
-                          color: ui.colors.accent.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(2, 0),
-                        ),
-                      ],
+                      color: _isFileHovered ? ui.colors.accent : Colors.transparent,
                     ),
                     alignment: Alignment.center,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const UiText(
+                        UiText(
                           text: 'FILE',
                           variant: UiTextVariant.label,
-                          color: Colors.black87,
+                          color: _isFileHovered ? ui.colors.textInverse : ui.colors.textPrimary,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.8,
                         ),
                         const SizedBox(width: 4),
-                        Icon(LucideIcons.chevronDown, size: 14, color: Colors.black54),
+                        Icon(
+                          LucideIcons.chevronDown, 
+                          size: 14, 
+                          color: _isFileHovered ? ui.colors.textInverse : ui.colors.textPrimary
+                        ),
                       ],
                     ),
                   ),
