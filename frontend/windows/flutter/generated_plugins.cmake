@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   screen_retriever_windows
-  syncfusion_pdfviewer_windows
   url_launcher_windows
   window_manager
 )
@@ -13,6 +12,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   flutter_pty
   jni
+  pdfrx
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)
