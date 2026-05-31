@@ -138,6 +138,32 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> createProjectFile(String fileName, String content) async {
+    if (kIsWeb) {
+      final newFile = UniLabFile(
+        id: const Uuid().v4(),
+        name: fileName,
+        path: 'web/$fileName',
+        content: content,
+      );
+      _openFiles.add(newFile);
+      _activeFileIndex = _openFiles.length - 1;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final path = p.join(_projectRoot, fileName);
+      final file = io.File(path);
+      await file.writeAsString(content);
+      await refreshProjectFiles();
+      await openFile(file);
+    } catch (e) {
+      _consoleOutput += '\nError creating file: $e\n';
+      notifyListeners();
+    }
+  }
+
   void openImportDataTab() {
     final existingIndex = _openFiles.indexWhere((f) => f.path == 'unilab://import-data');
     if (existingIndex != -1) {
@@ -294,6 +320,24 @@ class AppProvider with ChangeNotifier {
       }
     } catch (e) {
       _consoleOutput += '\nError deleting: $e\n';
+      notifyListeners();
+    }
+  }
+
+  void updateMovedFilePaths(String oldPath, String newPath) {
+    bool changed = false;
+    for (int i = 0; i < _openFiles.length; i++) {
+      final file = _openFiles[i];
+      if (file.path == oldPath) {
+        _openFiles[i] = file.copyWith(path: newPath);
+        changed = true;
+      } else if (file.path.startsWith(oldPath + '/')) {
+        final remainingPath = file.path.substring(oldPath.length);
+        _openFiles[i] = file.copyWith(path: newPath + remainingPath);
+        changed = true;
+      }
+    }
+    if (changed) {
       notifyListeners();
     }
   }
