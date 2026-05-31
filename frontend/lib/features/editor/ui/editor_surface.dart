@@ -38,7 +38,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
     // Custom Syntax Theme
     final Map<String, TextStyle> customSyntaxTheme = {
       'root': TextStyle(
-        color: editorFg, 
+        color: editorFg,
         backgroundColor: editorBg,
         fontSize: settings.fontSize,
         fontFamily: settings.fontFamily,
@@ -46,7 +46,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
       'keyword': TextStyle(color: colors[0], fontWeight: FontWeight.bold),
       'string': TextStyle(color: colors[1]),
       'number': TextStyle(color: colors[2]),
-      'comment': TextStyle(color: editorFg.withValues(alpha: 0.5), fontStyle: FontStyle.italic),
+      'comment': TextStyle(color: editorFg.withValues(alpha: 0.5)),
       'function': TextStyle(color: colors[3]),
       'params': TextStyle(color: editorFg.withValues(alpha: 0.8)),
       'builtin': TextStyle(color: colors[5].withValues(alpha: 0.9)),
@@ -60,11 +60,39 @@ class _EditorSurfaceState extends State<EditorSurface> {
     return ContextMenuRegion(
       contextMenu: GenericContextMenu(
         buttonConfigs: [
-          ContextMenuButtonConfig('Cut', icon: Icon(Icons.content_cut, size: 16, color: ui.colors.textMuted), onPressed: () {}),
-          ContextMenuButtonConfig('Copy', icon: Icon(Icons.content_copy, size: 16, color: ui.colors.textMuted), onPressed: () {}),
-          ContextMenuButtonConfig('Paste', icon: Icon(Icons.content_paste, size: 16, color: ui.colors.textMuted), onPressed: () {}),
-          ContextMenuButtonConfig('Run Selection', icon: Icon(Icons.play_arrow, size: 16, color: ui.colors.accent), onPressed: () {}),
-          ContextMenuButtonConfig('Peek Definition', icon: Icon(Icons.search, size: 16, color: ui.colors.info), onPressed: () {}),
+          ContextMenuButtonConfig(
+            'Cut',
+            icon: Icon(Icons.content_cut, size: 16, color: ui.colors.textMuted),
+            onPressed: () {},
+          ),
+          ContextMenuButtonConfig(
+            'Copy',
+            icon: Icon(
+              Icons.content_copy,
+              size: 16,
+              color: ui.colors.textMuted,
+            ),
+            onPressed: () {},
+          ),
+          ContextMenuButtonConfig(
+            'Paste',
+            icon: Icon(
+              Icons.content_paste,
+              size: 16,
+              color: ui.colors.textMuted,
+            ),
+            onPressed: () {},
+          ),
+          ContextMenuButtonConfig(
+            'Run Selection',
+            icon: Icon(Icons.play_arrow, size: 16, color: ui.colors.accent),
+            onPressed: () {},
+          ),
+          ContextMenuButtonConfig(
+            'Peek Definition',
+            icon: Icon(Icons.search, size: 16, color: ui.colors.info),
+            onPressed: () {},
+          ),
         ],
       ),
       child: CodeTheme(

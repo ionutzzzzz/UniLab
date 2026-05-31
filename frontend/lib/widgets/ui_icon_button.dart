@@ -32,13 +32,11 @@ class _UiIconButtonState extends State<UiIconButton> {
     final ui = UiTheme.of(context);
     final isEnabled = widget.onPressed != null;
 
-    final bgColor = widget.isActive
-        ? ui.colors.selected
-        : (_isHovered && isEnabled ? ui.colors.hover : Colors.transparent);
+    final bgColor = _isHovered && isEnabled ? ui.colors.accent : Colors.transparent;
         
-    final fgColor = widget.isActive
+    final fgColor = _isHovered && isEnabled
         ? ui.colors.textInverse
-        : (isEnabled ? ui.colors.icon : ui.colors.textDisabled);
+        : (widget.isActive ? ui.colors.accent : (isEnabled ? ui.colors.icon : ui.colors.textDisabled));
 
     final button = MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
