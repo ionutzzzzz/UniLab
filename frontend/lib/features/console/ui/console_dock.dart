@@ -164,7 +164,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
                         text: isCommand ? line.substring(3) : line,
                         variant: UiTextVariant.consoleBody,
                         color: isCommand ? ui.colors.textPrimary : ui.colors.textSecondary,
-                        fontFamily: 'JetBrains Mono',
                       ),
                     ),
                   ],
@@ -193,7 +192,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   controller: _controller,
                   style: ui.typography.consoleBody.copyWith(
                     color: ui.colors.textPrimary,
-                    fontFamily: 'JetBrains Mono',
                     fontSize: 12,
                   ),
                   decoration: const InputDecoration(

@@ -183,5 +183,70 @@ class SyntaxHighlightTheme {
         Color(0xFFFFCB6B), // Type
       ],
     ),
+    SyntaxHighlightTheme(
+      name: 'Pastel Pixel',
+      backgroundColor: Color(0xFF1A1C23),
+      foregroundColor: Color(0xFFD1D5DB),
+      colors: [
+        Color(0xFFDECBE4), // Keyword
+        Color(0xFFCCEBC5), // String
+        Color(0xFFFED9A6), // Number
+        Color(0xFFB3CDE3), // Function
+        Color(0xFFFBB4AE), // Variable
+        Color(0xFFE5D8BD), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Noctis',
+      backgroundColor: Color(0xFF2c2e3b),
+      foregroundColor: Color(0xFFe3e4e5),
+      colors: [
+        Color(0xFFff57a0), // Keyword
+        Color(0xFFb9e295), // String
+        Color(0xFFf5c276), // Number
+        Color(0xFF72b1fc), // Function
+        Color(0xFFe3e4e5), // Variable
+        Color(0xFFc592ff), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Monokai Pro',
+      backgroundColor: Color(0xFF2d2a2e),
+      foregroundColor: Color(0xFFfcfcfa),
+      colors: [
+        Color(0xFFff6188), // Keyword
+        Color(0xFFffd866), // String
+        Color(0xFFa9dc76), // Number
+        Color(0xFF78dce8), // Function
+        Color(0xFFab9df2), // Variable
+        Color(0xFFfc9867), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Panda',
+      backgroundColor: Color(0xFF292a2b),
+      foregroundColor: Color(0xFFe6e6e6),
+      colors: [
+        Color(0xFFff75b5), // Keyword
+        Color(0xFF19f9d8), // String
+        Color(0xFFffb86c), // Number
+        Color(0xFF45a9f9), // Function
+        Color(0xFFff2c6d), // Variable
+        Color(0xFFb084eb), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'NightFox',
+      backgroundColor: Color(0xFF192330),
+      foregroundColor: Color(0xFFcdcecf),
+      colors: [
+        Color(0xFF9d79d6), // Keyword
+        Color(0xFF98c379), // String
+        Color(0xFFe0af68), // Number
+        Color(0xFF82aaff), // Function
+        Color(0xFFcdcecf), // Variable
+        Color(0xFF63cdcf), // Type
+      ],
+    ),
   ];
 }

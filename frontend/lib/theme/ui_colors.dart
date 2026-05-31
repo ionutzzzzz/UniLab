@@ -139,33 +139,33 @@ class UiColors {
   }
 
   factory UiColors.dark() => UiColors(
-        canvas: const Color(0xFF0F1115),
-        panel: const Color(0xFF16191E),
-        panelHeader: const Color(0xFF1A1D23),
-        ribbonTabs: const Color(0xFF121419),
-        overlay: const Color(0xFF1A1D23),
-        hover: const Color(0xFF232830),
-        selected: const Color(0xFF2D343F),
-        selectedMuted: const Color(0xFF1C2028),
-        divider: const Color(0xFF2A2D35),
-        border: const Color(0xFF2A2D35),
+        canvas: const Color(0xFF1E1E1E), // Standard IDE Background
+        panel: const Color(0xFF1E1E1E),
+        panelHeader: const Color(0xFF252526),
+        ribbonTabs: const Color(0xFF2D2D30),
+        overlay: const Color(0xFF252526),
+        hover: const Color(0xFF2A2D2E),
+        selected: const Color(0xFF37373D),
+        selectedMuted: const Color(0xFF2A2D2E),
+        divider: const Color(0xFF3F3F46),
+        border: const Color(0xFF3F3F46),
         textPrimary: const Color(0xFFE2E4E9),
         textSecondary: const Color(0xFFADB3BD),
         textMuted: const Color(0xFF8B949E),
         textDisabled: const Color(0xFF626971),
-        textInverse: const Color(0xFF0F1115), // Dark text on light accents
-        accent: const Color(0xFFB3CDE3), // Matplotlib Pastel1 Blue
-        accentHover: const Color(0xFFCBD5E8), // Matplotlib Pastel2 Light Periwinkle
-        accentMuted: const Color(0xFF1C2028),
-        success: const Color(0xFFCCEBC5), // Matplotlib Pastel1 Green
-        warning: const Color(0xFFFED9A6), // Matplotlib Pastel1 Orange
-        danger: const Color(0xFFFBB4AE), // Matplotlib Pastel1 Red
-        info: const Color(0xFFDECBE4), // Matplotlib Pastel1 Purple
-        tan: const Color(0xFFE5D8BD), // Matplotlib Pastel1 Tan
-        yellow: const Color(0xFFFFFFCC), // Matplotlib Pastel1 Yellow
+        textInverse: const Color(0xFFFFFFFF),
+        accent: const Color(0xFF4AA3FF),
+        accentHover: const Color(0xFF6BB1FF),
+        accentMuted: const Color(0xFF264F78),
+        success: const Color(0xFF23D18B),
+        warning: const Color(0xFFE5E510),
+        danger: const Color(0xFFF14C4C),
+        info: const Color(0xFF4AA3FF),
+        tan: const Color(0xFFE5D8BD),
+        yellow: const Color(0xFFFFFFCC),
         icon: const Color(0xFFADB3BD),
-        glassBackground: const Color(0xAA1A1D23),
-        glassBorder: const Color(0x26B3CDE3), // Subtle accent edge for glass
+        glassBackground: const Color(0xCC252526),
+        glassBorder: const Color(0x334AA3FF),
         shadowSm: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),

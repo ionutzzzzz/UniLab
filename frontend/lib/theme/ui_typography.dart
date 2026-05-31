@@ -20,7 +20,7 @@ class UiTypography {
   final TextStyle codeGutter;
   final TextStyle consoleBody;
 
-  factory UiTypography.base(Color textPrimary, Color textMuted, {double scale = 1.0}) {
+  factory UiTypography.base(Color textPrimary, Color textMuted, {double scale = 1.0, String codeFontFamily = 'JetBrains Mono'}) {
     return UiTypography(
       title: TextStyle(
         fontFamily: 'Inter',
@@ -51,21 +51,21 @@ class UiTypography {
         color: textMuted,
       ),
       codeBody: TextStyle(
-        fontFamily: 'JetBrains Mono',
+        fontFamily: codeFontFamily,
         fontSize: 13 * scale,
         fontWeight: FontWeight.w400,
         height: 1.55,
         color: textPrimary,
       ),
       codeGutter: TextStyle(
-        fontFamily: 'JetBrains Mono',
+        fontFamily: codeFontFamily,
         fontSize: 12 * scale,
         fontWeight: FontWeight.w400,
         height: 1.55,
         color: textMuted,
       ),
       consoleBody: TextStyle(
-        fontFamily: 'JetBrains Mono',
+        fontFamily: codeFontFamily,
         fontSize: 12 * scale,
         fontWeight: FontWeight.w400,
         height: 1.5,
