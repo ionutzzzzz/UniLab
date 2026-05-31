@@ -5,6 +5,7 @@ import 'ui_typography.dart';
 import 'ui_spacing.dart';
 import 'ui_density.dart';
 import 'syntax_palette.dart';
+import 'syntax_themes.dart';
 import '../models/models.dart';
 
 @immutable
@@ -53,14 +54,27 @@ UiTheme createUiTheme(UserSettings settings, Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final baseColors = isDark ? UiColors.dark() : UiColors.light();
   
+  // Find the selected syntax theme
+  final syntaxTheme = SyntaxHighlightTheme.all.firstWhere(
+    (t) => t.name == settings.syntaxHighlightTheme,
+    orElse: () => SyntaxHighlightTheme.all.first,
+  );
+
   final colors = baseColors.copyWith(
+    canvas: syntaxTheme.backgroundColor,
+    panel: syntaxTheme.backgroundColor,
     accent: settings.accentColor,
     accentHover: settings.accentColor.withValues(alpha: 0.8),
   );
 
   return UiTheme(
     colors: colors,
-    typography: UiTypography.base(colors.textPrimary, colors.textMuted, scale: settings.uiScale),
+    typography: UiTypography.base(
+      colors.textPrimary, 
+      colors.textMuted, 
+      scale: settings.uiScale,
+      codeFontFamily: settings.fontFamily,
+    ),
     spacing: UiSpacing.standard(scale: settings.uiScale),
     density: UiDensity.comfortable,
     syntax: isDark ? SyntaxPalette.darkPlus() : SyntaxPalette.lightPlus(),

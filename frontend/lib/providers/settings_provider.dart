@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
+import '../theme/syntax_themes.dart';
 
 class SettingsProvider with ChangeNotifier {
   UserSettings _settings = UserSettings();
@@ -46,8 +47,8 @@ class SettingsProvider with ChangeNotifier {
     final plotColormap = prefs.getString('plotColormap') ?? 'Blues';
     String syntaxHighlightTheme = prefs.getString('syntaxHighlightTheme') ?? 'Dracula';
     
-    // Validate that the loaded theme actually exists in our new theme list
-    final availableThemes = ['Dracula', 'VS Code Dark+', 'JetBrains Darcula', 'One Dark Pro', 'Tokyo Night', 'Catppuccin Mocha'];
+    // Validate that the loaded theme actually exists in our theme list
+    final availableThemes = SyntaxHighlightTheme.all.map((t) => t.name).toList();
     if (!availableThemes.contains(syntaxHighlightTheme)) {
       syntaxHighlightTheme = 'Dracula';
     }
