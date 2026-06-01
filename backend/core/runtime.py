@@ -3424,12 +3424,32 @@ def std(x, axis=None):
 def var(x, axis=None): 
     if axis is not None: axis = _unilab_to_int(axis) - 1
     return np.var(x, axis=axis)
-def min(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.min(x, axis=axis)
-def max(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.max(x, axis=axis)
+def min(x, *args):
+    n_out = unilab_get_nargout()
+    if len(args) == 0:
+        if n_out > 1:
+            return np.min(x), np.argmin(x) + 1
+        return np.min(x)
+    if len(args) == 1:
+        y = args[0]
+        if n_out > 1:
+             # min(A, B) doesn't typically return indices in MATLAB the same way
+             return np.minimum(x, y), 0
+        return np.minimum(x, y)
+    return np.min(x)
+
+def max(x, *args):
+    n_out = unilab_get_nargout()
+    if len(args) == 0:
+        if n_out > 1:
+            return np.max(x), np.argmax(x) + 1
+        return np.max(x)
+    if len(args) == 1:
+        y = args[0]
+        if n_out > 1:
+             return np.maximum(x, y), 0
+        return np.maximum(x, y)
+    return np.max(x)
 def round(x): return np.round(x)
 def floor(x): return np.floor(x)
 def ceil(x): return np.ceil(x)
@@ -3471,7 +3491,9 @@ def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is n
 def factorial(n): return float(math.factorial(_unilab_to_int(n)))
 def trapz(y, x=None): return np.trapz(y, x=x)
 def inv(x): return np.linalg.inv(x)
-def eig(x): return np.linalg.eig(x)
+def eig(x):
+    eigenvalues, eigenvectors = np.linalg.eig(np.atleast_2d(x))
+    return eigenvectors, np.diag(eigenvalues)
 def diag(v, k=0): return np.diag(v, _unilab_to_int(k))
 def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
 def det(x): return np.linalg.det(x)
@@ -3485,3 +3507,39 @@ def imag(x): return np.imag(x)
 def sort(x, axis=-1): 
     if axis != -1: axis = _unilab_to_int(axis) - 1
     return np.sort(x, axis=axis)
+
+def fft(x, n=None, axis=-1): return scipy_fft(x, n=n, axis=axis)
+def ifft(x, n=None, axis=-1): return scipy_ifft(x, n=n, axis=axis)
+
+def mldivide(A, B): 
+    if A.ndim == 2 and B.ndim == 2:
+        if A.shape[0] == A.shape[1]:
+            return np.linalg.solve(A, B)
+        else:
+            return np.linalg.lstsq(A, B, rcond=None)[0]
+    return np.linalg.lstsq(A, B, rcond=None)[0]
+
+def sinh(x): return np.sinh(x)
+def cosh(x): return np.cosh(x)
+def asinh(x): return np.arcsinh(x)
+def acosh(x): return np.arccosh(x)
+def atanh(x): return np.arctanh(x)
+
+def strcmp(s1, s2): return bool(s1 == s2)
+def isequal(a, b): return np.array_equal(a, b)
+def cumsum(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.cumsum(x, axis=axis)
+def randi(imax, *shape):
+    if len(shape) == 0: shape = (1, 1)
+    elif len(shape) == 1: shape = (int(shape[0]), int(shape[0]))
+    else: shape = [int(s) for s in shape]
+    return np.random.randint(1, _unilab_to_int(imax) + 1, size=shape)
+
+def argmin(x, axis=None):
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    # MATLAB argmin (min with 2 outputs) returns 1-based index
+    return np.argmin(x, axis=axis) + 1
+def argmax(x, axis=None):
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.argmax(x, axis=axis) + 1

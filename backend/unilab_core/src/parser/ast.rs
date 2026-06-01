@@ -44,6 +44,7 @@ pub enum Expr {
         body: Box<Expr>,
     },
     FunctionHandle(String),
+    KeywordArg(String, Box<Expr>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

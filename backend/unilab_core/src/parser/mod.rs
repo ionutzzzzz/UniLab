@@ -450,7 +450,7 @@ fn parse_arg_item(pair: pest::iterators::Pair<Rule>) -> Expr {
             let mut sub = first.into_inner();
             let key = sub.next().unwrap().as_str().trim().to_string();
             let val = parse_expression(sub.next().unwrap());
-            Expr::BinaryOp(Box::new(Expr::Identifier(key)), BinaryOperator::Eq, Box::new(val))
+            Expr::KeywordArg(key, Box::new(val))
         }
         _ => Expr::Identifier(pair.as_str().trim().to_string()),
     }
