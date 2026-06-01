@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "unilab_core",
+    "unilab_cli",
+]
+resolver = "2"
