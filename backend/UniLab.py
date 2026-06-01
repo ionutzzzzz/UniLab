@@ -146,10 +146,12 @@ except ImportError:
     readline = None
 
 try:
-    from backend.core.main import UniLabCore, BackendConfig
+    from backend.core.unilab_core import UniLabCore
+    from backend.core.models import BackendConfig
 except ImportError:
     try:
-        from core.main import UniLabCore, BackendConfig
+        from core.unilab_core import UniLabCore
+        from core.models import BackendConfig
     except ImportError as e:
         print(f"Error: Could not import UniLabCore. Ensure you are in the project root.")
         print(f"Details: {e}")
