@@ -1,84 +1,170 @@
-% 01_quantum_mechanics.m
-% UniLab Quantum Physics: 1D Schrodinger Equation & Wavefunction Evolution
-
-clear all;
-close all;
+%% MATLAB Syntax Demonstration Script
 clc;
+clear;
+close all;
 
-disp('⚛️ UniLab Quantum Mechanics Suite');
-disp('===================================');
+disp('=== MATLAB Syntax Test ===');
 
-%% 1. Quantum Harmonic Oscillator (Eigenstates)
-disp('--- 1. Harmonic Oscillator Eigenstates ---');
-x = linspace(-5, 5, 500);
-m = 1; hbar = 1; omega = 1;
+%% Variables and Data Types
+a = 10;
+b = 3.14;
+c = "Hello";
+d = 'World';
+e = true;
 
-% Hermite polynomials (recursive implementation)
-function H = hermite_poly(n, x)
-    if n == 0
-        H = ones(size(x));
-    elseif n == 1
-        H = 2 * x;
-    else
-        H = 2 * x .* hermite_poly(n-1, x) - 2 * (n-1) * hermite_poly(n-2, x);
-    end
+disp(a);
+disp(b);
+disp(c);
+disp(d);
+disp(e);
+
+%% Arrays and Matrices
+v = [1 2 3 4 5];
+m = [1 2; 3 4];
+
+disp(v);
+disp(m);
+
+%% Cell Arrays
+cellArr = {1, 'text', [1 2 3]};
+disp(cellArr);
+
+%% Structures
+person.name = 'John';
+person.age = 30;
+disp(person);
+
+%% Arithmetic Operations
+x = 5;
+y = 2;
+
+disp(x + y);
+disp(x - y);
+disp(x * y);
+disp(x / y);
+disp(x ^ y);
+
+%% Logical Operations
+disp(x > y);
+disp(x < y);
+disp(x == y);
+disp(x ~= y);
+disp((x > 0) && (y > 0));
+
+%% If Statement
+if x > y
+    disp('x is greater');
+elseif x == y
+    disp('equal');
+else
+    disp('y is greater');
 end
 
-% Wavefunction for level n
-function psi = quantum_ho_psi(n, x, m, hbar, omega)
-    alpha = sqrt(m * omega / hbar);
-    norm = 1 / sqrt(2^n * factorial(n)) * (alpha^2 / pi)^(1/4);
-    psi = norm * exp(-alpha^2 * x.^2 / 2) .* hermite_poly(n, alpha * x);
+%% Switch Statement
+value = 2;
+
+switch value
+    case 1
+        disp('One');
+    case 2
+        disp('Two');
+    otherwise
+        disp('Other');
 end
 
+%% For Loop
+for i = 1:5
+    fprintf('For loop: %d\n', i);
+end
+
+%% While Loop
+count = 1;
+while count <= 3
+    fprintf('While loop: %d\n', count);
+    count = count + 1;
+end
+
+%% Try-Catch
+try
+    z = 1 / 0;
+    disp(z);
+catch ME
+    fprintf('Error: %s\n', ME.message);
+end
+
+%% Anonymous Function
+square = @(n) n.^2;
+disp(square(5));
+
+%% Function Handle
+fh = @sin;
+disp(fh(pi/2));
+
+%% Vectorization
+vec = 1:10;
+disp(vec.^2);
+
+%% Matrix Operations
+A = rand(3);
+B = rand(3);
+
+C = A * B;
+D = A .* B;
+
+disp(C);
+disp(D);
+
+%% Indexing
+disp(vec(3));
+disp(A(2,3));
+
+%% Colon Operator
+disp(1:2:10);
+
+%% String Operations
+s1 = "MATLAB";
+s2 = "Test";
+disp(s1 + " " + s2);
+
+%% Table
+T = table([1;2;3], ["A";"B";"C"], ...
+    'VariableNames', {'ID','Name'});
+disp(T);
+
+%% Plotting
 figure;
-hold on;
-colors = {'r', 'g', 'b', 'm'};
-for n = 0:3
-    psi = quantum_ho_psi(n, x, m, hbar, omega);
-    plot(x, psi + n + 0.5, 'LineWidth', 2, 'Color', colors{n+1});
-end
-title('QHO Eigenstates: \psi_n(x)');
-xlabel('Position (x)'); ylabel('Energy / Amplitude');
+plot(1:10, rand(1,10));
+title('Syntax Test Plot');
+xlabel('X');
+ylabel('Y');
 grid on;
-hold off;
 
-%% 2. Quantum Tunneling Simulation
-disp(' ');
-disp('--- 2. Quantum Tunneling (Wave Packet) ---');
-state = struct();
-state.N = 100;
-state.x = linspace(-10, 10, state.N);
-state.dx = state.x(2) - state.x(1);
-state.dt = 0.05;
-V_barrier = zeros(1, state.N);
-V_barrier(state.N/2 - 3 : state.N/2 + 3) = 15.0; % Barrier
-state.V = V_barrier;
-k0 = 2.0;
-state.psi = exp(-0.5 * (state.x + 5).^2) .* exp(1j * k0 * state.x);
-state.psi = state.psi / sqrt(sum(abs(state.psi).^2) * state.dx);
+%% Timing
+tic;
+pause(0.1);
+elapsed = toc;
+fprintf('Elapsed time: %.4f s\n', elapsed);
 
-function s = schrodinger_step(s, params)
-    psi = s.psi;
-    V = s.V;
-    dx = s.dx; dt = s.dt;
-    % Finite difference Hamiltonian
-    lap = zeros(1, s.N);
-    lap(2:end-1) = (psi(3:end) - 2*psi(2:end-1) + psi(1:end-2)) / dx^2;
-    H_psi = -0.5 * lap + V .* psi;
-    s.psi = psi - 1j * H_psi * dt;
-    s.psi = s.psi / sqrt(sum(abs(s.psi).^2) * dx);
+%% File I/O
+filename = 'test_file.txt';
+
+fid = fopen(filename, 'w');
+fprintf(fid, 'Hello MATLAB\n');
+fclose(fid);
+
+fid = fopen(filename, 'r');
+content = fread(fid, '*char')';
+fclose(fid);
+
+disp(content);
+
+%% Local Function Call
+result = addNumbers(10, 20);
+disp(result);
+
+disp('=== End of Test ===');
+
+%% Local Function
+function out = addNumbers(a, b)
+    out = a + b;
 end
-
-function schrodinger_draw(ax, s)
-    prob = abs(s.psi).^2;
-    plot(ax, s.x, prob, 'b-', 'LineWidth', 2);
-    fill(ax, s.x, s.V / 20, 'r', 'Alpha', 0.2); 
-    title(ax, 'Quantum Tunneling: Probability Density |\psi|^2');
-    ylim(ax, [0, 1.2]);
-end
-
-disp('Launching Quantum Simulation...');
-simulate('algorithm', 'step', @schrodinger_step, 'draw', @schrodinger_draw, 'state', state);
-
-disp('Quantum Mechanics Suite Complete.');
