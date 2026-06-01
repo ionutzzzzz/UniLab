@@ -6,6 +6,7 @@ import time
 import pathlib
 import builtins
 import inspect
+import math
 import scipy.signal as signal
 from contextvars import ContextVar
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
@@ -2216,7 +2217,7 @@ def meshgrid(*args):
         x = processed_args[0]
         return np.meshgrid(x, x)
     return np.meshgrid(*processed_args)
-def randperm(n): return np.random.permutation(int(n)) + 1
+def randperm(n): return np.random.permutation(_unilab_to_int(n)) + 1
 def _is_symbolic(x):
     return hasattr(x, '__module__') and 'sympy' in x.__module__
 
@@ -3405,3 +3406,82 @@ def find_peaks(x, min_height=-np.inf):
         return np.array(peaks).reshape(1, -1)
     return np.array(peaks).reshape(-1, 1), np.array(locs).reshape(-1, 1)
 
+
+def _unilab_to_int(x):
+    if isinstance(x, np.ndarray):
+        return int(x.item())
+    return int(x)
+
+def sum(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.sum(x, axis=axis)
+def mean(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.mean(x, axis=axis)
+def std(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.std(x, axis=axis)
+def var(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.var(x, axis=axis)
+def min(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.min(x, axis=axis)
+def max(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.max(x, axis=axis)
+def round(x): return np.round(x)
+def floor(x): return np.floor(x)
+def ceil(x): return np.ceil(x)
+def sin(x): return np.sin(x)
+def cos(x): return np.cos(x)
+def tan(x): return np.tan(x)
+def tanh(x): return np.tanh(x)
+def exp(x): return np.exp(x)
+def log(x): return np.log(x)
+def log10(x): return np.log10(x)
+def sqrt(x): return np.sqrt(x)
+def abs(x): return np.abs(x)
+def rand(*args): return np.random.rand(*[_unilab_to_int(a) for a in args])
+def randn(*args): return np.random.randn(*[_unilab_to_int(a) for a in args])
+# randperm already defined? Let's check again.
+def reshape(x, *shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.reshape(x, shape)
+def linspace(start, stop, n=100): return np.linspace(start, stop, _unilab_to_int(n))
+def zeros(*shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.zeros(shape)
+def ones(*shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.ones(shape)
+def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is not None else _unilab_to_int(n))
+def factorial(n): return float(math.factorial(_unilab_to_int(n)))
+def trapz(y, x=None): return np.trapz(y, x=x)
+def inv(x): return np.linalg.inv(x)
+def eig(x): return np.linalg.eig(x)
+def diag(v, k=0): return np.diag(v, _unilab_to_int(k))
+def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
+def det(x): return np.linalg.det(x)
+
+def mod(x, y): return np.mod(x, y)
+def rem(x, y): return np.remainder(x, y)
+
+def real(x): return np.real(x)
+def imag(x): return np.imag(x)
+
+def sort(x, axis=-1): 
+    if axis != -1: axis = _unilab_to_int(axis) - 1
+    return np.sort(x, axis=axis)
