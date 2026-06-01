@@ -20,6 +20,7 @@ pub struct Evaluator {
 
 impl Evaluator {
     pub fn new() -> Self {
+        eprintln!("Creating new Evaluator");
         let mut builtins_env = Environment::new();
 
         // Constants
@@ -45,7 +46,10 @@ impl Evaluator {
             "figure", "gcf", "gca", "clf", "cla", "fprintf", "sprintf", "num2str",
             "deg2rad", "rad2deg", "trapz", "inv", "eig", "diag", "norm", "det",
             "fopen", "fread", "fclose", "fwrite", "mod", "rem", "meshgrid",
-            "real", "imag", "sort", "sign",
+            "real", "imag", "sort", "sign", "fft", "ifft",
+            "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+            "ischar", "iscell", "isnumeric", "strcmp", "isequal",
+            "argmin", "argmax", "isempty",
         ];
 
         for name in builtins {
@@ -115,6 +119,7 @@ impl Evaluator {
     }
 
     fn eval_statement(&mut self, stmt: &Stmt) -> Result<Value, String> {
+        eprintln!("Evaluating statement: {:?}", stmt);
         match stmt {
             Stmt::Expression(expr) => {
                 let val = self.eval_expression(expr)?;
@@ -130,12 +135,7 @@ impl Evaluator {
             Stmt::Assignment { lhs, rhs } => {
                 let val = match rhs {
                     Expr::FunctionCall { func, args } => {
-                        let f_val = self.eval_expression(func)?;
-                        let mut arg_vals = Vec::new();
-                        for a in args {
-                            arg_vals.push(self.eval_expression(a)?);
-                        }
-                        self.call_function(f_val, arg_vals, lhs.len())?
+                        self.eval_function_call_internal(func, args, lhs.len())?
                     }
                     _ => self.eval_expression(rhs)?,
                 };
@@ -261,6 +261,7 @@ impl Evaluator {
     fn assign_lhs(&mut self, l: &Expr, val: Value) -> Result<(), String> {
         match l {
             Expr::Identifier(name) => {
+                eprintln!("Defining identifier: {} = {:?}", name, val);
                 self.env.write().unwrap().define(name.clone(), val);
             }
             Expr::FunctionCall { func, args } => {
@@ -298,19 +299,43 @@ impl Evaluator {
                          match &mut target_val {
                              Value::Matrix(m) => {
                                  if idx_vals.len() == 1 {
-                                     let indices: Vec<usize> = match &idx_vals[0] {
-                                         Value::Scalar(i) => vec![*i as usize - 1],
-                                         Value::Matrix(mat) => mat.iter().map(|&i| i as usize - 1).collect(),
-                                         Value::Colon => (0..m.len()).collect(),
-                                         _ => return Err("Invalid index type".to_string()),
-                                     };
-                                     if let Value::Scalar(v) = val {
-                                         let slice = m.as_slice_mut().unwrap();
-                                         for idx in indices { slice[idx] = v; }
-                                     } else if let Value::Matrix(src) = val {
-                                         let slice = m.as_slice_mut().unwrap();
-                                         for (i, idx) in indices.into_iter().enumerate() {
-                                             slice[idx] = src.as_slice().unwrap()[i];
+                                     let is_logical = if let Value::Matrix(mat) = &idx_vals[0] {
+                                         mat.iter().any(|&x| x == 0.0)
+                                     } else { false };
+
+                                     if is_logical {
+                                         if let Value::Matrix(mat) = &idx_vals[0] {
+                                             let mut src_idx = 0;
+                                             let src_flat: Vec<f64> = match &val {
+                                                 Value::Matrix(m) => m.iter().cloned().collect(),
+                                                 Value::Scalar(n) => vec![*n],
+                                                 _ => Vec::new(),
+                                             };
+                                             let slice = m.as_slice_mut().unwrap();
+                                             for (i, &mask_val) in mat.iter().enumerate() {
+                                                 if mask_val != 0.0 {
+                                                     let fill_val = if src_flat.len() == 1 { src_flat[0] }
+                                                                    else { *src_flat.get(src_idx).unwrap_or(&0.0) };
+                                                     slice[i] = fill_val;
+                                                     src_idx += 1;
+                                                 }
+                                             }
+                                         }
+                                     } else {
+                                         let indices: Vec<usize> = match &idx_vals[0] {
+                                             Value::Scalar(i) => vec![*i as usize - 1],
+                                             Value::Matrix(mat) => mat.iter().map(|&i| i as usize - 1).collect(),
+                                             Value::Colon => (0..m.len()).collect(),
+                                             _ => return Err("Invalid index type".to_string()),
+                                         };
+                                         if let Value::Scalar(v) = val {
+                                             let slice = m.as_slice_mut().unwrap();
+                                             for idx in indices { slice[idx] = v; }
+                                         } else if let Value::Matrix(src) = val {
+                                             let slice = m.as_slice_mut().unwrap();
+                                             for (i, idx) in indices.into_iter().enumerate() {
+                                                 slice[idx] = src.as_slice().unwrap()[i];
+                                             }
                                          }
                                      }
                                  } else if idx_vals.len() == 2 {
@@ -392,6 +417,57 @@ impl Evaluator {
         Ok(last)
     }
 
+    fn eval_function_call_internal(&mut self, func: &Expr, args: &Vec<Expr>, nargout: usize) -> Result<Value, String> {
+        // eprintln!("Evaluating FunctionCall with target: {:?} and {} args", func, args.len());
+        let f_val = self.eval_expression(func)?;
+        if let Value::CellArray(_) = f_val {
+            // eprintln!("Calling CellArray as function: {:?} with {} args", func, args.len());
+        }
+        
+        let end_vals = match &f_val {
+            Value::Matrix(m) => {
+                if args.len() == 1 { vec![m.len() as f64] }
+                else { vec![m.nrows() as f64, m.ncols() as f64] }
+            }
+            Value::ComplexMatrix(m) => {
+                 if args.len() == 1 { vec![m.len() as f64] }
+                 else { vec![m.nrows() as f64, m.ncols() as f64] }
+            }
+            Value::CellArray(v) => vec![v.len() as f64],
+            Value::String(s) => vec![s.len() as f64],
+            _ => Vec::new(),
+        };
+
+        let mut arg_vals = Vec::new();
+        for (i, a) in args.iter().enumerate() {
+            let mut current_ev = None;
+            if !end_vals.is_empty() {
+                let ev = if end_vals.len() == 1 { end_vals[0] }
+                         else if i < end_vals.len() { end_vals[i] }
+                         else { *end_vals.last().unwrap() };
+                current_ev = Some(ev);
+                self.end_stack.push(ev);
+            }
+            
+            let res = self.eval_expression(a);
+            if current_ev.is_some() { self.end_stack.pop(); }
+            let val = res?;
+
+            // Check for colon expansion {: }
+            if let Expr::CellIndexing { args: c_args, .. } = a {
+                if c_args.len() == 1 && c_args[0] == Expr::Colon {
+                    if let Value::CellArray(v) = val {
+                        for item in v { arg_vals.push(item); }
+                        continue;
+                    }
+                }
+            }
+            arg_vals.push(val);
+        }
+
+        self.call_function(f_val, arg_vals, nargout)
+    }
+
     fn eval_expression(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
             Expr::Number(n) => Ok(Value::Scalar(*n)),
@@ -438,37 +514,7 @@ impl Evaluator {
                 }
             }
             Expr::FunctionCall { func, args } => {
-                let f_val = self.eval_expression(func)?;
-                let mut arg_vals = Vec::new();
-                
-                let end_vals = match &f_val {
-                    Value::Matrix(m) => {
-                        if args.len() == 1 { vec![m.len() as f64] }
-                        else { vec![m.nrows() as f64, m.ncols() as f64] }
-                    }
-                    Value::ComplexMatrix(m) => {
-                         if args.len() == 1 { vec![m.len() as f64] }
-                         else { vec![m.nrows() as f64, m.ncols() as f64] }
-                    }
-                    Value::CellArray(v) => vec![v.len() as f64],
-                    Value::String(s) => vec![s.len() as f64],
-                    _ => Vec::new(),
-                };
-
-                for (i, a) in args.iter().enumerate() {
-                    if !end_vals.is_empty() {
-                        let ev = if end_vals.len() == 1 { end_vals[0] } 
-                                 else if i < end_vals.len() { end_vals[i] }
-                                 else { *end_vals.last().unwrap() };
-                        self.end_stack.push(ev);
-                        let res = self.eval_expression(a);
-                        self.end_stack.pop();
-                        arg_vals.push(res?);
-                    } else {
-                        arg_vals.push(self.eval_expression(a)?);
-                    }
-                }
-                self.call_function(f_val, arg_vals, 1)
+                self.eval_function_call_internal(func, args, 1)
             }
             Expr::CellIndexing { target, args } => {
                 let t_val = self.eval_expression(target)?;
@@ -507,6 +553,14 @@ impl Evaluator {
                                         return Ok(v[idx].clone());
                                     }
                                 }
+                                Value::Matrix(indices) => {
+                                    let mut res = Vec::new();
+                                    for &idx_val in indices {
+                                        res.push(v[idx_val as usize - 1].clone());
+                                    }
+                                    return Ok(Value::CellArray(res));
+                                }
+                                Value::Colon => return Ok(Value::CellArray(v.clone())),
                                 _ => {}
                             }
                         }
@@ -519,32 +573,64 @@ impl Evaluator {
                 if rows.is_empty() {
                     return Ok(Value::Matrix(Array2::zeros((0, 0))));
                 }
-                let height = rows.len();
-                let width = rows[0].len();
-                let mut data = Vec::new();
-                let mut cell_data = Vec::new();
+                
+                let mut block_rows = Vec::new();
                 let mut is_complex = false;
-                let mut is_heterogeneous = false;
+                
                 for row in rows {
-                    if row.len() != width { return Err("Inconsistent matrix row lengths".to_string()); }
+                    let mut block_row = Vec::new();
                     for entry in row {
-                        let evaled = self.eval_expression(entry)?;
-                        cell_data.push(evaled.clone());
-                        match evaled {
-                            Value::Scalar(n) => data.push(Complex64::new(n, 0.0)),
-                            Value::Complex(re, im) => { data.push(Complex64::new(re, im)); is_complex = true; }
-                            _ => { is_heterogeneous = true; }
+                        let val = self.eval_expression(entry)?;
+                        match &val {
+                            Value::ComplexMatrix(_) | Value::Complex(_, _) => is_complex = true,
+                            _ => {}
                         }
+                        block_row.push(val);
                     }
+                    block_rows.push(block_row);
                 }
-                if is_heterogeneous {
-                    return Ok(Value::CellArray(cell_data));
-                }
+
+                // Convert all to ComplexMatrix if any is complex, otherwise Matrix
                 if is_complex {
-                    Ok(Value::ComplexMatrix(Array2::from_shape_vec((height, width), data).unwrap()))
+                    let mut final_rows = Vec::new();
+                    for row in block_rows {
+                        let mut row_mats = Vec::new();
+                        for val in &row {
+                            match val {
+                                Value::Scalar(n) => row_mats.push(Array2::from_elem((1, 1), Complex64::new(*n, 0.0))),
+                                Value::Complex(re, im) => row_mats.push(Array2::from_elem((1, 1), Complex64::new(*re, *im))),
+                                Value::Matrix(m) => row_mats.push(m.mapv(|x| Complex64::new(x, 0.0))),
+                                Value::ComplexMatrix(m) => row_mats.push(m.clone()),
+                                _ => return Ok(Value::CellArray(row.iter().cloned().collect())), // Fall back to CellArray if heterogeneous non-math
+                            }
+                        }
+                        // Horizontal concat row
+                        let views: Vec<_> = row_mats.iter().map(|m| m.view()).collect();
+                        let row_concat = ndarray::concatenate(ndarray::Axis(1), &views).map_err(|e| e.to_string())?;
+                        final_rows.push(row_concat);
+                    }
+                    // Vertical concat rows
+                    let views: Vec<_> = final_rows.iter().map(|m| m.view()).collect();
+                    let final_concat = ndarray::concatenate(ndarray::Axis(0), &views).map_err(|e| e.to_string())?;
+                    Ok(Value::ComplexMatrix(final_concat))
                 } else {
-                    let real_data = data.into_iter().map(|c| c.re).collect();
-                    Ok(Value::Matrix(Array2::from_shape_vec((height, width), real_data).unwrap()))
+                    let mut final_rows = Vec::new();
+                    for row in block_rows {
+                        let mut row_mats = Vec::new();
+                        for val in &row {
+                            match val {
+                                Value::Scalar(n) => row_mats.push(Array2::from_elem((1, 1), *n)),
+                                Value::Matrix(m) => row_mats.push(m.clone()),
+                                _ => return Ok(Value::CellArray(row.iter().cloned().collect())),
+                            }
+                        }
+                        let views: Vec<_> = row_mats.iter().map(|m| m.view()).collect();
+                        let row_concat = ndarray::concatenate(ndarray::Axis(1), &views).map_err(|e| e.to_string())?;
+                        final_rows.push(row_concat);
+                    }
+                    let views: Vec<_> = final_rows.iter().map(|m| m.view()).collect();
+                    let final_concat = ndarray::concatenate(ndarray::Axis(0), &views).map_err(|e| e.to_string())?;
+                    Ok(Value::Matrix(final_concat))
                 }
             }
             Expr::Transpose(inner) => {
@@ -579,6 +665,7 @@ impl Evaluator {
                 Ok(Value::CellArray(items))
             }
             Expr::FunctionHandle(name) => Ok(Value::FunctionHandle(name.clone())),
+            Expr::KeywordArg(_, val) => self.eval_expression(val),
             Expr::AnonymousFunc { params, body } => {
                 Ok(Value::AnonymousFunction {
                     params: params.clone(),
@@ -662,8 +749,13 @@ impl Evaluator {
                     BinaryOperator::Add => Ok(Value::Matrix(a + b)),
                     BinaryOperator::Sub => Ok(Value::Matrix(a - b)),
                     BinaryOperator::Mul => Ok(Value::Matrix(a.dot(&b))),
+                    BinaryOperator::Div => Ok(Value::Matrix(a / b)),
                     BinaryOperator::DotMul => Ok(Value::Matrix(a * b)),
                     BinaryOperator::DotDiv => Ok(Value::Matrix(a / b)),
+                    BinaryOperator::LDiv | BinaryOperator::DotLDiv => {
+                        // Fall back to Python for LDiv
+                        PythonBridge::call_runtime_func("mldivide", vec![Value::Matrix(a), Value::Matrix(b)], 1).map_err(|e| e.to_string())
+                    }
                     BinaryOperator::DotPow => {
                         let mut res = a.clone();
                         for (i, val) in res.iter_mut().enumerate() {
@@ -702,6 +794,26 @@ impl Evaluator {
                     _ => Err(format!("Operator {:?} not implemented for Scalar/Bool", op)),
                 }
             }
+            (Value::Matrix(a), op, Value::Bool(b)) => {
+                let b_val = if b { 1.0 } else { 0.0 };
+                match op {
+                    BinaryOperator::Add => Ok(Value::Matrix(a.mapv(|x| x + b_val))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(a.mapv(|x| x - b_val))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(a.mapv(|x| x * b_val))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(a.mapv(|x| x / b_val))),
+                    _ => Err(format!("Operator {:?} not implemented for Matrix/Bool", op)),
+                }
+            }
+            (Value::Bool(a), op, Value::Matrix(b)) => {
+                let a_val = if a { 1.0 } else { 0.0 };
+                match op {
+                    BinaryOperator::Add => Ok(Value::Matrix(b.mapv(|x| a_val + x))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(b.mapv(|x| a_val - x))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(b.mapv(|x| a_val * x))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(b.mapv(|x| a_val / x))),
+                    _ => Err(format!("Operator {:?} not implemented for Bool/Matrix", op)),
+                }
+            }
             (Value::Matrix(a), op, Value::Scalar(b)) => {
                 match op {
                     BinaryOperator::Add => Ok(Value::Matrix(a.mapv(|x| x + b))),
@@ -711,6 +823,10 @@ impl Evaluator {
                     BinaryOperator::Pow | BinaryOperator::DotPow => Ok(Value::Matrix(a.mapv(|x| x.powf(b)))),
                     BinaryOperator::Eq => Ok(Value::Matrix(a.mapv(|x| if x == b { 1.0 } else { 0.0 }))),
                     BinaryOperator::Ne => Ok(Value::Matrix(a.mapv(|x| if x != b { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Lt => Ok(Value::Matrix(a.mapv(|x| if x < b { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Gt => Ok(Value::Matrix(a.mapv(|x| if x > b { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Le => Ok(Value::Matrix(a.mapv(|x| if x <= b { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Ge => Ok(Value::Matrix(a.mapv(|x| if x >= b { 1.0 } else { 0.0 }))),
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Scalar", op)),
                 }
             }
@@ -722,6 +838,10 @@ impl Evaluator {
                     BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(b.mapv(|x| a / x))),
                     BinaryOperator::Eq => Ok(Value::Matrix(b.mapv(|x| if a == x { 1.0 } else { 0.0 }))),
                     BinaryOperator::Ne => Ok(Value::Matrix(b.mapv(|x| if a != x { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Lt => Ok(Value::Matrix(b.mapv(|x| if a < x { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Gt => Ok(Value::Matrix(b.mapv(|x| if a > x { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Le => Ok(Value::Matrix(b.mapv(|x| if a <= x { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Ge => Ok(Value::Matrix(b.mapv(|x| if a >= x { 1.0 } else { 0.0 }))),
                     _ => Err(format!("Operator {:?} not implemented for Scalar/Matrix", op)),
                 }
             }
@@ -841,9 +961,6 @@ impl Evaluator {
     }
 
     fn call_function(&mut self, func: Value, args: Vec<Value>, nargout: usize) -> Result<Value, String> {
-        if let Value::FunctionHandle(ref name) = func {
-            eprintln!("Calling builtin: {} with {} args", name, args.len());
-        }
         match func {
             Value::Function { name: _, params, returns, body } => {
                 let parent_env = self.env.clone();
@@ -1000,17 +1117,16 @@ impl Evaluator {
                     }
                     "size" => {
                         if args.len() == 1 {
-                            match &args[0] {
-                                Value::Matrix(m) => {
-                                    let res = vec![m.nrows() as f64, m.ncols() as f64];
-                                    return Ok(Value::Matrix(Array2::from_shape_vec((1, 2), res).unwrap()));
-                                }
-                                Value::ComplexMatrix(m) => {
-                                    let res = vec![m.nrows() as f64, m.ncols() as f64];
-                                    return Ok(Value::Matrix(Array2::from_shape_vec((1, 2), res).unwrap()));
-                                }
-                                _ => return Ok(Value::Matrix(Array2::from_elem((1, 2), 1.0))),
+                            let (rows, cols) = match &args[0] {
+                                Value::Matrix(m) => (m.nrows(), m.ncols()),
+                                Value::ComplexMatrix(m) => (m.nrows(), m.ncols()),
+                                _ => (1, 1),
+                            };
+                            if nargout > 1 {
+                                return Ok(Value::List(vec![Value::Scalar(rows as f64), Value::Scalar(cols as f64)]));
                             }
+                            let res = vec![rows as f64, cols as f64];
+                            return Ok(Value::Matrix(Array2::from_shape_vec((1, 2), res).unwrap()));
                         } else if args.len() == 2 {
                             let dim = match &args[1] {
                                 Value::Scalar(n) => *n as usize,
@@ -1055,12 +1171,27 @@ impl Evaluator {
                           Err("Invalid simulate args".to_string())
                     }
                     "sum" | "mean" | "std" | "var" | "min" | "max" | "round" | "floor" | "ceil" |
-                    "sin" | "cos" | "tan" | "tanh" | "exp" | "log" | "log10" | "sqrt" | "abs" |
+                    "sin" | "cos" | "tan" | "tanh" | "sinh" | "cosh" | "asinh" | "acosh" | "atanh" | "exp" | "log" | "log10" | "sqrt" | "abs" |
                     "rand" | "randn" | "randperm" | "reshape" | "linspace" | "zeros" | "ones" | "eye" |
                     "factorial" | "trapz" | "inv" | "eig" | "diag" | "norm" | "det" | "mod" | "rem" | "meshgrid" |
-                    "real" | "imag" | "sort" | "sign" => {
+                    "real" | "imag" | "sort" | "sign" | "fft" | "ifft" |
+                    "ischar" | "iscell" | "isnumeric" | "strcmp" | "isequal" |
+                    "argmin" | "argmax" | "isempty" => {
                         if args.len() == 1 {
                             match name.as_str() {
+                                "ischar" => return Ok(Value::Bool(matches!(args[0], Value::String(_)))),
+                                "iscell" => return Ok(Value::Bool(matches!(args[0], Value::CellArray(_)))),
+                                "isnumeric" => return Ok(Value::Bool(matches!(args[0], Value::Scalar(_) | Value::Matrix(_) | Value::Complex(_, _) | Value::ComplexMatrix(_)))),
+                                "isempty" => {
+                                    match &args[0] {
+                                        Value::Matrix(m) => return Ok(Value::Bool(m.is_empty())),
+                                        Value::ComplexMatrix(m) => return Ok(Value::Bool(m.is_empty())),
+                                        Value::CellArray(v) => return Ok(Value::Bool(v.is_empty())),
+                                        Value::String(s) => return Ok(Value::Bool(s.is_empty())),
+                                        Value::Void => return Ok(Value::Bool(true)),
+                                        _ => return Ok(Value::Bool(false)),
+                                    }
+                                }
                                 "sign" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.signum())); } }
                                 "real" => {
                                     match &args[0] {
@@ -1085,6 +1216,11 @@ impl Evaluator {
                                 "cos" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.cos())); } }
                                 "tan" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.tan())); } }
                                 "tanh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.tanh())); } }
+                                "sinh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.sinh())); } }
+                                "cosh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.cosh())); } }
+                                "asinh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.asinh())); } }
+                                "acosh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.acosh())); } }
+                                "atanh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.atanh())); } }
                                 "sqrt" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.sqrt())); } }
                                 "abs" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.abs())); } }
                                 "log" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.ln())); } }
@@ -1196,7 +1332,15 @@ impl Evaluator {
                             if indices.len() == 1 {
                                 return Ok(Value::Scalar(res_data[0]));
                             }
-                            return Ok(Value::Matrix(Array2::from_shape_vec(indices.raw_dim(), res_data).unwrap()));
+                            // MATLAB Rule: If source is a vector, result inherits source's orientation
+                            let shape = if m.nrows() == 1 {
+                                (1, indices.len())
+                            } else if m.ncols() == 1 {
+                                (indices.len(), 1)
+                            } else {
+                                (indices.nrows(), indices.ncols())
+                            };
+                            return Ok(Value::Matrix(Array2::from_shape_vec(shape, res_data).unwrap()));
                         }
                         Value::Colon => {
                             let data = m.iter().cloned().collect();
@@ -1269,7 +1413,19 @@ impl Evaluator {
                              for &idx_val in indices {
                                  res_data.push(m.as_slice().unwrap()[idx_val as usize - 1]);
                              }
-                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec(indices.raw_dim(), res_data).unwrap()));
+                             if indices.len() == 1 {
+                                 let res = res_data[0];
+                                 return Ok(Value::Complex(res.re, res.im));
+                             }
+                             // MATLAB Rule: If source is a vector, result inherits source's orientation
+                             let shape = if m.nrows() == 1 {
+                                 (1, indices.len())
+                             } else if m.ncols() == 1 {
+                                 (indices.len(), 1)
+                             } else {
+                                 (indices.nrows(), indices.ncols())
+                             };
+                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec(shape, res_data).unwrap()));
                          }
                          Value::Colon => {
                              let data = m.iter().cloned().collect();
@@ -1302,7 +1458,13 @@ impl Evaluator {
                 }
                 Err("Invalid cell array indexing".to_string())
             }
-            _ => Err(format!("Cannot call {:?}", func)),
+            _ => {
+                if args.is_empty() {
+                    Ok(func)
+                } else {
+                    Err(format!("Cannot call {:?}", func))
+                }
+            }
         }
     }
 

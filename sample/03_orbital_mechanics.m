@@ -1,4 +1,12 @@
-===');
+% 03_orbital_mechanics.m
+% UniLab Orbital Mechanics: Quantum Harmonic Oscillator & Tunneling
+
+clear all;
+close all;
+clc;
+
+disp('🛰️ UniLab Orbital Mechanics & Quantum Tunneling');
+disp('===============================================');
 
 %% 1. Quantum Harmonic Oscillator (Eigenstates)
 disp('--- 1. Harmonic Oscillator Eigenstates ---');
