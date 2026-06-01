@@ -44,7 +44,7 @@ mW1 = zeros(size(W1)); mb1 = zeros(size(b1));
 mW2 = zeros(size(W2)); mb2 = zeros(size(b2));
 mW3 = zeros(size(W3)); mb3 = zeros(size(b3));
 
-epochs = 25000;
+epochs = 1000;
 train_loss_hist = zeros(epochs, 1);
 val_loss_hist = zeros(epochs, 1);
 
