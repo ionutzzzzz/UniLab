@@ -61,6 +61,11 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
         }
 
         Python::with_gil(|py| {
+            // Force headless matplotlib backend
+            if let Ok(m) = py.import("matplotlib") {
+                let _ = m.call_method1("use", ("Agg",));
+            }
+
             let sys = py.import("sys")?;
             let pypath = sys.getattr("path")?;
 
@@ -241,7 +246,15 @@ pub extern "C" fn unilab_execute(
         })
         .or_else(|e: String| -> Result<String, String> {
             eprintln!("Python error in unilab_execute: {}", e);
-            Ok(json!({"success": false, "error": e}).to_string())
+            Ok(json!({
+                "success": false, 
+                "error": e,
+                "stderr": format!("Python Error: {}", e),
+                "stdout": "",
+                "duration_s": 0.0,
+                "variables_snapshot": {},
+                "plots": []
+            }).to_string())
         })
     });
 
