@@ -690,15 +690,6 @@ def unilab_freqfreqz(b, a, worN=None):
 def unilab_conv(a, v, mode='full'):
     return signal.convolve(_unilab_vec(a), _unilab_vec(v), mode=mode)
 
-def unilab_eig(A):
-    n_out = unilab_get_nargout()
-    if n_out <= 1:
-        return np.linalg.eigvals(A).reshape(-1, 1)
-    
-    # [V, D]
-    d, v = np.linalg.eig(A)
-    return v, np.diag(d)
-
 def unilab_xcorr(a, v=None, mode='full'):
     if v is None: v = a
     c = signal.correlate(_unilab_vec(a), _unilab_vec(v), mode=mode)
@@ -2554,12 +2545,27 @@ def ode45(f, tspan, y0, options=None):
 
 def diag(v, k=0):
     v = np.asarray(v)
+    k = int(k)
     if v.ndim == 2:
         if v.shape[0] == 1 or v.shape[1] == 1:
+            # Vector input: create diagonal matrix
             return np.diag(v.flatten(), k)
-        # Extract diagonal from matrix
-        return np.diag(v, k).reshape(-1, 1)
+        else:
+            # Matrix input: extract diagonal as column vector
+            return np.diag(v, k).reshape(-1, 1)
+    # 1D input: create diagonal matrix
     return np.diag(v, k)
+
+def eig(x):
+    n_out = unilab_get_nargout()
+    x_mat = np.atleast_2d(x)
+    if n_out <= 1:
+        # Return eigenvalues as a column vector
+        return np.linalg.eigvals(x_mat).reshape(-1, 1)
+    
+    # [V, D] = eig(A)
+    eigenvalues, eigenvectors = np.linalg.eig(x_mat)
+    return eigenvectors, np.diag(eigenvalues)
 
 def num2str(x, precision=None):
     if precision is not None:
@@ -3277,6 +3283,7 @@ def list_libraries():
     print("\n" + "-" * 50)
 
 def unilab_clear_workspace(g):
+    print("::CLEAR_WORKSPACE::")
     import types
     import backend.core.runtime as rt
     keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
@@ -3326,7 +3333,9 @@ def unilab_clear_workspace(g):
 
 def unilab_clear_variables(g, names):
     for name in names:
-        if name in g: del g[name]
+        if name in g: 
+            print(f"::CLEAR_VAR::{name}")
+            del g[name]
 
 def unilab_iter(x):
     if isinstance(x, np.ndarray):
@@ -3491,10 +3500,6 @@ def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is n
 def factorial(n): return float(math.factorial(_unilab_to_int(n)))
 def trapz(y, x=None): return np.trapz(y, x=x)
 def inv(x): return np.linalg.inv(x)
-def eig(x):
-    eigenvalues, eigenvectors = np.linalg.eig(np.atleast_2d(x))
-    return eigenvectors, np.diag(eigenvalues)
-def diag(v, k=0): return np.diag(v, _unilab_to_int(k))
 def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
 def det(x): return np.linalg.det(x)
 

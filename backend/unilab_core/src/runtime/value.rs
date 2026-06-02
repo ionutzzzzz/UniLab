@@ -11,6 +11,7 @@ pub enum Value {
     Complex(f64, f64),
     Matrix(Array2<f64>),
     ComplexMatrix(Array2<Complex64>),
+    LogicalMatrix(Array2<bool>),
     String(String),
     Bool(bool),
     CellArray(Vec<Value>),
@@ -38,6 +39,7 @@ impl Value {
             Value::Complex(re, im) => *re != 0.0 || *im != 0.0,
             Value::Matrix(m) => m.iter().all(|&x| x != 0.0),
             Value::ComplexMatrix(m) => m.iter().all(|&x| x.re != 0.0 || x.im != 0.0),
+            Value::LogicalMatrix(m) => m.iter().all(|&x| x),
             Value::String(s) => !s.is_empty(),
             Value::Bool(b) => *b,
             Value::CellArray(v) => !v.is_empty(),
@@ -73,6 +75,9 @@ impl fmt::Display for Value {
             },
             Value::ComplexMatrix(m) => {
                 write!(f, "{}x{} complex matrix", m.nrows(), m.ncols())
+            },
+            Value::LogicalMatrix(m) => {
+                write!(f, "{}x{} logical matrix", m.nrows(), m.ncols())
             },
             Value::String(s) => write!(f, "'{}'", s),
             Value::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),

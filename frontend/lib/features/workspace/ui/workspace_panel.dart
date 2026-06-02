@@ -93,7 +93,7 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                               tooltip: 'Refresh Workspace', 
                               size: 24, 
                               iconSize: 14, 
-                              onPressed: () => appProvider.refreshProjectFiles(),
+                              onPressed: () async => await appProvider.fetchWorkspaceVariables(),
                             ),
                             const SizedBox(width: 4),
                             UiIconButton(
@@ -101,7 +101,7 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                               tooltip: 'Clear Workspace', 
                               size: 24, 
                               iconSize: 14, 
-                              onPressed: () => appProvider.clearWorkspace(),
+                              onPressed: () async => await appProvider.clearWorkspace(),
                             ),
                             const SizedBox(width: 4),
                             UiIconButton(
