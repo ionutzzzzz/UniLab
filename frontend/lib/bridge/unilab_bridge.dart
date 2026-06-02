@@ -11,7 +11,7 @@ class UniLabBridge {
   Socket? _socket;
   StreamSubscription<List<int>>? _subscription;
   final Queue<Completer<Map<String, dynamic>>> _pendingRequests = Queue();
-  final _eventController = StreamController<Map<String, dynamic>>.broadcast();
+  static final _eventController = StreamController<Map<String, dynamic>>.broadcast();
 
   String? _sessionId;
   bool _initialized = false;

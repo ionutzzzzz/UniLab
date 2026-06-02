@@ -146,12 +146,15 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
                 let variables = args.get_item(0).unwrap();
                 let py = variables.py();
                 
-                let json_mod = py.import("json").unwrap();
-                let variables_json: String = json_mod
-                    .call_method1("dumps", (variables,))
-                    .unwrap()
-                    .extract()
-                    .unwrap();
+                let variables_json = (|| {
+                    let json_mod = py.import("json").ok()?;
+                    let vars_json: String = json_mod
+                        .call_method1("dumps", (variables,))
+                        .ok()?
+                        .extract()
+                        .ok()?;
+                    Some(vars_json)
+                })().unwrap_or_else(|| "{}".to_string());
 
                 if let Some(cb) = *WORKSPACE_CALLBACK.lock().unwrap() {
                     let c_sid = CString::new(py_session_id.clone()).unwrap();
