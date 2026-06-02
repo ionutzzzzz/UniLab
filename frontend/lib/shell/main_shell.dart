@@ -40,27 +40,20 @@ class MainShell extends ConsumerWidget {
               if (settings.showToolbar)
                 const AppRibbon(),
               Expanded(
-                child: Row(
-                  children: [
-                    if (!showLeft)
-                      _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
-                        ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
-                      }),
-                    Expanded(
-                      child: SplitShell(
-                        showLeftPanel: showLeft,
-                        showRightPanel: showRight,
-                        leftPanel: const ExplorerPanel(),
-                        centerPanel: const EditorStack(),
-                        rightPanel: const WorkspacePanel(),
-                        bottomPanel: const ConsoleDock(),
-                      ),
-                    ),
-                    if (!showRight)
-                      _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
-                        ref.read(shellLayoutProvider.notifier).toggleRightPanel();
-                      }, isRight: true),
-                  ],
+                child: SplitShell(
+                  key: ValueKey('split_shell_${layoutState.layoutId}'),
+                  showLeftPanel: showLeft,
+                  showRightPanel: showRight,
+                  leftPanel: const ExplorerPanel(),
+                  leftRail: _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
+                    ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+                  }),
+                  centerPanel: const EditorStack(),
+                  rightPanel: const WorkspacePanel(),
+                  rightRail: _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
+                    ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+                  }, isRight: true),
+                  bottomPanel: const ConsoleDock(),
                 ),
               ),
               if (settings.showStatusBar)
@@ -84,14 +77,18 @@ class MainShell extends ConsumerWidget {
         ),
       ),
       child: Column(
+        crossAxisAlignment: isRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           SizedBox(height: ui.spacing.md),
-          _RailIcon(
-            icon: icon, 
-            tooltip: tooltip, 
-            color: ui.colors.accent,
-            isActive: isActive,
-            onTap: onTap,
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: ui.spacing.xs),
+            child: _RailIcon(
+              icon: icon, 
+              tooltip: tooltip, 
+              color: ui.colors.accent,
+              isActive: isActive,
+              onTap: onTap,
+            ),
           ),
         ],
       ),

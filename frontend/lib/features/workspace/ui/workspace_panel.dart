@@ -67,14 +67,17 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                   children: [
                     Expanded(
                       flex: 1,
-                      child: UiText(
-                        text: 'Workspace'.toUpperCase(),
-                        variant: UiTextVariant.label,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        fontSize: 10,
-                        color: ui.colors.textMuted,
-                        overflow: TextOverflow.ellipsis,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: UiText(
+                          text: 'Workspace'.toUpperCase(),
+                          variant: UiTextVariant.label,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          fontSize: 10,
+                          color: ui.colors.textMuted,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                     Flexible(

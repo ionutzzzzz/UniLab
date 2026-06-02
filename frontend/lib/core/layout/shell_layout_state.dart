@@ -7,6 +7,7 @@ class ShellLayoutState {
   final bool showLeftPanel;
   final bool showRightPanel;
   final bool showBottomPanel;
+  final int layoutId;
 
   const ShellLayoutState({
     this.leftPanelWidth = 240,
@@ -15,6 +16,7 @@ class ShellLayoutState {
     this.showLeftPanel = true,
     this.showRightPanel = true,
     this.showBottomPanel = true,
+    this.layoutId = 0,
   });
 
   ShellLayoutState copyWith({
@@ -24,6 +26,7 @@ class ShellLayoutState {
     bool? showLeftPanel,
     bool? showRightPanel,
     bool? showBottomPanel,
+    int? layoutId,
   }) {
     return ShellLayoutState(
       leftPanelWidth: leftPanelWidth ?? this.leftPanelWidth,
@@ -32,6 +35,7 @@ class ShellLayoutState {
       showLeftPanel: showLeftPanel ?? this.showLeftPanel,
       showRightPanel: showRightPanel ?? this.showRightPanel,
       showBottomPanel: showBottomPanel ?? this.showBottomPanel,
+      layoutId: layoutId ?? this.layoutId,
     );
   }
 }
@@ -64,6 +68,17 @@ class ShellLayoutNotifier extends Notifier<ShellLayoutState> {
 
   void toggleBottomPanel() {
     state = state.copyWith(showBottomPanel: !state.showBottomPanel);
+  }
+
+  void resetLayout() {
+    // Safely retrieve current ID, protecting against hot-reload nullability bugs
+    int currentId = 0;
+    try {
+      currentId = state.layoutId;
+    } catch (_) {}
+    
+    // Creating a fresh ShellLayoutState resets all panel visibility back to true!
+    state = ShellLayoutState(layoutId: currentId + 1);
   }
 }
 

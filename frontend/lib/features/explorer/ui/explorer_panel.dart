@@ -103,101 +103,104 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               children: [
                 Expanded(
                   flex: 1,
-                  child: UiText(
-                    text: 'Explorer',
-                    variant: UiTextVariant.body,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: UiText(
+                      text: 'Explorer',
+                      variant: UiTextVariant.body,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 Flexible(
                   flex: 2,
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    reverse: true, // Scroll to the right end by default to see the collapse button
+                    reverse: true,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                      _HeaderAction(
-                        icon: _showSearch ? LucideIcons.x : LucideIcons.search,
-                        onPressed: () {
-                          setState(() {
-                            _showSearch = !_showSearch;
-                            if (!_showSearch) _searchController.clear();
-                          });
-                        },
-                        tooltip: 'Search',
-                        ui: ui,
-                      ),
-                      _HeaderAction(
-                        icon: LucideIcons.refreshCw,
-                        onPressed: () => appProvider.refreshProjectFiles(),
-                        tooltip: 'Refresh',
-                        ui: ui,
-                      ),
-                      _HeaderAction(
-                        icon: LucideIcons.filePlus,
-                        onPressed: () => appProvider.addNewFile(),
-                        tooltip: 'New File',
-                        ui: ui,
-                      ),
-                      _HeaderAction(
-                        icon: LucideIcons.folderPlus,
-                        onPressed: () {
-                          if (kIsWeb) return;
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              final controller = TextEditingController();
-                              return AlertDialog(
-                                backgroundColor: ui.colors.panel,
-                                title: Text('New Folder', style: TextStyle(color: ui.colors.textPrimary)),
-                                content: TextField(
-                                  controller: controller,
-                                  style: TextStyle(color: ui.colors.textPrimary),
-                                  decoration: InputDecoration(
-                                    hintText: 'Folder Name',
-                                    hintStyle: TextStyle(color: ui.colors.textMuted),
+                        _HeaderAction(
+                          icon: _showSearch ? LucideIcons.x : LucideIcons.search,
+                          onPressed: () {
+                            setState(() {
+                              _showSearch = !_showSearch;
+                              if (!_showSearch) _searchController.clear();
+                            });
+                          },
+                          tooltip: 'Search',
+                          ui: ui,
+                        ),
+                        _HeaderAction(
+                          icon: LucideIcons.refreshCw,
+                          onPressed: () => appProvider.refreshProjectFiles(),
+                          tooltip: 'Refresh',
+                          ui: ui,
+                        ),
+                        _HeaderAction(
+                          icon: LucideIcons.filePlus,
+                          onPressed: () => appProvider.addNewFile(),
+                          tooltip: 'New File',
+                          ui: ui,
+                        ),
+                        _HeaderAction(
+                          icon: LucideIcons.folderPlus,
+                          onPressed: () {
+                            if (kIsWeb) return;
+                            showDialog(
+                              context: context,
+                              builder: (context) {
+                                final controller = TextEditingController();
+                                return AlertDialog(
+                                  backgroundColor: ui.colors.panel,
+                                  title: Text('New Folder', style: TextStyle(color: ui.colors.textPrimary)),
+                                  content: TextField(
+                                    controller: controller,
+                                    style: TextStyle(color: ui.colors.textPrimary),
+                                    decoration: InputDecoration(
+                                      hintText: 'Folder Name',
+                                      hintStyle: TextStyle(color: ui.colors.textMuted),
+                                    ),
+                                    autofocus: true,
                                   ),
-                                  autofocus: true,
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
-                                  ),
-                                  TextButton(
-                                    onPressed: () async {
-                                      final name = controller.text;
-                                      if (name.isNotEmpty) {
-                                        final path = path_utils.join(appProvider.projectRoot, name);
-                                        await io.Directory(path).create(recursive: true);
-                                        appProvider.refreshProjectFiles();
-                                      }
-                                      if (context.mounted) {
-                                        Navigator.pop(context);
-                                      }
-                                    },
-                                    child: Text('Create', style: TextStyle(color: ui.colors.accent)),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                        tooltip: 'New Folder',
-                        ui: ui,
-                      ),
-                      _HeaderAction(
-                        icon: LucideIcons.chevronLeft,
-                        onPressed: () => ref.read(shellLayoutProvider.notifier).toggleLeftPanel(),
-                        tooltip: 'Collapse',
-                        ui: ui,
-                      ),
-                    ],
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final name = controller.text;
+                                        if (name.isNotEmpty) {
+                                          final path = path_utils.join(appProvider.projectRoot, name);
+                                          await io.Directory(path).create(recursive: true);
+                                          appProvider.refreshProjectFiles();
+                                        }
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                        }
+                                      },
+                                      child: Text('Create', style: TextStyle(color: ui.colors.accent)),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                          tooltip: 'New Folder',
+                          ui: ui,
+                        ),
+                        _HeaderAction(
+                          icon: LucideIcons.chevronLeft,
+                          onPressed: () => ref.read(shellLayoutProvider.notifier).toggleLeftPanel(),
+                          tooltip: 'Collapse',
+                          ui: ui,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
                 ),
               ],
             ),
