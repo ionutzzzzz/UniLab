@@ -46,7 +46,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   void _initControllers() {
     _horizontalController = MultiSplitViewController(areas: _buildHorizontalAreas());
     _verticalController = MultiSplitViewController(areas: [
-      Area(data: 'main'),
+      Area(data: 'main', min: 100),
       Area(data: 'bottom', size: 220, min: 100),
     ]);
   }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
@@ -57,7 +59,25 @@ class _EditorSurfaceState extends State<EditorSurface> {
       'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
     };
 
-    return ContextMenuRegion(
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          final isCtrlPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+          if (isCtrlPressed) {
+            final provider = context.read<SettingsProvider>();
+            final currentSize = provider.settings.fontSize;
+            // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
+            final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
+            if (newSize != currentSize) {
+              provider.updateSettings(provider.settings.copyWith(fontSize: newSize));
+            }
+          }
+        }
+      },
+      child: ContextMenuRegion(
       contextMenu: GenericContextMenu(
         buttonConfigs: [
           ContextMenuButtonConfig(
@@ -99,8 +119,9 @@ class _EditorSurfaceState extends State<EditorSurface> {
         data: CodeThemeData(styles: customSyntaxTheme),
         child: Container(
           color: editorBg,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
+          child: Builder(
+            builder: (context) {
+              final viewportWidth = MediaQuery.of(context).size.width;
               final codeField = CodeField(
                 controller: widget.controller,
                 focusNode: widget.focusNode,
@@ -137,10 +158,11 @@ class _EditorSurfaceState extends State<EditorSurface> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: IntrinsicWidth(
-                      child: codeField,
+                    constraints: BoxConstraints(
+                      minWidth: viewportWidth,
+                      maxWidth: 5000, 
                     ),
+                    child: codeField,
                   ),
                 ),
               );
@@ -148,6 +170,6 @@ class _EditorSurfaceState extends State<EditorSurface> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
