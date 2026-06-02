@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as p;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/editor_models.dart';
 import '../../../theme/ui_theme.dart';
@@ -8,6 +9,7 @@ import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
 import '../../../widgets/plot_viewer/plot_widget.dart';
 import '../../../providers/riverpod_providers.dart';
+import '../../../providers/app_provider.dart';
 import 'figure_view.dart';
 
 class PlotsGallery extends ConsumerStatefulWidget {
@@ -91,7 +93,13 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
               ),
               UiIconButton(icon: LucideIcons.layoutGrid, tooltip: 'Grid View', size: 24, iconSize: 14),
               SizedBox(width: ui.spacing.xs),
-              UiIconButton(icon: LucideIcons.trash2, tooltip: 'Clear All', size: 24, iconSize: 14),
+              UiIconButton(
+                icon: LucideIcons.trash2, 
+                tooltip: 'Clear All', 
+                size: 24, 
+                iconSize: 14,
+                onPressed: () => p.Provider.of<AppProvider>(context, listen: false).clearPlots(),
+              ),
             ],
           ),
         ),

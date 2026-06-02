@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import '../providers/settings_provider.dart';
+import '../providers/app_provider.dart';
 import '../theme/ui_theme.dart';
 import '../theme/plot_colormaps.dart';
 import '../theme/syntax_themes.dart';
@@ -27,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'title': 'Shortcuts', 'icon': LucideIcons.keyboard},
     {'title': 'Network', 'icon': LucideIcons.network},
     {'title': 'Security', 'icon': LucideIcons.shieldCheck},
+    {'title': 'Backend', 'icon': LucideIcons.server},
   ];
 
   @override
@@ -179,8 +181,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case 3: return _buildShortcutsSettings(ui, settingsProvider);
       case 4: return _buildNetworkSettings(ui, settingsProvider);
       case 5: return _buildSecuritySettings(ui, settingsProvider);
+      case 6: return _buildBackendSettings(ui);
       default: return _buildComingSoon(ui);
     }
+  }
+
+  Widget _buildBackendSettings(UiTheme ui) {
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, _) {
+        final info = appProvider.serverInfo;
+        final capabilities = (info['capabilities'] as List<dynamic>?)?.cast<String>() ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionHeader(ui, 'Server Information'),
+            _buildSettingItem(
+              ui,
+              'Server Name',
+              'The name of the connected backend engine.',
+              UiText(text: info['name'] ?? 'Disconnected', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+            ),
+            _buildSettingItem(
+              ui,
+              'Version',
+              'Current version of the backend server.',
+              UiText(text: info['version'] ?? 'N/A', variant: UiTextVariant.body),
+            ),
+            _buildSettingItem(
+              ui,
+              'Status',
+              'Current operational status of the server.',
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: info['status'] == 'active' ? Colors.green : Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  UiText(text: info['status']?.toUpperCase() ?? 'OFFLINE', variant: UiTextVariant.label),
+                ],
+              ),
+            ),
+            SizedBox(height: ui.spacing.xl),
+            _buildSectionHeader(ui, 'Capabilities'),
+            if (capabilities.isEmpty)
+              UiText(text: 'No capabilities reported', variant: UiTextVariant.label, color: ui.colors.textMuted)
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: capabilities.map((cap) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: ui.colors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: ui.colors.accent.withValues(alpha: 0.3)),
+                  ),
+                  child: UiText(
+                    text: cap.toUpperCase(),
+                    variant: UiTextVariant.label,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: ui.colors.accent,
+                  ),
+                )).toList(),
+              ),
+            SizedBox(height: ui.spacing.xl),
+            _buildSectionHeader(ui, 'Session Control'),
+            UiButton(
+              label: 'Restart Backend Server',
+              variant: UiButtonVariant.secondary,
+              icon: LucideIcons.refreshCw,
+              onPressed: () {
+                // TODO: Implement backend restart
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildAppearanceSettings(UiTheme ui, SettingsProvider settingsProvider) {

@@ -84,6 +84,10 @@ class UniLabStatusBar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (appProvider.serverInfo['version'] != null) ...[
+                _buildStatusItem('v${appProvider.serverInfo['version']}'),
+                _buildDivider(),
+              ],
               _buildStatusItem('Ln 1, Col 1'),
               _buildDivider(),
               _buildStatusItem('CRLF'),
