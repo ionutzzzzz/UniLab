@@ -49,11 +49,11 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   List<Area> _buildHorizontalAreas() {
     List<Area> areas = [];
     if (widget.showLeftPanel) {
-      areas.add(Area(size: 240, min: 150, data: 'left'));
+      areas.add(Area(size: 240, min: 50, data: 'left'));
     }
     areas.add(Area(data: 'center'));
     if (widget.showRightPanel) {
-      areas.add(Area(size: 280, min: 200, data: 'right'));
+      areas.add(Area(size: 280, min: 50, data: 'right'));
     }
     return areas;
   }
@@ -82,6 +82,38 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     _horizontalController?.dispose();
     _verticalController?.dispose();
     super.dispose();
+  }
+
+  bool _leftWantsToClose = false;
+  bool _rightWantsToClose = false;
+
+  Widget _buildLeftPanelWrapper() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Track size without interrupting the active drag
+        _leftWantsToClose = constraints.maxWidth < 100;
+        return widget.leftPanel;
+      },
+    );
+  }
+
+  Widget _buildRightPanelWrapper() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Track size without interrupting the active drag
+        _rightWantsToClose = constraints.maxWidth < 100;
+        return widget.rightPanel;
+      },
+    );
+  }
+
+  void _onHorizontalDragEnd(int index) {
+    if (_leftWantsToClose && widget.showLeftPanel) {
+      ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+    }
+    if (_rightWantsToClose && widget.showRightPanel) {
+      ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+    }
   }
 
   @override
@@ -126,10 +158,11 @@ class _SplitShellState extends ConsumerState<SplitShell> {
       child: MultiSplitView(
         key: _horizontalKey,
         controller: _horizontalController,
+        onDividerDragEnd: _onHorizontalDragEnd,
         builder: (context, area) {
-          if (area.data == 'left') return widget.leftPanel;
+          if (area.data == 'left') return _buildLeftPanelWrapper();
           if (area.data == 'center') return centerContent;
-          if (area.data == 'right') return widget.rightPanel;
+          if (area.data == 'right') return _buildRightPanelWrapper();
           return const SizedBox.shrink();
         },
       ),

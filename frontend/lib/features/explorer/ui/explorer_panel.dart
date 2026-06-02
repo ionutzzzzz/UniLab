@@ -12,6 +12,7 @@ import '../../../widgets/ui_icon_button.dart';
 import '../../../providers/app_provider.dart';
 import 'package:flutter/services.dart';
 import '../../../widgets/ui_glass_container.dart';
+import '../../../core/layout/shell_layout_state.dart';
 
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
@@ -99,24 +100,25 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    UiText(
-                      text: 'Explorer',
-                      variant: UiTextVariant.body,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
-                    ),
-                  ],
+                Expanded(
+                  flex: 1,
+                  child: UiText(
+                    text: 'Explorer',
+                    variant: UiTextVariant.body,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
+                Flexible(
+                  flex: 2,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true, // Scroll to the right end by default to see the collapse button
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       _HeaderAction(
                         icon: _showSearch ? LucideIcons.x : LucideIcons.search,
                         onPressed: () {
@@ -187,23 +189,37 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                         tooltip: 'New Folder',
                         ui: ui,
                       ),
+                      _HeaderAction(
+                        icon: LucideIcons.chevronLeft,
+                        onPressed: () => ref.read(shellLayoutProvider.notifier).toggleLeftPanel(),
+                        tooltip: 'Collapse',
+                        ui: ui,
+                      ),
                     ],
                   ),
+                ),
                 ),
               ],
             ),
           ),
           // Tree View
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.symmetric(vertical: ui.spacing.xs),
-              children: [
-                _buildSectionHeader(ui, 'PROJECT'),
-                if (appProvider.projectFiles.isEmpty)
-                  _buildEmptyState(ui)
-                else
-                  ..._buildProjectTree(appProvider.projectFiles, 0, ui, appProvider),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 50) {
+                  return const SizedBox.shrink();
+                }
+                return ListView(
+                  padding: EdgeInsets.symmetric(vertical: ui.spacing.xs),
+                  children: [
+                    _buildSectionHeader(ui, 'PROJECT'),
+                    if (appProvider.projectFiles.isEmpty)
+                      _buildEmptyState(ui)
+                    else
+                      ..._buildProjectTree(appProvider.projectFiles, 0, ui, appProvider),
+                  ],
+                );
+              }
             ),
           ),
         ],
@@ -516,46 +532,53 @@ class _FileTreeRowState extends State<_FileTreeRow> {
   }
 
   Widget _buildRowContent(UiTheme ui, double paddingLeft, bool isSelected, bool isHighlighted) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 100),
-      height: 24,
-      padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
-      decoration: BoxDecoration(
-        color: isSelected 
-          ? ui.colors.selected
-          : (isHighlighted ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent),
-      ),
-      child: Row(
-        children: [
-          if (widget.isDir)
-            Icon(
-              widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-              size: 12,
-              color: ui.colors.textMuted,
-            )
-          else
-            const SizedBox(width: 12),
-          const SizedBox(width: 6),
-          Icon(
-            widget.isDir 
-              ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
-              : _getFileIcon(widget.name),
-            size: 14,
-            color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < paddingLeft + 30) {
+          return const SizedBox.shrink();
+        }
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          height: 24,
+          padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
+          decoration: BoxDecoration(
+            color: isSelected 
+              ? ui.colors.selected
+              : (isHighlighted ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: UiText(
-              text: widget.name,
-              variant: UiTextVariant.body,
-              fontSize: 12,
-              color: (isSelected || isHighlighted) ? ui.colors.textPrimary : ui.colors.textSecondary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          child: Row(
+            children: [
+              if (widget.isDir)
+                Icon(
+                  widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                  size: 12,
+                  color: ui.colors.textMuted,
+                )
+              else
+                const SizedBox(width: 12),
+              const SizedBox(width: 6),
+              Icon(
+                widget.isDir 
+                  ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
+                  : _getFileIcon(widget.name),
+                size: 14,
+                color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: UiText(
+                  text: widget.name,
+                  variant: UiTextVariant.body,
+                  fontSize: 12,
+                  color: (isSelected || isHighlighted) ? ui.colors.textPrimary : ui.colors.textSecondary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      }
     );
   }
 
