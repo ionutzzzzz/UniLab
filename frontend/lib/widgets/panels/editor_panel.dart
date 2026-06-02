@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_highlight/themes/vs2015.dart';
@@ -162,19 +164,47 @@ class _EditorPanelState extends State<EditorPanel> {
                   ],
                 ),
               ),
-              // Code Editor
-              Expanded(
-                                      child: activeFile != null
-                                    ? Container(
-                                        color: ui.colors.canvas,
-                                        child: Theme(
-                                          data: Theme.of(context).copyWith(
-                                            hoverColor: Colors.transparent,
-                                          ),
+                            Expanded(
+                              child: activeFile != null
+                                  ? Container(
+                                      color: ui.colors.canvas,
+                                      child: Theme(
+                                        data: Theme.of(context).copyWith(
+                                          hoverColor: Colors.transparent,
+                                        ),
+                                        child: Listener(
+                                          onPointerSignal: (pointerSignal) {
+                                            if (pointerSignal is PointerScrollEvent) {
+                                              final isCtrlPressed = HardwareKeyboard
+                                                      .instance.logicalKeysPressed
+                                                      .contains(LogicalKeyboardKey.controlLeft) ||
+                                                  HardwareKeyboard.instance.logicalKeysPressed
+                                                      .contains(LogicalKeyboardKey.controlRight) ||
+                                                  HardwareKeyboard.instance.logicalKeysPressed
+                                                      .contains(LogicalKeyboardKey.metaLeft) ||
+                                                  HardwareKeyboard.instance.logicalKeysPressed
+                                                      .contains(LogicalKeyboardKey.metaRight);
+                                              if (isCtrlPressed) {
+                                                final currentSize =
+                                                    settingsProvider.settings.fontSize;
+                                                final newSize = (currentSize -
+                                                        (pointerSignal.scrollDelta.dy > 0
+                                                            ? 1
+                                                            : -1))
+                                                    .clamp(8.0, 48.0);
+                                                if (newSize != currentSize) {
+                                                  settingsProvider.updateSettings(
+                                                      settingsProvider.settings
+                                                          .copyWith(fontSize: newSize));
+                                                }
+                                              }
+                                            }
+                                          },
                                           child: CodeTheme(
                                             data: CodeThemeData(styles: vs2015Theme),
-                                            child: LayoutBuilder(
-                                              builder: (context, constraints) {
+                                            child: Builder(
+                                              builder: (context) {
+                                                final viewportWidth = MediaQuery.of(context).size.width;
                                                 final codeField = CodeField(
                                                   controller: _getOrCreateController(activeFile),
                                                   wrap: settingsProvider.settings.wordWrap,
@@ -192,7 +222,8 @@ class _EditorPanelState extends State<EditorPanel> {
                                                     background: ui.colors.canvas,
                                                     textStyle: TextStyle(
                                                       color: ui.colors.textMuted,
-                                                      fontSize: settingsProvider.settings.fontSize - 2,
+                                                      fontSize:
+                                                          settingsProvider.settings.fontSize - 2,
                                                       fontFamily: 'JetBrains Mono',
                                                       height: 1.5,
                                                     ),
@@ -201,21 +232,22 @@ class _EditorPanelState extends State<EditorPanel> {
                                                     showLineNumbers: true,
                                                   ),
                                                 );
-                
+
                                                 if (settingsProvider.settings.wordWrap) {
                                                   return SingleChildScrollView(
                                                     child: codeField,
                                                   );
                                                 }
-                
+
                                                 return SingleChildScrollView(
                                                   child: SingleChildScrollView(
                                                     scrollDirection: Axis.horizontal,
                                                     child: ConstrainedBox(
-                                                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                                                      child: IntrinsicWidth(
-                                                        child: codeField,
+                                                      constraints: BoxConstraints(
+                                                        minWidth: viewportWidth,
+                                                        maxWidth: 5000,
                                                       ),
+                                                      child: codeField,
                                                     ),
                                                   ),
                                                 );
@@ -223,9 +255,9 @@ class _EditorPanelState extends State<EditorPanel> {
                                             ),
                                           ),
                                         ),
-                                      )
-                                    : Center(
-                        child: Column(
+                                      ),
+                                    )
+                                  : Center(                        child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
