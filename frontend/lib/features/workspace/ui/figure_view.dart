@@ -1,26 +1,29 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../models/editor_models.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
+import '../../../widgets/plot_viewer/plot_widget.dart';
 
 class FigureView extends StatelessWidget {
   const FigureView({
     super.key,
-    required this.title,
+    required this.plotData,
     required this.onBack,
   });
 
-  final String title;
+  final PlotData plotData;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
+
     return Column(
       children: [
-        // Figure Toolbar (Inspired by matlab.html)
+        // Figure Toolbar
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm, vertical: 4),
           decoration: BoxDecoration(
@@ -39,7 +42,7 @@ class FigureView extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: UiText(
-                  text: title,
+                  text: plotData.title,
                   variant: UiTextVariant.label,
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
@@ -59,7 +62,7 @@ class FigureView extends StatelessWidget {
             ],
           ),
         ),
-        
+
         // Secondary Toolbar (Format)
         Container(
           height: 32,
@@ -91,23 +94,75 @@ class FigureView extends StatelessWidget {
               borderRadius: ui.spacing.radiusLg,
               border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
             ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.lineChart, size: 64, color: ui.colors.accent.withValues(alpha: 0.4)),
-                  const SizedBox(height: 24),
-                  UiText(
-                    text: 'High-Fidelity Rendering: $title',
-                    variant: UiTextVariant.body,
-                    color: ui.colors.textMuted,
-                  ),
-                ],
-              ),
-            ),
+            child: _buildPlotContent(context, ui),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPlotContent(BuildContext context, UiTheme ui) {
+    // Case 1: Base64 PNG image
+    if (plotData.imageDataUri != null) {
+      return InteractiveViewer(
+        child: Image.memory(
+          base64Decode(plotData.imageDataUri!.split(',').last),
+          fit: BoxFit.contain,
+          errorBuilder: (_, e, __) => Center(
+            child: UiText(text: 'Image error: $e', color: ui.colors.danger),
+          ),
+        ),
+      );
+    }
+
+    // Case 2: Structured line/scatter data
+    if (plotData.xData.isNotEmpty &&
+        (plotData.type == 'line' || plotData.type == 'scatter' || plotData.type == 'plot')) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: PlotWidget(
+          title: plotData.title,
+          data: List.generate(
+            plotData.xData.length,
+            (i) => {'x': plotData.xData[i], 'y': plotData.yData[i]},
+          ),
+        ),
+      );
+    }
+
+    // Case 3: 3D plots (not yet supported)
+    if (plotData.type == 'surf' || plotData.type == 'mesh') {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.box, size: 48, color: ui.colors.textDisabled),
+            const SizedBox(height: 16),
+            UiText(
+              text: '3D surface rendering not yet supported.\nUse the PNG output.',
+              variant: UiTextVariant.body,
+              textAlign: TextAlign.center,
+              color: ui.colors.textMuted,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Fallback
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.lineChart, size: 64, color: ui.colors.accent.withValues(alpha: 0.4)),
+          const SizedBox(height: 24),
+          UiText(
+            text: plotData.title,
+            variant: UiTextVariant.body,
+            color: ui.colors.textMuted,
+          ),
+        ],
+      ),
     );
   }
 }

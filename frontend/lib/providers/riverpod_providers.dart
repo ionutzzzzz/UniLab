@@ -119,6 +119,11 @@ class PlotGalleryNotifier extends StateNotifier<List<PlotData>> {
   void clearAll() {
     state = [];
   }
+
+  /// Replace all plots with a new list (called from AppProvider).
+  void replaceAll(List<PlotData> plots) {
+    state = plots;
+  }
 }
 
 class KeyboardShortcutsNotifier extends StateNotifier<Map<String, String>> {

@@ -218,6 +218,7 @@ class ExecutionResult {
   final String stderr;
   final Map<String, dynamic> variables;
   final List<String> plots;
+  final Map<String, dynamic> extra;
 
   ExecutionResult({
     required this.success,
@@ -225,6 +226,7 @@ class ExecutionResult {
     required this.stderr,
     required this.variables,
     required this.plots,
+    this.extra = const {},
   });
 
   factory ExecutionResult.fromJson(Map<String, dynamic> json) {
@@ -234,6 +236,7 @@ class ExecutionResult {
       stderr: json['stderr'] ?? '',
       variables: json['variables_snapshot'] ?? {},
       plots: List<String>.from(json['plots'] ?? []),
+      extra: Map<String, dynamic>.from(json['extra'] ?? {}),
     );
   }
 }

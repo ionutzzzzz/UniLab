@@ -105,11 +105,12 @@ class ConsoleMessage {
 class PlotData {
   final String id;
   final String title;
-  final String type; // 'line', 'scatter', 'bar', 'surface', etc.
+  final String type; // 'line', 'scatter', 'bar', 'surface', 'image', etc.
   final List<double> xData;
   final List<double> yData;
   final List<List<double>>? zData; // For 3D plots
   final String? fileName;
+  final String? imageDataUri; // For base64 PNG images from backend
   DateTime createdAt;
 
   PlotData({
@@ -120,6 +121,7 @@ class PlotData {
     required this.yData,
     this.zData,
     this.fileName,
+    this.imageDataUri,
     DateTime? createdAt,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -132,6 +134,7 @@ class PlotData {
     List<double>? yData,
     List<List<double>>? zData,
     String? fileName,
+    String? imageDataUri,
     DateTime? createdAt,
   }) {
     return PlotData(
@@ -142,6 +145,7 @@ class PlotData {
       yData: yData ?? this.yData,
       zData: zData ?? this.zData,
       fileName: fileName ?? this.fileName,
+      imageDataUri: imageDataUri ?? this.imageDataUri,
       createdAt: createdAt ?? this.createdAt,
     );
   }

@@ -68,108 +68,102 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final variablesAsync = ref.watch(workspaceVariablesProvider);
+    final variables = ref.watch(workspaceVariablesProvider);
 
-    return variablesAsync.when(
-      data: (variables) {
-        if (variables.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: ui.colors.panelHeader.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),
-                  ),
-                  const SizedBox(height: 20),
-                  UiText(
-                    text: 'Workspace is empty',
-                    variant: UiTextVariant.body,
-                    fontWeight: FontWeight.bold,
-                    color: ui.colors.textSecondary,
-                  ),
-                  const SizedBox(height: 8),
-                  UiText(
-                    text: 'Execute a script to see variables and matrices populated here.',
-                    variant: UiTextVariant.label,
-                    color: ui.colors.textMuted,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        final rows = variables.map((v) => PlutoRow(
-          cells: {
-            'name': PlutoCell(value: v.name),
-            'value': PlutoCell(value: v.value),
-            'size': PlutoCell(value: v.size),
-            'class': PlutoCell(value: v.typeClass),
-            'min': PlutoCell(value: v.min),
-            'max': PlutoCell(value: v.max),
-          },
-        )).toList();
-
-        return Container(
-          color: ui.colors.canvas,
-          child: PlutoGrid(
-            columns: columns,
-            rows: rows,
-            onLoaded: (PlutoGridOnLoadedEvent event) {
-              stateManager = event.stateManager;
-              stateManager!.setShowColumnFilter(false);
-            },
-            configuration: PlutoGridConfiguration(
-              columnSize: const PlutoGridColumnSizeConfig(
-                autoSizeMode: PlutoAutoSizeMode.equal, 
-              ),
-              style: PlutoGridStyleConfig(
-                enableGridBorderShadow: false,
-                gridBackgroundColor: ui.colors.canvas,
-                rowColor: ui.colors.canvas,
-                oddRowColor: ui.colors.canvas,
-                evenRowColor: ui.colors.canvas,
-                activatedColor: ui.colors.hover.withValues(alpha: 0.5),
-                checkedColor: ui.colors.selected,
-                cellColorInEditState: ui.colors.canvas,
-                cellColorInReadOnlyState: ui.colors.canvas,
-                columnTextStyle: ui.typography.label.copyWith(
-                  color: ui.colors.textMuted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+    if (variables.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: ui.colors.panelHeader.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
                 ),
-                cellTextStyle: ui.typography.body.copyWith(
-                  color: ui.colors.textPrimary,
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono',
-                ),
-                borderColor: ui.colors.divider.withValues(alpha: 0.3),
-                gridBorderColor: ui.colors.divider.withValues(alpha: 0.3),
-                activatedBorderColor: ui.colors.accent.withValues(alpha: 0.5),
-                inactivatedBorderColor: ui.colors.divider.withValues(alpha: 0.2),
-                menuBackgroundColor: ui.colors.canvas,
-                columnFilterHeight: 0,
-                rowHeight: 24,
-                columnHeight: 28,
-                enableColumnBorderVertical: true,
-                enableColumnBorderHorizontal: false,
-                enableCellBorderVertical: true,
-                enableCellBorderHorizontal: true,
+                child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),
               ),
-            ),
+              const SizedBox(height: 20),
+              UiText(
+                text: 'Workspace is empty',
+                variant: UiTextVariant.body,
+                fontWeight: FontWeight.bold,
+                color: ui.colors.textSecondary,
+              ),
+              const SizedBox(height: 8),
+              UiText(
+                text: 'Execute a script to see variables and matrices populated here.',
+                variant: UiTextVariant.label,
+                color: ui.colors.textMuted,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-        );
+        ),
+      );
+    }
+
+    final rows = variables.map((v) => PlutoRow(
+      cells: {
+        'name': PlutoCell(value: v.name),
+        'value': PlutoCell(value: v.value),
+        'size': PlutoCell(value: v.size),
+        'class': PlutoCell(value: v.typeClass),
+        'min': PlutoCell(value: v.min),
+        'max': PlutoCell(value: v.max),
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(child: UiText(text: 'Error: $err', color: ui.colors.danger)),
+    )).toList();
+
+    return Container(
+      color: ui.colors.canvas,
+      child: PlutoGrid(
+        columns: columns,
+        rows: rows,
+        onLoaded: (PlutoGridOnLoadedEvent event) {
+          stateManager = event.stateManager;
+          stateManager!.setShowColumnFilter(false);
+        },
+        configuration: PlutoGridConfiguration(
+          columnSize: const PlutoGridColumnSizeConfig(
+            autoSizeMode: PlutoAutoSizeMode.equal,
+          ),
+          style: PlutoGridStyleConfig(
+            enableGridBorderShadow: false,
+            gridBackgroundColor: ui.colors.canvas,
+            rowColor: ui.colors.canvas,
+            oddRowColor: ui.colors.canvas,
+            evenRowColor: ui.colors.canvas,
+            activatedColor: ui.colors.hover.withValues(alpha: 0.5),
+            checkedColor: ui.colors.selected,
+            cellColorInEditState: ui.colors.canvas,
+            cellColorInReadOnlyState: ui.colors.canvas,
+            columnTextStyle: ui.typography.label.copyWith(
+              color: ui.colors.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+            cellTextStyle: ui.typography.body.copyWith(
+              color: ui.colors.textPrimary,
+              fontSize: 11,
+              fontFamily: 'JetBrains Mono',
+            ),
+            borderColor: ui.colors.divider.withValues(alpha: 0.3),
+            gridBorderColor: ui.colors.divider.withValues(alpha: 0.3),
+            activatedBorderColor: ui.colors.accent.withValues(alpha: 0.5),
+            inactivatedBorderColor: ui.colors.divider.withValues(alpha: 0.2),
+            menuBackgroundColor: ui.colors.canvas,
+            columnFilterHeight: 0,
+            rowHeight: 24,
+            columnHeight: 28,
+            enableColumnBorderVertical: true,
+            enableColumnBorderHorizontal: false,
+            enableCellBorderVertical: true,
+            enableCellBorderHorizontal: true,
+          ),
+        ),
+      ),
     );
   }
 }

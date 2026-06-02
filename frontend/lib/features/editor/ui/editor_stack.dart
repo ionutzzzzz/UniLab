@@ -4,10 +4,12 @@ import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:highlight/languages/matlab.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path_utils;
+import 'package:undo/undo.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
+import '../../../models/models.dart';
 import '../../../utils/file_manager.dart';
 import 'editor_tab_bar.dart';
 import 'editor_breadcrumbs.dart';
@@ -28,21 +30,37 @@ class EditorStack extends StatefulWidget {
 }
 
 class _EditorStackState extends State<EditorStack> {
-  late CodeController _controller;
+  final Map<String, CodeController> _controllers = {};
+  final Map<String, ChangeStack> _undoStacks = {};
   final FocusNode _focusNode = FocusNode();
   bool _showFindReplace = false;
   Timer? _autoSaveTimer;
+  Timer? _undoTimer;
   String? _lastFileId;
   StreamSubscription? _actionSubscription;
+  bool _isUndoingOrRedoing = false;
+
+  CodeController _getOrCreateController(UniLabFile file) {
+    if (!_controllers.containsKey(file.id)) {
+      final controller = CodeController(
+        text: file.content,
+        language: matlab,
+      );
+      _controllers[file.id] = controller;
+      _undoStacks[file.id] = ChangeStack();
+    }
+    return _controllers[file.id]!;
+  }
+
+  CodeController? get _activeController {
+    final activeFile = context.read<AppProvider>().activeFile;
+    if (activeFile == null) return null;
+    return _getOrCreateController(activeFile);
+  }
 
   @override
   void initState() {
     super.initState();
-    _controller = CodeController(
-      text: '',
-      language: matlab,
-    );
-    _controller.addListener(_onCodeChanged);
 
     // Listen to actions from Ribbon via AppProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -53,12 +71,34 @@ class _EditorStackState extends State<EditorStack> {
           debugPrint('EditorStack: Not mounted, ignoring action');
           return;
         }
+        
+        final activeFile = appProvider.activeFile;
+        if (activeFile == null) return;
+        
+        final controller = _controllers[activeFile.id];
+        final stack = _undoStacks[activeFile.id];
+        if (controller == null || stack == null) return;
+
         switch (action) {
           case 'editor.find':
             _toggleFindReplace();
             break;
           case 'editor.gotoLine':
             _showGoToLineDialog();
+            break;
+          case 'editor.undo':
+            if (stack.canUndo) {
+              _isUndoingOrRedoing = true;
+              stack.undo();
+              _isUndoingOrRedoing = false;
+            }
+            break;
+          case 'editor.redo':
+            if (stack.canRedo) {
+              _isUndoingOrRedoing = true;
+              stack.redo();
+              _isUndoingOrRedoing = false;
+            }
             break;
         }
       });
@@ -68,6 +108,8 @@ class _EditorStackState extends State<EditorStack> {
   void _showGoToLineDialog() {
     final ui = UiTheme.of(context);
     final controller = TextEditingController();
+    final activeController = _activeController;
+    if (activeController == null) return;
     
     showDialog(
       context: context,
@@ -86,7 +128,7 @@ class _EditorStackState extends State<EditorStack> {
           onSubmitted: (val) {
             final line = int.tryParse(val);
             if (line != null) {
-              _goToLine(line);
+              _goToLine(activeController, line);
             }
             Navigator.pop(context);
           },
@@ -100,7 +142,7 @@ class _EditorStackState extends State<EditorStack> {
             onPressed: () {
               final line = int.tryParse(controller.text);
               if (line != null) {
-                _goToLine(line);
+                _goToLine(activeController, line);
               }
               Navigator.pop(context);
             },
@@ -111,9 +153,9 @@ class _EditorStackState extends State<EditorStack> {
     );
   }
 
-  void _goToLine(int line) {
+  void _goToLine(CodeController controller, int line) {
     if (line < 1) return;
-    final text = _controller.text;
+    final text = controller.text;
     final lines = text.split('\n');
     if (line > lines.length) return;
 
@@ -122,7 +164,7 @@ class _EditorStackState extends State<EditorStack> {
       pos += lines[i].length + 1;
     }
     
-    _controller.selection = TextSelection.collapsed(offset: pos);
+    controller.selection = TextSelection.collapsed(offset: pos);
     _focusNode.requestFocus();
   }
 
@@ -131,12 +173,43 @@ class _EditorStackState extends State<EditorStack> {
     final activeFile = appProvider.activeFile;
     if (activeFile == null) return;
 
+    final fileId = activeFile.id;
+    final controller = _controllers[fileId];
+    final stack = _undoStacks[fileId];
+    if (controller == null || stack == null) return;
+
     // Only handle changes for text files
     if (activeFile.path.isNotEmpty && !UniLabFileManager.isTextFile(activeFile.path)) {
       return;
     }
 
-    appProvider.updateActiveFileContent(_controller.text);
+    if (!_isUndoingOrRedoing) {
+       _undoTimer?.cancel();
+       final oldText = activeFile.content;
+       final newText = controller.text;
+       
+       if (oldText != newText) {
+          _undoTimer = Timer(const Duration(milliseconds: 500), () {
+             stack.add(Change(
+               oldText,
+               () {
+                  _isUndoingOrRedoing = true;
+                  controller.text = newText;
+                  appProvider.updateFileContent(fileId, newText);
+                  _isUndoingOrRedoing = false;
+               },
+               (old) {
+                  _isUndoingOrRedoing = true;
+                  controller.text = old as String;
+                  appProvider.updateFileContent(fileId, old);
+                  _isUndoingOrRedoing = false;
+               },
+             ));
+          });
+       }
+    }
+
+    appProvider.updateFileContent(fileId, controller.text);
 
     final settings = context.read<SettingsProvider>().settings;
     if (settings.autoSave) {
@@ -151,20 +224,34 @@ class _EditorStackState extends State<EditorStack> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final activeFile = context.watch<AppProvider>().activeFile;
-    if (activeFile != null && activeFile.id != _lastFileId) {
+    
+    if (activeFile != null) {
+      if (_lastFileId != null && _controllers.containsKey(_lastFileId) && _lastFileId != activeFile.id) {
+        _controllers[_lastFileId]!.removeListener(_onCodeChanged);
+      }
+      
+      final controller = _getOrCreateController(activeFile);
+      
+      // Sync from provider if not modified by editor
+      if (controller.text != activeFile.content && !activeFile.isModified) {
+         controller.text = activeFile.content;
+      }
+      
+      if (_lastFileId != activeFile.id) {
+        controller.addListener(_onCodeChanged);
+      }
       _lastFileId = activeFile.id;
-      _controller.removeListener(_onCodeChanged);
-      _controller.text = activeFile.content;
-      _controller.addListener(_onCodeChanged);
     }
   }
 
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
+    _undoTimer?.cancel();
     _actionSubscription?.cancel();
-    _controller.removeListener(_onCodeChanged);
-    _controller.dispose();
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
     _focusNode.dispose();
     super.dispose();
   }
@@ -186,6 +273,7 @@ class _EditorStackState extends State<EditorStack> {
     }
 
     final activeFile = appProvider.activeFile!;
+    final controller = _getOrCreateController(activeFile);
     
     final tabs = appProvider.openFiles.map((f) => EditorTabModel(
       id: f.id,
@@ -210,7 +298,7 @@ class _EditorStackState extends State<EditorStack> {
         debugPrint('EditorStack: Unknown or binary file type for path: ${activeFile.path}. Falling back to text editor.');
       }
       content = EditorSurface(
-        controller: _controller,
+        controller: controller,
         focusNode: _focusNode,
       );
       showMinimap = settings.showMinimap;
@@ -254,14 +342,14 @@ class _EditorStackState extends State<EditorStack> {
                           right: 20,
                           child: FindReplaceBar(
                             onClose: _toggleFindReplace,
-                            controller: _controller,
+                            controller: controller,
                           ),
                         ),
                     ],
                   ),
                 ),
                 if (showMinimap)
-                  _EditorMinimap(controller: _controller),
+                  _EditorMinimap(controller: controller),
               ],
             ),
           ),
