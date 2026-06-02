@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 import '../core/layout/shell_layout_state.dart';
@@ -8,16 +9,20 @@ class SplitShell extends ConsumerStatefulWidget {
   const SplitShell({
     super.key,
     required this.leftPanel,
+    required this.leftRail,
     required this.centerPanel,
     required this.rightPanel,
+    required this.rightRail,
     required this.bottomPanel,
     this.showLeftPanel = true,
     this.showRightPanel = true,
   });
 
   final Widget leftPanel;
+  final Widget leftRail;
   final Widget centerPanel;
   final Widget rightPanel;
+  final Widget rightRail;
   final Widget bottomPanel;
   final bool showLeftPanel;
   final bool showRightPanel;
@@ -50,10 +55,16 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     List<Area> areas = [];
     if (widget.showLeftPanel) {
       areas.add(Area(size: 240, min: 50, data: 'left'));
+    } else {
+      areas.add(Area(size: 48, min: 48, data: 'left_rail'));
     }
+    
     areas.add(Area(data: 'center'));
+    
     if (widget.showRightPanel) {
       areas.add(Area(size: 280, min: 50, data: 'right'));
+    } else {
+      areas.add(Area(size: 48, min: 48, data: 'right_rail'));
     }
     return areas;
   }
@@ -84,15 +95,47 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     super.dispose();
   }
 
-  bool _leftWantsToClose = false;
-  bool _rightWantsToClose = false;
+  void _resetCursor() {
+    // Attempt to reset the stuck resize cursor when the divider is unmounted mid-drag
+    SystemChannels.mouseCursor.invokeMethod<void>(
+      'activateSystemCursor',
+      <String, dynamic>{
+        'kind': 'basic',
+        'device': 1,
+      },
+    ).catchError((_) {});
+  }
 
   Widget _buildLeftPanelWrapper() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Track size without interrupting the active drag
-        _leftWantsToClose = constraints.maxWidth < 100;
+        if (constraints.maxWidth <= 100 && widget.showLeftPanel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (ref.read(shellLayoutProvider).showLeftPanel) {
+              _resetCursor();
+              ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+            }
+          });
+          return const SizedBox.shrink();
+        }
         return widget.leftPanel;
+      },
+    );
+  }
+
+  Widget _buildLeftRailWrapper() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 60 && !widget.showLeftPanel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!ref.read(shellLayoutProvider).showLeftPanel) {
+              _resetCursor();
+              ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+            }
+          });
+          return const SizedBox.shrink();
+        }
+        return widget.leftRail;
       },
     );
   }
@@ -100,26 +143,44 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   Widget _buildRightPanelWrapper() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Track size without interrupting the active drag
-        _rightWantsToClose = constraints.maxWidth < 100;
+        if (constraints.maxWidth <= 100 && widget.showRightPanel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (ref.read(shellLayoutProvider).showRightPanel) {
+              _resetCursor();
+              ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+            }
+          });
+          return const SizedBox.shrink();
+        }
         return widget.rightPanel;
       },
     );
   }
 
-  void _onHorizontalDragEnd(int index) {
-    if (_leftWantsToClose && widget.showLeftPanel) {
-      ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
-    }
-    if (_rightWantsToClose && widget.showRightPanel) {
-      ref.read(shellLayoutProvider.notifier).toggleRightPanel();
-    }
+  Widget _buildRightRailWrapper() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 60 && !widget.showRightPanel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!ref.read(shellLayoutProvider).showRightPanel) {
+              _resetCursor();
+              ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+            }
+          });
+          return const SizedBox.shrink();
+        }
+        return widget.rightRail;
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final layoutState = ref.watch(shellLayoutProvider);
+
+    // Update vertical areas based on bottom panel visibility
+    _verticalController?.areas = _buildVerticalAreas(layoutState.showBottomPanel);
 
     // Update vertical areas based on bottom panel visibility
     _verticalController?.areas = _buildVerticalAreas(layoutState.showBottomPanel);
@@ -158,11 +219,12 @@ class _SplitShellState extends ConsumerState<SplitShell> {
       child: MultiSplitView(
         key: _horizontalKey,
         controller: _horizontalController,
-        onDividerDragEnd: _onHorizontalDragEnd,
         builder: (context, area) {
           if (area.data == 'left') return _buildLeftPanelWrapper();
+          if (area.data == 'left_rail') return _buildLeftRailWrapper();
           if (area.data == 'center') return centerContent;
           if (area.data == 'right') return _buildRightPanelWrapper();
+          if (area.data == 'right_rail') return _buildRightRailWrapper();
           return const SizedBox.shrink();
         },
       ),

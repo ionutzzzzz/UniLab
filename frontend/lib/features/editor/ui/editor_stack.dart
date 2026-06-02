@@ -218,54 +218,61 @@ class _EditorStackState extends State<EditorStack> {
 
     return Container(
       color: ui.colors.canvas,
-      child: Column(
-        children: [
-          EditorTabBar(
-            tabs: tabs,
-            onTabTap: (id) {
-              final index = appProvider.openFiles.indexWhere((f) => f.id == id);
-              appProvider.setActiveFile(index);
-            },
-            onTabClose: (id) {
-              final index = appProvider.openFiles.indexWhere((f) => f.id == id);
-              appProvider.closeFile(index);
-            },
-            onNewTab: () => appProvider.addNewFile(),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight < 50) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            children: [
+              EditorTabBar(
+                tabs: tabs,
+                onTabTap: (id) {
+                  final index = appProvider.openFiles.indexWhere((f) => f.id == id);
+                  appProvider.setActiveFile(index);
+                },
+                onTabClose: (id) {
+                  final index = appProvider.openFiles.indexWhere((f) => f.id == id);
+                  appProvider.closeFile(index);
+                },
+                onNewTab: () => appProvider.addNewFile(),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Stack(
                         children: [
-                          EditorBreadcrumbs(
-                            pathSegments: activeFile.path.isNotEmpty 
-                                ? path_utils.split(activeFile.path)
-                                : [activeFile.name],
+                          Column(
+                            children: [
+                              EditorBreadcrumbs(
+                                pathSegments: activeFile.path.isNotEmpty 
+                                    ? path_utils.split(activeFile.path)
+                                    : [activeFile.name],
+                              ),
+                              Expanded(child: content),
+                            ],
                           ),
-                          Expanded(child: content),
+                          if (_showFindReplace) 
+                            Positioned(
+                              top: 0,
+                              right: 20,
+                              child: FindReplaceBar(
+                                onClose: _toggleFindReplace,
+                                controller: _controller,
+                              ),
+                            ),
                         ],
                       ),
-                      if (_showFindReplace) 
-                        Positioned(
-                          top: 0,
-                          right: 20,
-                          child: FindReplaceBar(
-                            onClose: _toggleFindReplace,
-                            controller: _controller,
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                    if (showMinimap)
+                      _EditorMinimap(controller: _controller),
+                  ],
                 ),
-                if (showMinimap)
-                  _EditorMinimap(controller: _controller),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

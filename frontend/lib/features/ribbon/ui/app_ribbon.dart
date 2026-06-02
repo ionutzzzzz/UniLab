@@ -6,6 +6,7 @@ import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../core/commands/command.dart';
 import '../../../core/commands/commands_registration.dart';
+import '../../../core/layout/shell_layout_state.dart';
 import '../../../theme/plot_colormaps.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
@@ -285,7 +286,9 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Reset Layout',
               icon: LucideIcons.layoutTemplate,
-              onTap: () {},
+              onTap: () {
+                ref.read(shellLayoutProvider.notifier).resetLayout();
+              },
             ),
             RibbonButton(
               label: 'Command Only',
