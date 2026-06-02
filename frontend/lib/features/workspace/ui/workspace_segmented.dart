@@ -94,28 +94,35 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
       child: Column(
         children: [
           Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  widget.icon, 
-                  size: 14, 
-                  color: isActive ? ui.colors.accent : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
-                ),
-                if (widget.showLabel) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: UiText(
-                      text: widget.label,
-                      variant: UiTextVariant.label,
-                      fontSize: 10,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                      color: isActive ? ui.colors.textPrimary : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
-                      overflow: TextOverflow.ellipsis,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 24) {
+                  return const SizedBox.shrink();
+                }
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      widget.icon, 
+                      size: 14, 
+                      color: isActive ? ui.colors.accent : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
                     ),
-                  ),
-                ],
-              ],
+                    if (widget.showLabel) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: UiText(
+                          text: widget.label,
+                          variant: UiTextVariant.label,
+                          fontSize: 10,
+                          fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                          color: isActive ? ui.colors.textPrimary : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              }
             ),
           ),
           // Subtle active indicator

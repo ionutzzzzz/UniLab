@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
+import '../../../core/layout/shell_layout_state.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/app_provider.dart';
@@ -11,14 +13,14 @@ import 'property_inspector.dart';
 import 'help_view.dart';
 import '../../../widgets/ui_icon_button.dart';
 
-class WorkspacePanel extends StatefulWidget {
+class WorkspacePanel extends ConsumerStatefulWidget {
   const WorkspacePanel({super.key});
 
   @override
-  State<WorkspacePanel> createState() => _WorkspacePanelState();
+  ConsumerState<WorkspacePanel> createState() => _WorkspacePanelState();
 }
 
-class _WorkspacePanelState extends State<WorkspacePanel> {
+class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
   String _activeSegment = 'Variables';
   final List<String> _segments = ['Variables', 'Inspector', 'Plots', 'Help'];
 
@@ -64,6 +66,7 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                 child: Row(
                   children: [
                     Expanded(
+                      flex: 1,
                       child: UiText(
                         text: 'Workspace'.toUpperCase(),
                         variant: UiTextVariant.label,
@@ -74,20 +77,40 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    UiIconButton(
-                      icon: LucideIcons.refreshCcw, 
-                      tooltip: 'Refresh Workspace', 
-                      size: 24, 
-                      iconSize: 14, 
-                      onPressed: () => appProvider.refreshProjectFiles(),
-                    ),
-                    const SizedBox(width: 4),
-                    UiIconButton(
-                      icon: LucideIcons.trash2, 
-                      tooltip: 'Clear Workspace', 
-                      size: 24, 
-                      iconSize: 14, 
-                      onPressed: () => appProvider.clearWorkspace(),
+                    Flexible(
+                      flex: 2,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true, // Keep the collapse button visible
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            UiIconButton(
+                              icon: LucideIcons.refreshCcw, 
+                              tooltip: 'Refresh Workspace', 
+                              size: 24, 
+                              iconSize: 14, 
+                              onPressed: () => appProvider.refreshProjectFiles(),
+                            ),
+                            const SizedBox(width: 4),
+                            UiIconButton(
+                              icon: LucideIcons.trash2, 
+                              tooltip: 'Clear Workspace', 
+                              size: 24, 
+                              iconSize: 14, 
+                              onPressed: () => appProvider.clearWorkspace(),
+                            ),
+                            const SizedBox(width: 4),
+                            UiIconButton(
+                              icon: LucideIcons.chevronRight, 
+                              tooltip: 'Collapse', 
+                              size: 24, 
+                              iconSize: 14, 
+                              onPressed: () => ref.read(shellLayoutProvider.notifier).toggleRightPanel(),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -101,7 +124,14 @@ class _WorkspacePanelState extends State<WorkspacePanel> {
               ),
               // Content
               Expanded(
-                child: activeView,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 50) {
+                      return const SizedBox.shrink();
+                    }
+                    return activeView;
+                  }
+                ),
               ),
             ],
           ),

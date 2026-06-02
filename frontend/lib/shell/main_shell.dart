@@ -42,9 +42,10 @@ class MainShell extends ConsumerWidget {
               Expanded(
                 child: Row(
                   children: [
-                    _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
-                      ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
-                    }),
+                    if (!showLeft)
+                      _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
+                        ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+                      }),
                     Expanded(
                       child: SplitShell(
                         showLeftPanel: showLeft,
@@ -55,9 +56,10 @@ class MainShell extends ConsumerWidget {
                         bottomPanel: const ConsoleDock(),
                       ),
                     ),
-                    _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
-                      ref.read(shellLayoutProvider.notifier).toggleRightPanel();
-                    }, isRight: true),
+                    if (!showRight)
+                      _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
+                        ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+                      }, isRight: true),
                   ],
                 ),
               ),
