@@ -30,8 +30,8 @@ UniLab_GRAMMAR = r"""
               | continue_stmt
               | import_stmt
               | export_stmt
-              | command_call
               | expr_stmt
+              | command_call
 
     ?assignment: multi_assignment | single_assignment
     multi_assignment.10: lhs_list EQUAL expression
@@ -550,7 +550,7 @@ class UniLabToPython(Transformer):
         if params is None: params = []
         if isinstance(params, str): params = []
         block = items[-2]
-        raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
+        raw_params = [str(p) for p in params if str(p) not in (",", "(", ")")]
         
         # Handle tilde (~) in parameters by converting to dummy names
         processed_params = []
@@ -652,7 +652,7 @@ class UniLabToPython(Transformer):
         current_row = []
         for item in items:
             if isinstance(item, list): current_row.extend(item)
-            elif item is not None and str(item).strip() in [";", "\n", ""]:
+            elif item is not None and str(item).strip() in (";", "\n", ""):
                 if str(item).strip() == ";" or "\n" in str(item):
                     if current_row: rows.append(current_row); current_row = []
         if current_row: rows.append(current_row)
@@ -664,7 +664,7 @@ class UniLabToPython(Transformer):
         current_row = []
         for item in items:
             if isinstance(item, list): current_row.extend(item)
-            elif item is not None and str(item).strip() in [";", "\n", ""]:
+            elif item is not None and str(item).strip() in (";", "\n", ""):
                 if str(item).strip() == ";" or "\n" in str(item):
                     if current_row: rows.append(current_row); current_row = []
         if current_row: rows.append(current_row)
@@ -677,7 +677,7 @@ class UniLabToPython(Transformer):
     def anonymous_func(self, items):
         params = items[2] if len(items) > 3 else []
         expr = items[-1]
-        raw_params = [str(p) for p in params if str(p) not in [",", "(", ")"]]
+        raw_params = [str(p) for p in params if str(p) not in (",", "(", ")")]
         
         # Handle tilde (~) in anonymous function parameters
         processed_params = []
@@ -700,7 +700,7 @@ class UniLabToPython(Transformer):
         return f"{name}({', '.join(args)})"
         
     def clear_stmt(self, items):
-        names = [str(i) for i in items if str(i) not in ["clear", " "]]
+        names = [str(i) for i in items if str(i) not in ("clear", " ")]
         if not names or "all" in names: return "unilab_clear_workspace(globals())"
         quoted = [f"'{n}'" for n in names]
         return f"unilab_clear_variables(globals(), [{', '.join(quoted)}])"
