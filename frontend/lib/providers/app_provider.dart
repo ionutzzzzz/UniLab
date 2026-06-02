@@ -437,4 +437,13 @@ class AppProvider with ChangeNotifier {
     _consoleOutput += '\n>> Execution stopped by user.\n';
     notifyListeners();
   }
+
+  // Editor Actions
+  final StreamController<String> _editorActionController = StreamController<String>.broadcast();
+  Stream<String> get editorActions => _editorActionController.stream;
+
+  void triggerEditorAction(String action) {
+    debugPrint('AppProvider: Triggering editor action: $action');
+    _editorActionController.add(action);
+  }
 }

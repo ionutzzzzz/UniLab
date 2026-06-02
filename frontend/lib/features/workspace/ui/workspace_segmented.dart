@@ -87,7 +87,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
 
     Widget content = AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+      padding: EdgeInsets.symmetric(horizontal: ui.spacing.xs),
       decoration: BoxDecoration(
         color: isActive ? ui.colors.canvas : (_isHovered ? ui.colors.hover.withValues(alpha: 0.5) : Colors.transparent),
       ),
@@ -95,7 +95,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         children: [
           Expanded(
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   widget.icon, 
@@ -104,12 +104,15 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                 ),
                 if (widget.showLabel) ...[
                   const SizedBox(width: 8),
-                  UiText(
-                    text: widget.label,
-                    variant: UiTextVariant.label,
-                    fontSize: 10,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                    color: isActive ? ui.colors.textPrimary : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
+                  Flexible(
+                    child: UiText(
+                      text: widget.label,
+                      variant: UiTextVariant.label,
+                      fontSize: 10,
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                      color: isActive ? ui.colors.textPrimary : (_isHovered ? ui.colors.textPrimary : ui.colors.textMuted),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ],

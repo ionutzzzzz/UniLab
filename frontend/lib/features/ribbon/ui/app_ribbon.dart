@@ -300,8 +300,17 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         RibbonGroup(
           title: 'Edit',
           children: [
-            RibbonButton(label: 'Find & Replace', icon: LucideIcons.searchCode, isLarge: true, onTap: () {}),
-            RibbonButton(label: 'Go to Line', icon: LucideIcons.hash, onTap: () {}),
+            RibbonButton(
+              label: 'Find & Replace', 
+              icon: LucideIcons.searchCode, 
+              isLarge: true, 
+              onTap: () => appProvider.triggerEditorAction('editor.find'),
+            ),
+            RibbonButton(
+              label: 'Go to Line', 
+              icon: LucideIcons.hash, 
+              onTap: () => appProvider.triggerEditorAction('editor.gotoLine'),
+            ),
           ],
         ),
         RibbonGroup(
