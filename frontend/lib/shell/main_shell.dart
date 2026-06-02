@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
@@ -11,9 +12,11 @@ import '../features/ribbon/ui/app_ribbon.dart';
 import '../features/workspace/ui/workspace_panel.dart';
 import '../features/console/ui/console_dock.dart';
 import '../features/explorer/ui/explorer_panel.dart';
+import '../widgets/command_palette/command_palette.dart';
 import '../core/layout/shell_breakpoints.dart';
 import '../core/layout/shell_layout_state.dart';
 import '../providers/settings_provider.dart';
+import '../providers/app_provider.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key});
@@ -22,45 +25,82 @@ class MainShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ui = UiTheme.of(context);
     final settings = p.Provider.of<SettingsProvider>(context).settings;
-    
-    return Scaffold(
-      backgroundColor: ui.colors.panel,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          
-          // Determine visibility based on user preference and active layout state
-          final layoutState = ref.watch(shellLayoutProvider);
-          final bool showLeft = layoutState.showLeftPanel;
-          final bool showRight = layoutState.showRightPanel;
-          
-          return Column(
-            children: [
-              const TitleStrip(),
-              if (settings.showToolbar)
-                const AppRibbon(),
-              Expanded(
-                child: SplitShell(
-                  key: ValueKey('split_shell_${layoutState.layoutId}'),
-                  showLeftPanel: showLeft,
-                  showRightPanel: showRight,
-                  leftPanel: const ExplorerPanel(),
-                  leftRail: _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
-                    ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
-                  }),
-                  centerPanel: const EditorStack(),
-                  rightPanel: const WorkspacePanel(),
-                  rightRail: _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
-                    ref.read(shellLayoutProvider.notifier).toggleRightPanel();
-                  }, isRight: true),
-                  bottomPanel: const ConsoleDock(),
-                ),
-              ),
-              if (settings.showStatusBar)
-                const AppStatusBar(),
-            ],
-          );
-        }
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () {
+          CommandPalette.show(context);
+        },
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+          appProvider.saveActiveFile();
+        },
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
+          appProvider.addNewFile();
+        },
+        const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
+          if (appProvider.activeFileIndex >= 0) {
+            appProvider.closeFile(appProvider.activeFileIndex);
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.f5): () {
+          appProvider.runActiveFile();
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          appProvider.runActiveFile();
+        },
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () {
+          appProvider.triggerEditorAction('editor.undo');
+        },
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): () {
+          appProvider.triggerEditorAction('editor.redo');
+        },
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): () {
+          appProvider.triggerEditorAction('editor.redo');
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: ui.colors.panel,
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              
+              // Determine visibility based on user preference and active layout state
+              final layoutState = ref.watch(shellLayoutProvider);
+              final bool showLeft = layoutState.showLeftPanel;
+              final bool showRight = layoutState.showRightPanel;
+              
+              return Column(
+                children: [
+                  const TitleStrip(),
+                  if (settings.showToolbar)
+                    const AppRibbon(),
+                  Expanded(
+                    child: SplitShell(
+                      key: ValueKey('split_shell_${layoutState.layoutId}'),
+                      showLeftPanel: showLeft,
+                      showRightPanel: showRight,
+                      leftPanel: const ExplorerPanel(),
+                      leftRail: _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
+                        ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+                      }),
+                      centerPanel: const EditorStack(),
+                      rightPanel: const WorkspacePanel(),
+                      rightRail: _buildSideRail(context, 'Workspace', LucideIcons.layoutGrid, showRight, () {
+                        ref.read(shellLayoutProvider.notifier).toggleRightPanel();
+                      }, isRight: true),
+                      bottomPanel: const ConsoleDock(),
+                    ),
+                  ),
+                  if (settings.showStatusBar)
+                    const AppStatusBar(),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }

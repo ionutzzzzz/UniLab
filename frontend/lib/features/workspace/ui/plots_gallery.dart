@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../models/editor_models.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
+import '../../../widgets/plot_viewer/plot_widget.dart';
+import '../../../providers/riverpod_providers.dart';
 import 'figure_view.dart';
 
 class PlotsGallery extends ConsumerStatefulWidget {
@@ -14,28 +18,25 @@ class PlotsGallery extends ConsumerStatefulWidget {
 }
 
 class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
-  String? _selectedPlot;
+  String? _selectedPlotId;
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
-    // Mock plots for UI development
-    final mockPlots = [
-      'Quantum Mechanics: Wave Function',
-      'Fluid Dynamics: Streamlines',
-      'Structural Analysis: Stress Distribution',
-      'Signal Processing: FFT Analysis',
-    ];
+    final plots = ref.watch(plotGalleryProvider);
 
-    if (_selectedPlot != null) {
+    if (_selectedPlotId != null) {
+      final plot = plots.firstWhere(
+        (p) => p.id == _selectedPlotId,
+        orElse: () => plots.isNotEmpty ? plots.first : PlotData(title: '', type: '', xData: [], yData: []),
+      );
       return FigureView(
-        title: _selectedPlot!,
-        onBack: () => setState(() => _selectedPlot = null),
+        plotData: plot,
+        onBack: () => setState(() => _selectedPlotId = null),
       );
     }
 
-    if (mockPlots.isEmpty) {
+    if (plots.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -82,8 +83,8 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
             children: [
               Expanded(
                 child: UiText(
-                  text: 'Plot History', 
-                  variant: UiTextVariant.label, 
+                  text: 'Plot History',
+                  variant: UiTextVariant.label,
                   fontWeight: FontWeight.bold,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -103,11 +104,11 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
               mainAxisSpacing: 12,
               childAspectRatio: 1.2,
             ),
-            itemCount: mockPlots.length,
+            itemCount: plots.length,
             itemBuilder: (context, index) {
               return _PlotThumbnail(
-                title: mockPlots[index],
-                onTap: () => setState(() => _selectedPlot = mockPlots[index]),
+                plotData: plots[index],
+                onTap: () => setState(() => _selectedPlotId = plots[index].id),
               );
             },
           ),
@@ -118,8 +119,8 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
 }
 
 class _PlotThumbnail extends StatefulWidget {
-  const _PlotThumbnail({required this.title, required this.onTap});
-  final String title;
+  const _PlotThumbnail({required this.plotData, required this.onTap});
+  final PlotData plotData;
   final VoidCallback onTap;
 
   @override
@@ -132,7 +133,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -152,7 +153,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Mock Plot Content Area
+              // Plot Content Area
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -162,12 +163,41 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Icon(LucideIcons.lineChart, size: 32, color: ui.colors.textDisabled.withValues(alpha: 0.3)),
+                      // Render actual plot data
+                      if (widget.plotData.imageDataUri != null)
+                        Image.memory(
+                          base64Decode(widget.plotData.imageDataUri!.split(',').last),
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(
+                            LucideIcons.lineChart,
+                            size: 32,
+                            color: ui.colors.textDisabled.withValues(alpha: 0.3),
+                          ),
+                        )
+                      else if (widget.plotData.xData.isNotEmpty)
+                        PlotWidget(
+                          title: '',
+                          data: List.generate(
+                            widget.plotData.xData.length,
+                            (i) => {
+                              'x': widget.plotData.xData[i],
+                              'y': widget.plotData.yData[i],
+                            },
+                          ),
+                        )
+                      else
+                        Icon(
+                          LucideIcons.lineChart,
+                          size: 32,
+                          color: ui.colors.textDisabled.withValues(alpha: 0.3),
+                        ),
                       if (_isHovered)
                         Container(
                           decoration: BoxDecoration(
                             color: ui.colors.accent.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(ui.spacing.radiusMd.topLeft.x)),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(ui.spacing.radiusMd.topLeft.x),
+                            ),
                           ),
                           child: Center(
                             child: Container(
@@ -177,7 +207,11 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                                 shape: BoxShape.circle,
                                 boxShadow: ui.colors.shadowSm,
                               ),
-                              child: Icon(LucideIcons.maximize2, size: 16, color: ui.colors.textInverse),
+                              child: Icon(
+                                LucideIcons.maximize2,
+                                size: 16,
+                                color: ui.colors.textInverse,
+                              ),
                             ),
                           ),
                         ),
@@ -191,13 +225,15 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                 decoration: BoxDecoration(
                   color: _isHovered ? ui.colors.accent.withValues(alpha: 0.05) : Colors.transparent,
                   border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(ui.spacing.radiusMd.bottomLeft.x)),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(ui.spacing.radiusMd.bottomLeft.x),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     UiText(
-                      text: widget.title,
+                      text: widget.plotData.title,
                       variant: UiTextVariant.label,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -207,7 +243,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                     ),
                     const SizedBox(height: 2),
                     UiText(
-                      text: 'Generated 2m ago',
+                      text: 'Generated ${_formatTime(widget.plotData.createdAt)}',
                       variant: UiTextVariant.label,
                       fontSize: 9,
                       color: ui.colors.textMuted,
@@ -220,5 +256,15 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
+
+    if (diff.inSeconds < 60) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }

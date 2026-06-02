@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as p;
 import 'package:window_manager/window_manager.dart';
 import 'package:context_menus/context_menus.dart';
 import 'theme/app_theme.dart';
 import 'providers/app_provider.dart';
 import 'providers/settings_provider.dart';
+import 'features/workspace/state/workspace_providers.dart' as workspace_prov;
+import 'providers/riverpod_providers.dart' as rp;
 import 'shell/main_shell.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Provider;
-import 'package:provider/provider.dart' as p;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,11 +32,25 @@ void main() async {
 
   runApp(
     ProviderScope(
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => AppProvider()),
-          ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ],
+      child: Consumer(
+        builder: (context, ref, child) {
+          return p.MultiProvider(
+            providers: [
+              p.ChangeNotifierProvider(
+                create: (_) => AppProvider(
+                  onVariablesUpdated: (vars) {
+                    ref.read(workspace_prov.workspaceVariablesProvider.notifier).replaceAll(vars);
+                  },
+                  onPlotsUpdated: (plots) {
+                    ref.read(rp.plotGalleryProvider.notifier).replaceAll(plots);
+                  },
+                ),
+              ),
+              p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+            ],
+            child: child,
+          );
+        },
         child: const UniLabApp(),
       ),
     ),

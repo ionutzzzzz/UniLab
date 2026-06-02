@@ -1,50 +1,67 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:watcher/watcher.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
-import '../utils/backend_client.dart';
+import '../models/editor_models.dart';
+import '../features/workspace/domain/workspace_variable.dart' as domain;
+import '../bridge/unilab_bridge.dart';
 import '../utils/file_manager.dart';
 
 // Use a conditional import to handle dart:io
 import 'dart:io' as io;
 
-class AppProvider with ChangeNotifier {
-  final BackendClient _client = BackendClient();
+enum BackendStatus { connecting, connected, error }
 
+class AppProvider with ChangeNotifier {
   final List<UniLabFile> _openFiles = [];
   int _activeFileIndex = -1;
   List<dynamic> _availableSamples = [];
   List<dynamic> _projectFiles = [];
   late String _projectRoot;
-  
-  String _consoleOutput = '';
+
+  // Console: structured messages instead of raw string
+  final List<ConsoleMessage> _consoleMessages = [];
 
   Map<String, dynamic> _workspaceVariables = {};
-  final List<Map<String, dynamic>> _generatedPlots = [];
+  final List<PlotData> _generatedPlots = [];
   bool _isExecuting = false;
+  final Set<String> _savingFileIds = {};
+
+  BackendStatus _backendStatus = BackendStatus.connecting;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
+
+  // Callbacks to push state into Riverpod (using domain WorkspaceVariable)
+  final void Function(List<domain.WorkspaceVariable>)? onVariablesUpdated;
+  final void Function(List<PlotData>)? onPlotsUpdated;
 
   List<UniLabFile> get openFiles => _openFiles;
   int get activeFileIndex => _activeFileIndex;
   UniLabFile? get activeFile =>
       _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
-  String get consoleOutput => _consoleOutput;
+  List<ConsoleMessage> get consoleMessages => List.unmodifiable(_consoleMessages);
+  String get consoleOutput => _consoleMessages.map((m) => m.text).join('\n');
   Map<String, dynamic> get workspaceVariables => _workspaceVariables;
-  List<Map<String, dynamic>> get generatedPlots => _generatedPlots;
+  List<PlotData> get generatedPlots => List.unmodifiable(_generatedPlots);
   bool get isExecuting => _isExecuting;
   List<dynamic> get availableSamples => _availableSamples;
   List<dynamic> get projectFiles => _projectFiles;
   String get projectRoot => _projectRoot;
+  BackendStatus get backendStatus => _backendStatus;
 
-  AppProvider() {
+  AppProvider({
+    this.onVariablesUpdated,
+    this.onPlotsUpdated,
+  }) {
     _projectRoot = _discoverProjectRoot();
     _loadAvailableSamples();
     refreshProjectFiles();
     _initWatcher();
+    _initBridge();
   }
 
   String _discoverProjectRoot() {
@@ -77,6 +94,32 @@ class AppProvider with ChangeNotifier {
   void dispose() {
     _watcherSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Initialize the FFI bridge to the Rust backend.
+  Future<void> _initBridge() async {
+    try {
+      final backendPath = await UniLabBridge.findBackendPath();
+      await UniLabBridge.instance.initialize(backendPath);
+      await UniLabBridge.instance.createSession('gui_user');
+      _backendStatus = BackendStatus.connected;
+      await fetchWorkspaceVariables();
+      _addConsoleMessage('UniLab bridge initialized.', ConsoleMessageType.success);
+    } catch (e) {
+      _backendStatus = BackendStatus.error;
+      _addConsoleMessage('Bridge initialization error: $e', ConsoleMessageType.error);
+    }
+    notifyListeners();
+  }
+
+  /// Add a message to the console.
+  void _addConsoleMessage(String text, ConsoleMessageType type, {String? source}) {
+    _consoleMessages.add(ConsoleMessage(
+      text: text,
+      type: type,
+      source: source ?? 'System',
+    ));
+    notifyListeners();
   }
 
   void _initWatcher() {
@@ -156,11 +199,18 @@ class AppProvider with ChangeNotifier {
       final path = p.join(_projectRoot, fileName);
       final file = io.File(path);
       await file.writeAsString(content);
+
+      // Also sync to backend workspace
+      try {
+        await UniLabBridge.instance.createFile(fileName, content);
+      } catch (e) {
+        debugPrint('Failed to sync file to backend: $e');
+      }
+
       await refreshProjectFiles();
       await openFile(file);
     } catch (e) {
-      _consoleOutput += '\nError creating file: $e\n';
-      notifyListeners();
+      _addConsoleMessage('Error creating file: $e', ConsoleMessageType.error);
     }
   }
 
@@ -258,9 +308,10 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateActiveFileContent(String content) {
-    if (activeFile != null) {
-      _openFiles[_activeFileIndex] = activeFile!.copyWith(
+  void updateFileContent(String id, String content) {
+    final index = _openFiles.indexWhere((f) => f.id == id);
+    if (index != -1 && _openFiles[index].content != content) {
+      _openFiles[index] = _openFiles[index].copyWith(
         content: content,
         isModified: true,
       );
@@ -268,16 +319,31 @@ class AppProvider with ChangeNotifier {
     }
   }
 
+  void updateActiveFileContent(String content) {
+    if (activeFile != null) {
+      updateFileContent(activeFile!.id, content);
+    }
+  }
+
   Future<void> saveActiveFile() async {
-    if (activeFile == null || kIsWeb) return;
+    if (_activeFileIndex < 0 || _activeFileIndex >= _openFiles.length || kIsWeb) return;
+
+    final fileToSave = _openFiles[_activeFileIndex];
+    final fileId = fileToSave.id;
+
+    if (_savingFileIds.contains(fileId)) {
+       debugPrint('AppProvider: Save already in progress for file: $fileId');
+       return;
+    }
 
     // Safeguard: Only save text files to prevent corruption of binary files
-    if (activeFile!.path.isNotEmpty && !UniLabFileManager.isTextFile(activeFile!.path)) {
-      debugPrint('AppProvider: Skipping save for binary file: ${activeFile!.path}');
+    if (fileToSave.path.isNotEmpty && !UniLabFileManager.isTextFile(fileToSave.path)) {
+      debugPrint('AppProvider: Skipping save for binary file: ${fileToSave.path}');
       return;
     }
 
-    String savePath = activeFile!.path;
+    String savePath = fileToSave.path;
+    _savingFileIds.add(fileId);
 
     try {
       if (savePath.isEmpty) {
@@ -285,21 +351,34 @@ class AppProvider with ChangeNotifier {
         if (!await directory.exists()) {
           await directory.create(recursive: true);
         }
-        savePath = p.join(_projectRoot, activeFile!.name);
+        savePath = p.join(_projectRoot, fileToSave.name);
       }
 
       final file = io.File(savePath);
-      await file.writeAsString(activeFile!.content);
+      await file.writeAsString(fileToSave.content);
 
-      _openFiles[_activeFileIndex] = activeFile!.copyWith(
-        path: savePath,
-        isModified: false,
-      );
+      // Also sync to backend workspace
+      try {
+        await UniLabBridge.instance.createFile(fileToSave.name, fileToSave.content);
+      } catch (e) {
+        debugPrint('Failed to sync file to backend: $e');
+      }
+
+      // Re-verify the file is still open and find its current index (it might have moved)
+      final currentIndex = _openFiles.indexWhere((f) => f.id == fileId);
+      if (currentIndex != -1) {
+        _openFiles[currentIndex] = _openFiles[currentIndex].copyWith(
+          path: savePath,
+          isModified: false,
+        );
+        notifyListeners();
+      }
 
       await refreshProjectFiles();
     } catch (e) {
-      _consoleOutput += '\nError saving file: $e\n';
-      notifyListeners();
+      _addConsoleMessage('Error saving file: $e', ConsoleMessageType.error);
+    } finally {
+      _savingFileIds.remove(fileId);
     }
   }
 
@@ -308,7 +387,15 @@ class AppProvider with ChangeNotifier {
     try {
       final ioEntity = entity as io.FileSystemEntity;
       if (await ioEntity.exists()) {
+        final fileName = p.basename(ioEntity.path);
         await ioEntity.delete(recursive: true);
+
+        // Also delete from backend
+        try {
+          await UniLabBridge.instance.createFile(fileName, ''); // Could add delete method later
+        } catch (e) {
+          debugPrint('Failed to sync file deletion to backend: $e');
+        }
 
         // If it was an open file, close it
         final openIndex = _openFiles.indexWhere((f) => f.path == ioEntity.path);
@@ -319,8 +406,7 @@ class AppProvider with ChangeNotifier {
         await refreshProjectFiles();
       }
     } catch (e) {
-      _consoleOutput += '\nError deleting: $e\n';
-      notifyListeners();
+      _addConsoleMessage('Error deleting: $e', ConsoleMessageType.error);
     }
   }
 
@@ -346,42 +432,152 @@ class AppProvider with ChangeNotifier {
     if (activeFile == null) return;
 
     _isExecuting = true;
-    _consoleOutput += '\n>> Running ${activeFile!.name}...\n';
-    notifyListeners();
+    _addConsoleMessage('>> Running ${activeFile!.name}...', ConsoleMessageType.output, source: 'System');
 
     try {
-      final result = await _client.runCode(activeFile!.content);
-      _consoleOutput += result.stdout;
-      if (result.stderr.isNotEmpty) {
-        _consoleOutput += '\nError: ${result.stderr}';
-      }
-      _workspaceVariables = result.variables;
+      final result = await UniLabBridge.instance.execute(activeFile!.content);
 
-      // Simulate plot generation if the code suggests it or just for demo
-      if (activeFile!.content.contains('plot') ||
-          activeFile!.content.contains('surf')) {
-        _generatedPlots.add({
-          'id': DateTime.now().millisecondsSinceEpoch.toString(),
-          'title': 'Figure ${_generatedPlots.length + 1}',
-          'data': [
-            {'x': 0.0, 'y': 1.0},
-            {'x': 1.0, 'y': 3.0},
-            {'x': 2.0, 'y': 2.0},
-            {'x': 3.0, 'y': 5.0},
-          ],
-        });
+      if (result.stdout.isNotEmpty) {
+        _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
       }
+      if (result.stderr.isNotEmpty) {
+        _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
+      }
+
+      // Update workspace variables from result
+      _updateVariablesFromResult(result);
+
+      // Parse plots from result.extra
+      _updatePlotsFromResult(result);
     } catch (e) {
-      _consoleOutput += '\nExecution Error: $e';
+      _addConsoleMessage('Execution Error: $e', ConsoleMessageType.error, source: 'Error');
     } finally {
       _isExecuting = false;
       notifyListeners();
     }
   }
 
+  /// Convert ExecutionResult variables to WorkspaceVariable list and push to Riverpod.
+  void _updateVariablesFromResult(ExecutionResult result) {
+    final vars = result.variables.entries.map((e) {
+      final info = e.value as Map<String, dynamic>;
+      final shape = info['shape'] as List<dynamic>?;
+      final sizeStr = shape != null ? shape.join('x') : '1x1';
+      return domain.WorkspaceVariable(
+        name: e.key,
+        value: info['preview']?.toString() ?? '',
+        size: sizeStr,
+        typeClass: info['dtype']?.toString() ?? 'unknown',
+      );
+    }).toList();
+    _workspaceVariables = result.variables;
+    onVariablesUpdated?.call(vars);
+  }
+
+  /// Parse plots from result.extra and create PlotData objects.
+  void _updatePlotsFromResult(ExecutionResult result) {
+    _generatedPlots.clear();
+
+    final b64List = result.extra['plot_data_b64'] as List<dynamic>? ?? [];
+    final plot3dList = result.extra['plot_3d_data'] as List<dynamic>? ?? [];
+
+    // Base64 PNG plots
+    for (int i = 0; i < b64List.length; i++) {
+      final dataUri = b64List[i] as String;
+      _generatedPlots.add(PlotData(
+        title: 'Figure ${i + 1}',
+        type: 'image',
+        xData: [],
+        yData: [],
+        imageDataUri: dataUri,
+      ));
+    }
+
+    // 3D / structured data plots
+    for (int i = 0; i < plot3dList.length; i++) {
+      final raw = plot3dList[i] as Map<String, dynamic>;
+      final xRaw = (raw['x'] as List<dynamic>?)
+          ?.map((v) => (v as num).toDouble())
+          .toList() ?? [];
+      final yRaw = (raw['y'] as List<dynamic>?)
+          ?.map((v) => (v as num).toDouble())
+          .toList() ?? [];
+      _generatedPlots.add(PlotData(
+        title: 'Figure ${b64List.length + i + 1}',
+        type: raw['type']?.toString() ?? 'line',
+        xData: xRaw,
+        yData: yRaw,
+      ));
+    }
+
+    onPlotsUpdated?.call(_generatedPlots);
+  }
+
   void clearConsole() {
-    _consoleOutput = '';
+    _consoleMessages.clear();
     notifyListeners();
+  }
+
+  /// Execute a command from the console REPL.
+  Future<void> runConsoleCommand(String command) async {
+    if (command.isEmpty) return;
+
+    _addConsoleMessage('>> $command', ConsoleMessageType.output, source: 'System');
+
+    try {
+      final result = await UniLabBridge.instance.execute(command);
+
+      if (result.stdout.isNotEmpty) {
+        _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
+      }
+      if (result.stderr.isNotEmpty) {
+        _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
+      }
+
+      _updateVariablesFromResult(result);
+      _updatePlotsFromResult(result);
+    } catch (e) {
+      _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error');
+    }
+  }
+
+  /// Get autocomplete suggestions from the backend.
+  Future<List<String>> getAutocomplete(String prefix) async {
+    try {
+      return await UniLabBridge.instance.getAutocomplete(prefix);
+    } catch (e) {
+      debugPrint('Autocomplete error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch workspace variables from the backend.
+  Future<void> fetchWorkspaceVariables() async {
+    try {
+      final workspace = await UniLabBridge.instance.getWorkspace();
+      if (workspace.isEmpty) return;
+
+      final vars = (workspace['variables'] as Map<String, dynamic>?)
+          ?.entries
+          .map((e) {
+            final info = e.value as Map<String, dynamic>;
+            final shape = info['shape'] as List<dynamic>?;
+            final sizeStr = shape != null ? shape.join('x') : '1x1';
+            return domain.WorkspaceVariable(
+              name: e.key,
+              value: info['preview']?.toString() ?? '',
+              size: sizeStr,
+              typeClass: info['dtype']?.toString() ?? 'unknown',
+            );
+          })
+          .toList() ?? [];
+
+      _workspaceVariables = workspace['variables'] ?? {};
+      onVariablesUpdated?.call(vars);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('fetchWorkspaceVariables error: $e');
+    }
   }
 
   Future<void> openFilePicker() async {
@@ -434,8 +630,7 @@ class AppProvider with ChangeNotifier {
 
   void stopExecution() {
     _isExecuting = false;
-    _consoleOutput += '\n>> Execution stopped by user.\n';
-    notifyListeners();
+    _addConsoleMessage('>> Execution stopped by user.', ConsoleMessageType.warning, source: 'System');
   }
 
   // Editor Actions

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_badge.dart';
+import '../../../models/editor_models.dart';
 import '../../../providers/app_provider.dart';
 import 'terminal_view.dart';
 import 'problems_view.dart';
@@ -126,13 +127,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  final List<String> _history = [
-    'UniLab R2026 loaded. Initializing kernel...',
-    '>> disp("Welcome to UniLab")',
-    'Welcome to UniLab',
-    '>> x = linspace(0, 10, 100);',
-    '>> y = sin(x);',
-  ];
 
   @override
   void initState() {
@@ -154,7 +148,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
     super.dispose();
   }
 
-  void _handleTabKey() {
+  Future<void> _handleTabKey() async {
     final text = _controller.text;
     final selection = _controller.selection;
 
@@ -166,50 +160,12 @@ class _ConsoleViewState extends State<_ConsoleView> {
 
     if (lastWord.isEmpty) return;
 
-    // 1. Check Commands
-    const commands = [
-      'disp', 'plot', 'clear', 'clc', 'pwd', 'cd', 'dir', 'ls', 'who', 'whos',
-      'linspace', 'sin', 'cos', 'tan', 'exp', 'log', 'abs', 'sqrt', 'help',
-      'import', 'export', 'save', 'load', 'figure', 'grid', 'title', 'xlabel', 'ylabel'
-    ];
-
-    final commandMatch = commands.firstWhere(
-      (c) => c.startsWith(lastWord) && c != lastWord,
-      orElse: () => '',
-    );
-
-    if (commandMatch.isNotEmpty) {
-      _applyCompletion(commandMatch, lastWord);
-      return;
-    }
-
-    // 2. Check Files (via AppProvider)
+    // Call backend for autocomplete suggestions
     final appProvider = Provider.of<AppProvider>(context, listen: false);
-    String searchDir = appProvider.projectRoot;
-    String prefix = lastWord;
+    final suggestions = await appProvider.getAutocomplete(lastWord);
 
-    if (lastWord.contains('/') || lastWord.contains('\\')) {
-      final lastSlash = lastWord.lastIndexOf(RegExp(r'[/\\]'));
-      final pathPart = lastWord.substring(0, lastSlash);
-      prefix = lastWord.substring(lastSlash + 1);
-      searchDir = p.join(appProvider.projectRoot, pathPart);
-    }
-
-    try {
-      final dir = io.Directory(searchDir);
-      if (dir.existsSync()) {
-        final entities = dir.listSync();
-        for (final entity in entities) {
-          final name = p.basename(entity.path);
-          if (name.startsWith(prefix) && name != prefix) {
-            final completion = lastWord.substring(0, lastWord.length - prefix.length) + name;
-            _applyCompletion(completion, lastWord);
-            return;
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore IO errors
+    if (suggestions.isNotEmpty) {
+      _applyCompletion(suggestions.first, lastWord);
     }
   }
 
@@ -228,8 +184,22 @@ class _ConsoleViewState extends State<_ConsoleView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Auto-scroll when new messages arrive
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context);
+    final messages = appProvider.consoleMessages;
+
     return Column(
       children: [
         // Console History
@@ -237,11 +207,12 @@ class _ConsoleViewState extends State<_ConsoleView> {
           child: ListView.builder(
             controller: _scrollController,
             padding: EdgeInsets.all(ui.spacing.md),
-            itemCount: _history.length,
+            itemCount: messages.length,
             itemBuilder: (context, index) {
-              final line = _history[index];
-              final isCommand = line.startsWith('>>');
-              
+              final msg = messages[index];
+              final isError = msg.type == ConsoleMessageType.error;
+              final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
@@ -256,9 +227,9 @@ class _ConsoleViewState extends State<_ConsoleView> {
                       ),
                     Expanded(
                       child: UiText(
-                        text: isCommand ? line.substring(3) : line,
+                        text: msg.text,
                         variant: UiTextVariant.consoleBody,
-                        color: isCommand ? ui.colors.textPrimary : ui.colors.textSecondary,
+                        color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
                       ),
                     ),
                   ],
@@ -298,19 +269,13 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   ),
                   onSubmitted: (value) {
                     if (value.isNotEmpty) {
-                      setState(() {
-                        _history.add('>> $value');
-                        _controller.clear();
-                      });
-                      
+                      appProvider.runConsoleCommand(value);
+                      _controller.clear();
+
                       // Auto-scroll to bottom
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (_scrollController.hasClients) {
-                          _scrollController.animateTo(
-                            _scrollController.position.maxScrollExtent,
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                          );
+                          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
                         }
                       });
                     }

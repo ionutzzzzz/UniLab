@@ -3,6 +3,9 @@ name = "unilab_core"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 pest = "2.7"
 pest_derive = "2.7"
@@ -14,3 +17,4 @@ pyo3 = { version = "0.23", features = ["auto-initialize"] }
 numpy = "0.23"
 num-complex = { version = "0.4", features = ["serde"] }
 rand = "0.8"
+uuid = { version = "1", features = ["v4"] }

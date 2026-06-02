@@ -657,3 +657,25 @@ class TranspilerEngine(BaseEngine):
                     self.globals.update(vars_loaded)
             except:
                 pass
+
+    # Synchronous wrappers for FFI/C interop (calls async methods via asyncio.run)
+    def run_code_sync(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+        """Synchronous wrapper for async run_code method. For use with FFI bridges."""
+        try:
+            return asyncio.run(self.run_code(code, timeout))
+        except RuntimeError as e:
+            # If there's already an event loop, use it
+            if "asyncio.run() cannot be called from a running event loop" in str(e):
+                import nest_asyncio
+                nest_asyncio.apply()
+                return asyncio.run(self.run_code(code, timeout))
+            raise
+
+    def fetch_variables_sync(self) -> Dict[str, Any]:
+        """Synchronous wrapper for async fetch_variables method."""
+        try:
+            return asyncio.run(self.fetch_variables())
+        except RuntimeError:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self.fetch_variables())
