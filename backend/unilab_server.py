@@ -12,6 +12,11 @@ import pathlib
 import argparse
 import time
 import uuid
+import os
+
+# Set web mode to enable base64 plot data returning
+os.environ['UNILAB_WEB_MODE'] = '1'
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
 # Add parent directory to path so we can import backend
 backend_dir = pathlib.Path(__file__).parent
@@ -68,8 +73,34 @@ class UniLabServer:
             return self.list_files(params.get('session_id'))
         elif method == 'create_file':
             return self.create_file(params.get('session_id'), params.get('filename'), params.get('content', ''))
+        elif method == 'get_info':
+            return self.get_info()
+        elif method == 'list_sessions':
+            return self.list_sessions()
         else:
             return {'error': f'Unknown method: {method}'}
+
+    def get_info(self):
+        """Get server information."""
+        return {
+            'version': '0.1.0',
+            'name': 'UniLab Python Server',
+            'status': 'active',
+            'capabilities': [
+                'execution',
+                'workspace',
+                'files',
+                'autocomplete',
+                'plotting'
+            ]
+        }
+
+    def list_sessions(self):
+        """List active sessions."""
+        return {
+            'sessions': list(self.sessions.keys()),
+            'count': len(self.sessions)
+        }
 
     def create_session(self, username):
         """Create a new session."""

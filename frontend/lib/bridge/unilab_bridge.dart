@@ -258,6 +258,28 @@ class UniLabBridge {
     }
   }
 
+  /// Get server information
+  Future<Map<String, dynamic>> getInfo() async {
+    if (!_initialized) throw StateError('Bridge not initialized');
+    try {
+      return await _sendRequest('get_info', {});
+    } catch (e) {
+      debugPrint('[UniLabBridge] getInfo error: $e');
+      return {};
+    }
+  }
+
+  /// List active sessions
+  Future<Map<String, dynamic>> listSessions() async {
+    if (!_initialized) throw StateError('Bridge not initialized');
+    try {
+      return await _sendRequest('list_sessions', {});
+    } catch (e) {
+      debugPrint('[UniLabBridge] listSessions error: $e');
+      return {};
+    }
+  }
+
   /// Find the backend path
   static Future<String> findBackendPath() async {
     try {

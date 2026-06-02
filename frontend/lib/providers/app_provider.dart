@@ -30,6 +30,8 @@ class AppProvider with ChangeNotifier {
   final List<PlotData> _generatedPlots = [];
   bool _isExecuting = false;
   final Set<String> _savingFileIds = {};
+  Map<String, dynamic> _serverInfo = {};
+  String _selectedConsoleTab = 'output';
 
   BackendStatus _backendStatus = BackendStatus.connecting;
 
@@ -52,6 +54,13 @@ class AppProvider with ChangeNotifier {
   List<dynamic> get projectFiles => _projectFiles;
   String get projectRoot => _projectRoot;
   BackendStatus get backendStatus => _backendStatus;
+  Map<String, dynamic> get serverInfo => _serverInfo;
+  String get selectedConsoleTab => _selectedConsoleTab;
+
+  void setSelectedConsoleTab(String tab) {
+    _selectedConsoleTab = tab;
+    notifyListeners();
+  }
 
   AppProvider({
     this.onVariablesUpdated,
@@ -103,8 +112,9 @@ class AppProvider with ChangeNotifier {
       await UniLabBridge.instance.initialize(backendPath);
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
+      _serverInfo = await UniLabBridge.instance.getInfo();
       await fetchWorkspaceVariables();
-      _addConsoleMessage('UniLab bridge initialized.', ConsoleMessageType.success);
+      _addConsoleMessage('UniLab bridge initialized (v${_serverInfo['version'] ?? 'unknown'}).', ConsoleMessageType.success);
     } catch (e) {
       _backendStatus = BackendStatus.error;
       _addConsoleMessage('Bridge initialization error: $e', ConsoleMessageType.error);
@@ -511,10 +521,22 @@ class AppProvider with ChangeNotifier {
     }
 
     onPlotsUpdated?.call(_generatedPlots);
+    
+    // Auto-switch to plots tab if any were generated
+    if (_generatedPlots.isNotEmpty) {
+      _selectedConsoleTab = 'plots';
+      notifyListeners();
+    }
   }
 
   void clearConsole() {
     _consoleMessages.clear();
+    notifyListeners();
+  }
+
+  void clearPlots() {
+    _generatedPlots.clear();
+    onPlotsUpdated?.call([]);
     notifyListeners();
   }
 
@@ -538,6 +560,8 @@ class AppProvider with ChangeNotifier {
       _updatePlotsFromResult(result);
     } catch (e) {
       _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error');
+    } finally {
+      notifyListeners();
     }
   }
 
@@ -620,11 +644,6 @@ class AppProvider with ChangeNotifier {
 
   void clearWorkspace() {
     _workspaceVariables.clear();
-    notifyListeners();
-  }
-
-  void clearPlots() {
-    _generatedPlots.clear();
     notifyListeners();
   }
 

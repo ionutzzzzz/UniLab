@@ -233,37 +233,20 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
           ],
         ),
         _RibbonGroup(
-          title: 'MANAGE',
+          title: 'VIEW',
           children: [
             _RibbonButton(
-              icon: Icons.add_to_photos_outlined,
-              label: 'New Figure',
-              onPressed: () {},
+              icon: Icons.collections_outlined,
+              label: 'Show Gallery',
+              isLarge: true,
+              onPressed: () => appProvider.setSelectedConsoleTab('plots'),
+              tooltip: 'View all generated plots',
             ),
             _RibbonButton(
-              icon: Icons.grid_on,
-              label: 'Grid',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.legend_toggle,
-              label: 'Legend',
-              onPressed: () {},
-            ),
-          ],
-        ),
-        _RibbonGroup(
-          title: 'EXPORT',
-          children: [
-            _RibbonButton(
-              icon: Icons.image_outlined,
-              label: 'PNG/JPG',
-              onPressed: () {},
-            ),
-            _RibbonButton(
-              icon: Icons.picture_as_pdf_outlined,
-              label: 'PDF',
-              onPressed: () {},
+              icon: Icons.delete_sweep_outlined,
+              label: 'Clear All',
+              onPressed: () => appProvider.clearPlots(),
+              tooltip: 'Clear all plots',
             ),
           ],
         ),
