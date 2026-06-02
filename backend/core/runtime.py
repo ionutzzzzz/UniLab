@@ -842,6 +842,87 @@ def _format_value(val):
 def disp(x):
     print(_format_value(x))
 
+def edit(filename):
+    """Signals the frontend to open a file."""
+    # Push event via update context if available
+    cb = unilab_update_ctx.get()
+    if cb:
+        # We need a way to push arbitrary events. 
+        # For now, we can abuse the variables snapshot or add a new context.
+        # But TranspilerEngine._trigger_workspace_changed only sends variables.
+        pass
+    
+    # Actually, the easiest is to print a marker that AppProvider handles
+    print(f"::OPEN_FILE::{filename}")
+
+def save(filename, *vars):
+    """Saves variables to a file (uses pickle/pkl)."""
+    import pickle
+    if not filename.endswith('.mat') and not filename.endswith('.pkl'):
+        filename += '.mat'
+    
+    # Resolve path relative to workspace
+    ws_path = unilab_workspace_ctx.get()
+    if ws_path:
+        p = pathlib.Path(ws_path) / filename
+    else:
+        p = pathlib.Path(filename)
+        
+    frame = inspect.currentframe().f_back
+    # Find user workspace
+    while frame and frame.f_globals.get('__name__') == __name__:
+        frame = frame.f_back
+    
+    data = {}
+    if not vars:
+        # Save all user variables
+        internal = {'np', 'plt', 'signal', 'unilab_workspace_ctx', 'unilab_update_ctx', 'ans'}
+        for k, v in frame.f_globals.items():
+            if k.startswith('_') or k in internal: continue
+            if inspect.ismodule(v) or inspect.isfunction(v): continue
+            data[k] = v
+    else:
+        for v in vars:
+            if v in frame.f_globals:
+                data[v] = frame.f_globals[v]
+                
+    with open(p, 'wb') as f:
+        pickle.dump(data, f)
+    print(f"Saved {len(data)} variables to {filename}")
+
+def load(filename):
+    """Loads variables from a file."""
+    import pickle
+    if not filename.endswith('.mat') and not filename.endswith('.pkl'):
+        if not pathlib.Path(filename).exists():
+             if pathlib.Path(filename + '.mat').exists(): filename += '.mat'
+             elif pathlib.Path(filename + '.pkl').exists(): filename += '.pkl'
+    
+    ws_path = unilab_workspace_ctx.get()
+    if ws_path:
+        p = pathlib.Path(ws_path) / filename
+    else:
+        p = pathlib.Path(filename)
+        
+    if not p.exists():
+        print(f"File not found: {filename}")
+        return
+
+    with open(p, 'rb') as f:
+        data = pickle.load(f)
+        
+    frame = inspect.currentframe().f_back
+    while frame and frame.f_globals.get('__name__') == __name__:
+        frame = frame.f_back
+        
+    frame.f_globals.update(data)
+    print(f"Loaded {len(data)} variables from {filename}")
+
+def exit(*args):
+    print("Use the 'Quit' button in the application menu to close UniLab.")
+
+def quit(*args):
+    print("Use the 'Quit' button in the application menu to close UniLab.")
 
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -884,7 +965,7 @@ def whos():
     
     # Names we definitely want to hide (internal UniLab architecture and pre-populated constants)
     internal_names = {
-        'np', 'plt', 'signal', 'unilab_workspace_ctx', '_unilab_3d_data_store',
+        'np', 'plt', 'signal', 'unilab_workspace_ctx', 'unilab_update_ctx', '_unilab_3d_data_store',
         'unilab_simulate', 'simulate', 'scipy_fft', 'scipy_ifft', 'scipy_fftshift', 
         'scipy_ifftshift', 'builtins', 'inspect', 'io', 'os', 'pathlib', 'time',
         'UnilabEnd', 'unilab_end', 'UnilabHandle', 'UnilabCVPartition', 'ContextVar',
@@ -934,14 +1015,11 @@ def whos():
         variables['ans'] = caller_globals['ans']
 
     if not variables:
-        return
+        return "Workspace is empty."
 
-    # Suppress ASCII output in web mode to allow rich HTML rendering
-    if os.environ.get('UNILAB_WEB_MODE') == '1':
-        return
-        
-    print(f"\n{'Name':<18} {'Size':<15} {'Bytes':<12} {'Class':<15}")
-    print("-" * 60)
+    output = []
+    output.append(f"{'Name':<18} {'Size':<15} {'Bytes':<12} {'Class':<15}")
+    output.append("-" * 60)
     
     for name in sorted(variables.keys()):
         val = variables[name]
@@ -951,13 +1029,13 @@ def whos():
             # Handle numpy arrays and similar
             shape = val.shape
             if not shape: # Scalar array
-                size = "1x1"
+                size_str = "1x1"
             else:
-                size = 'x'.join(map(str, shape))
+                size_str = 'x'.join(map(str, shape))
         elif hasattr(val, '__len__') and not isinstance(val, (str, dict)):
-            size = f"1x{len(val)}"
+            size_str = f"1x{len(val)}"
         else:
-            size = "1x1"
+            size_str = "1x1"
             
         # Get bytes
         try:
@@ -981,8 +1059,9 @@ def whos():
         if cls == 'str': cls = 'char'
         if cls == 'bool': cls = 'logical'
             
-        print(f"{name:<18} {size:<15} {bytes_count:<12} {cls:<15}")
-    print("")
+        output.append(f"{name:<18} {size_str:<15} {bytes_count:<12} {cls:<15}")
+    
+    return "\n".join(output)
 
 def _should_suppress_output(val):
     if val is None: return True
@@ -3289,19 +3368,23 @@ def render_image_terminal(img_path, width=None):
 
 def list_libraries():
     import pathlib
-    print("-" * 50 + "\n🧪 UniLab Toolbox Explorer\n" + "-" * 50)
-    libs_dir = pathlib.Path(__file__).resolve().parent.parent / "libraries"
+    res = ["-" * 50, "🧪 UniLab Toolbox Explorer", "-" * 50]
+    libs_dir = pathlib.Path(__file__).resolve().parent.parent / "stdlib" / "libraries"
+    if not libs_dir.exists():
+         return "Standard libraries directory not found."
+         
     for item in sorted(libs_dir.iterdir()):
         if item.is_dir() and not item.name.startswith("__"):
             funcs = sorted([f.stem for f in item.glob("*.m")])
             if funcs:
-                print(f"  > {item.name}:")
+                res.append(f"  > {item.name}:")
                 line = "    "
                 for i, f in enumerate(funcs):
-                    if builtins.len(line) + builtins.len(f) + 2 > 80: print(line); line = "    "
+                    if builtins.len(line) + builtins.len(f) + 2 > 80: res.append(line); line = "    "
                     line += f + (", " if i < builtins.len(funcs) - 1 else "")
-                print(line)
-    print("\n" + "-" * 50)
+                res.append(line)
+    res.append("\n" + "-" * 50)
+    return "\n".join(res)
 
 def unilab_clear_workspace(g):
     print("::CLEAR_WORKSPACE::")

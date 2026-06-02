@@ -183,6 +183,15 @@ class AppProvider with ChangeNotifier {
       }
       return;
     }
+
+    if (text.contains('::OPEN_FILE::')) {
+      final parts = text.split('::OPEN_FILE::');
+      if (parts.length > 1) {
+        final filename = parts[1].trim();
+        _handleOpenFileCommand(filename);
+      }
+      return;
+    }
     
     _consoleMessages.add(ConsoleMessage(
       text: text,
@@ -190,6 +199,17 @@ class AppProvider with ChangeNotifier {
       source: source ?? 'System',
     ));
     notifyListeners();
+  }
+
+  Future<void> _handleOpenFileCommand(String filename) async {
+    // Try to find file in project root
+    final fullPath = p.join(_projectRoot, filename);
+    final file = io.File(fullPath);
+    if (await file.exists()) {
+      await openFile(file);
+    } else {
+      _addConsoleMessage('File not found: $filename', ConsoleMessageType.error);
+    }
   }
 
   void _removeVariable(String name) {
@@ -517,13 +537,19 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> runActiveFile() async {
-    if (activeFile == null) return;
+    if (activeFile == null) {
+      debugPrint('[AppProvider] runActiveFile: No active file to run');
+      return;
+    }
 
     _isExecuting = true;
+    debugPrint('[AppProvider] runActiveFile: Starting execution for ${activeFile!.name}');
     _addConsoleMessage('>> Running ${activeFile!.name}...', ConsoleMessageType.output, source: 'System');
 
     try {
+      debugPrint('[AppProvider] runActiveFile: Calling bridge.execute');
       final result = await UniLabBridge.instance.execute(activeFile!.content);
+      debugPrint('[AppProvider] runActiveFile: Bridge execution completed. Success: ${result.success}');
 
       if (result.stdout.isNotEmpty) {
         _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
@@ -611,6 +637,7 @@ class AppProvider with ChangeNotifier {
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
 
+    _isExecuting = true;
     _addConsoleMessage('>> $command', ConsoleMessageType.output, source: 'System');
 
     try {
@@ -638,6 +665,7 @@ class AppProvider with ChangeNotifier {
     } catch (e) {
       _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error');
     } finally {
+      _isExecuting = false;
       await fetchWorkspaceVariables();
       notifyListeners();
     }

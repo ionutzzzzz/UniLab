@@ -79,13 +79,11 @@ class AutoloadDict(dict):
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
-        # Ensure runtime is fresh (especially important in embedded FFI mode)
-        import importlib
-        importlib.reload(runtime)
-        
         self.transpiler = UniLabTranspiler()
         self.on_workspace_changed = None
         self._workspace_changed_timer = None
+        self._runtime_names = set(dir(runtime))
+        self._last_ws_update = 0
         
         # Set initial CWD to sample folder in web mode
         if os.environ.get('UNILAB_WEB_MODE') == '1':
@@ -228,6 +226,8 @@ class TranspilerEngine(BaseEngine):
     async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
         # Handle 'help topic' style calls specifically
         stripped_code = code.strip().rstrip(';')
+        if not stripped_code:
+            return ExecutionResult(True, "", "", 0, 0.0, self._get_variables(), [])
         
         # Ensure we are in the correct directory for this session
         old_cwd = os.getcwd()
@@ -244,9 +244,6 @@ class TranspilerEngine(BaseEngine):
             import shlex
             
             parts = stripped_code.split()
-            if not parts:
-                return ExecutionResult(True, "", "", 0, 0.0, self._get_variables(), [])
-                
             cmd = parts[0].lower()
             
             # 1. Handle 'cd' (Directory Persistence)
@@ -260,8 +257,9 @@ class TranspilerEngine(BaseEngine):
                 except Exception as e:
                     return ExecutionResult(False, "", str(e), 1, 0.0, self._get_variables(), [])
 
-            # 2. Handle 'ls', 'pwd', 'dir', 'mkdir', 'rm', 'cp', 'mv', 'cat'
-            if cmd in ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'cat') or stripped_code.startswith('!'):
+            # 2. Handle common shell commands or '!' prefix
+            SHELL_COMMANDS = ('ls', 'dir', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'cat', 'git', 'python', 'python3', 'pip', 'pip3', 'npm', 'node', 'grep', 'curl', 'wget', 'chmod', 'chown', 'ssh', 'scp', 'apt', 'apt-get', 'brew', 'cargo')
+            if cmd in SHELL_COMMANDS or stripped_code.startswith('!'):
                 try:
                     exec_cmd = stripped_code[1:] if stripped_code.startswith('!') else stripped_code
                     proc = subprocess.run(shlex.split(exec_cmd), capture_output=True, text=True, timeout=timeout)
@@ -322,42 +320,56 @@ class TranspilerEngine(BaseEngine):
                 
                 return await self._get_help(topic)
 
-            # Auto-help: if user types a single function name without () or args
+            # Auto-help / Auto-call for commands
             if stripped_code and re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', stripped_code):
-                # 1. Check if it exists as a function in runtime or search paths
-                is_func = False
-                if hasattr(runtime, stripped_code) and not stripped_code.startswith('_'):
-                    is_func = True
-                if not is_func:
-                    for path in self.search_paths:
-                        if (path / f"{stripped_code}.m").exists():
-                            is_func = True
-                            break
+                is_command = stripped_code.lower() in ('whos', 'clc', 'list_libraries', 'exit', 'quit', 'clear')
                 
-                # 2. Check if it's ALREADY a variable in globals (and not just a function pointer)
-                is_var = False
-                if stripped_code in self.globals:
-                    val = self.globals[stripped_code]
-                    if not callable(val) or isinstance(val, np.ndarray):
-                        is_var = True
-                
-                # Command-like functions should be executed, not helped
-                is_command = stripped_code.lower() in ('whos', 'clc', 'list_libraries')
-                
-                if is_func and not is_var and not is_command:
-                    return await self._get_help(stripped_code)
+                if is_command:
+                    if stripped_code.lower() != 'clear': # clear handled by transpiler as statement
+                        code = stripped_code + "()"
+                else:
+                    # 1. Check if it exists as a function in runtime or search paths
+                    is_func = False
+                    if hasattr(runtime, stripped_code) and not stripped_code.startswith('_'):
+                        is_func = True
+                    if not is_func:
+                        for path in self.search_paths:
+                            if (path / f"{stripped_code}.m").exists():
+                                is_func = True
+                                break
+                    
+                    # 2. Check if it's ALREADY a variable in globals (and not just a function pointer)
+                    is_var = False
+                    if stripped_code in self.globals:
+                        val = self.globals[stripped_code]
+                        if not callable(val) or isinstance(val, np.ndarray):
+                            is_var = True
+                    
+                    if is_func and not is_var:
+                        return await self._get_help(stripped_code)
 
             start_ts = time.time()
             try:
-                python_code, called_funcs, added_paths = self.transpiler.transpile(code)
-                
+                try:
+                    python_code, called_funcs, added_paths = self.transpiler.transpile(code)
+                except Exception as te:
+                    # Fallback: try running as shell command if it looks like one (single line, no special MATLAB chars)
+                    if '\n' not in stripped_code and not any(c in stripped_code for c in '()[]{}='):
+                        try:
+                            # Use shlex to safely split, check if first part is an executable
+                            test_parts = shlex.split(stripped_code)
+                            if test_parts:
+                                import shutil
+                                if shutil.which(test_parts[0]):
+                                    proc = subprocess.run(test_parts, capture_output=True, text=True, timeout=timeout)
+                                    return ExecutionResult(proc.returncode == 0, proc.stdout, proc.stderr, proc.returncode, time.time()-start_ts, self._get_variables(), [])
+                        except:
+                            pass
+                    raise te
+
                 # Temporary add paths for resolution (from addpath calls in the code)
                 for ap in added_paths:
                     self._add_path(ap)
-                
-                # Reload runtime to pick up any recent changes to built-in functions
-                import importlib
-                importlib.reload(runtime)
                 
                 # Re-verify critical runtime functions and constants are in globals
                 for name in dir(runtime):
@@ -614,7 +626,7 @@ class TranspilerEngine(BaseEngine):
             
             # M-file completions from search paths
             m_files = set()
-            for path in self.search_paths:
+            for path in self.engine.search_paths:
                 if path.exists():
                     for p in path.glob('*.m'):
                         m_files.add(p.stem)
@@ -624,21 +636,20 @@ class TranspilerEngine(BaseEngine):
 
     def _get_variables(self):
         vars_snap = {}
-        runtime_names = set(dir(runtime))
+        import types
         
         for k, v in self.globals.items():
             if k.startswith('_') or k in ('np', 'plt', 'ans', 'addpath'):
                 continue
             
             # Skip core modules
-            import types
             if isinstance(v, types.ModuleType):
                 continue
                 
             # Keep only user-defined functions or non-callable values
             if callable(v):
                 # If it's a built-in runtime function, skip it
-                if k in runtime_names:
+                if k in self._runtime_names:
                     continue
                 # If it's a python builtin or np function, skip it
                 mod_name = getattr(v, '__module__', '') or ''
@@ -670,25 +681,27 @@ class TranspilerEngine(BaseEngine):
                 else:
                     size_str = 'x'.join(map(str, shape))
                     shape_list = list(shape)
-            elif hasattr(v, '__len__') and not isinstance(v, (str, dict)):
+            elif isinstance(v, (list, tuple)):
                 size_str = f"1x{len(v)}"
                 shape_list = [1, len(v)]
             else:
                 size_str = "1x1"
                 shape_list = [1, 1]
                 
-            # Determine Bytes
+            # Determine Bytes (Optimized)
             try:
                 if hasattr(v, 'nbytes'):
                     bytes_count = int(v.nbytes)
                 else:
+                    # sys.getsizeof is okay for simple types
                     bytes_count = sys.getsizeof(v)
             except:
                 bytes_count = 0
 
+            # Only generate preview if needed/asked, or keep it short
             preview = str(v)
-            if isinstance(v, np.ndarray) and v.size > 50:
-                preview = str(v.flatten()[:50]) + "..."
+            if len(preview) > 100:
+                 preview = preview[:100] + "..."
             
             vars_snap[k] = {
                 'name': k,

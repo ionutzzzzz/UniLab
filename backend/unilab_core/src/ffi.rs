@@ -160,7 +160,8 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
                     let c_sid = CString::new(py_session_id.clone()).unwrap();
                     let c_json = CString::new(variables_json).unwrap();
                     unsafe {
-                        cb(c_sid.as_ptr(), c_json.as_ptr());
+                        // Transfer ownership to Dart. Dart MUST call unilab_free_string on these pointers.
+                        cb(c_sid.into_raw(), c_json.into_raw());
                     }
                 }
                 Ok::<PyObject, PyErr>(py.None())

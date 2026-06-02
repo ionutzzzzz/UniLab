@@ -129,12 +129,41 @@ class _ConsoleViewState extends State<_ConsoleView> {
   void initState() {
     super.initState();
     _focusNode.onKeyEvent = (node, event) {
-      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
-        _handleTabKey();
-        return KeyEventResult.handled;
+      if (event is KeyDownEvent) {
+        if (event.logicalKey == LogicalKeyboardKey.tab) {
+          _handleTabKey();
+          return KeyEventResult.handled;
+        }
+        
+        if (event.logicalKey == LogicalKeyboardKey.enter) {
+          final isShiftPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight);
+          
+          if (!isShiftPressed) {
+            _submitCommand();
+            return KeyEventResult.handled;
+          }
+        }
       }
       return KeyEventResult.ignored;
     };
+  }
+
+  void _submitCommand() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) {
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      appProvider.runConsoleCommand(value);
+      _controller.clear();
+
+      // Auto-scroll to bottom
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
+    }
+    _focusNode.requestFocus();
   }
 
   @override
@@ -217,7 +246,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   children: [
                     if (isCommand)
                       UiText(
-                        text: '>> ',
+                        text: ' ',
                         variant: UiTextVariant.consoleBody,
                         fontWeight: FontWeight.bold,
                         color: ui.colors.accent,
@@ -256,6 +285,8 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   focusNode: _focusNode,
                   autofocus: true,
                   enabled: !appProvider.isExecuting,
+                  maxLines: null,
+                  minLines: 1,
                   style: ui.typography.consoleBody.copyWith(
                     color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.textPrimary,
                     fontSize: 12,
@@ -263,23 +294,13 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   decoration: InputDecoration(
                     border: InputBorder.none,
                     isDense: true,
-                    contentPadding: EdgeInsets.zero,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
                     hintText: appProvider.isExecuting ? 'Waiting for execution to finish...' : null,
                     hintStyle: TextStyle(color: ui.colors.textDisabled),
                   ),
-                  onSubmitted: (value) {
-                    if (value.isNotEmpty) {
-                      appProvider.runConsoleCommand(value);
-                      _controller.clear();
-
-                      // Auto-scroll to bottom
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollController.hasClients) {
-                          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-                        }
-                      });
-                    }
-                    _focusNode.requestFocus();
+                  onChanged: (value) {
+                    // Force rebuild for disabled state logic if needed
+                    setState(() {});
                   },
                 ),
               ),
