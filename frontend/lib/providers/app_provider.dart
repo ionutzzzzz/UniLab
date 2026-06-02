@@ -124,11 +124,48 @@ class AppProvider with ChangeNotifier {
 
   /// Add a message to the console.
   void _addConsoleMessage(String text, ConsoleMessageType type, {String? source}) {
+    if (text.contains('::CLEAR_TERMINAL::')) {
+      clearConsole();
+      return;
+    }
+
+    if (text.contains('::CLEAR_WORKSPACE::')) {
+      clearWorkspace();
+      return;
+    }
+
+    if (text.contains('::CLEAR_VAR::')) {
+      final parts = text.split('::CLEAR_VAR::');
+      if (parts.length > 1) {
+        final varName = parts[1].trim();
+        _removeVariable(varName);
+      }
+      return;
+    }
+    
     _consoleMessages.add(ConsoleMessage(
       text: text,
       type: type,
       source: source ?? 'System',
     ));
+    notifyListeners();
+  }
+
+  void _removeVariable(String name) {
+    _workspaceVariables.remove(name);
+    // Convert current map to domain list and notify
+    final vars = _workspaceVariables.entries.map((e) {
+      final info = e.value as Map<String, dynamic>;
+      final shape = info['shape'] as List<dynamic>?;
+      final sizeStr = shape != null ? shape.join('x') : '1x1';
+      return domain.WorkspaceVariable(
+        name: e.key,
+        value: info['preview']?.toString() ?? '',
+        size: sizeStr,
+        typeClass: info['dtype']?.toString() ?? 'unknown',
+      );
+    }).toList();
+    onVariablesUpdated?.call(vars);
     notifyListeners();
   }
 
@@ -463,13 +500,23 @@ class AppProvider with ChangeNotifier {
       _addConsoleMessage('Execution Error: $e', ConsoleMessageType.error, source: 'Error');
     } finally {
       _isExecuting = false;
+      await fetchWorkspaceVariables();
       notifyListeners();
     }
   }
 
   /// Convert ExecutionResult variables to WorkspaceVariable list and push to Riverpod.
   void _updateVariablesFromResult(ExecutionResult result) {
-    final vars = result.variables.entries.map((e) {
+    // Completely sync with backend result
+    _workspaceVariables = result.variables;
+
+    if (_workspaceVariables.isEmpty) {
+      onVariablesUpdated?.call([]);
+      notifyListeners();
+      return;
+    }
+
+    final vars = _workspaceVariables.entries.map((e) {
       final info = e.value as Map<String, dynamic>;
       final shape = info['shape'] as List<dynamic>?;
       final sizeStr = shape != null ? shape.join('x') : '1x1';
@@ -480,8 +527,9 @@ class AppProvider with ChangeNotifier {
         typeClass: info['dtype']?.toString() ?? 'unknown',
       );
     }).toList();
-    _workspaceVariables = result.variables;
+    
     onVariablesUpdated?.call(vars);
+    notifyListeners();
   }
 
   /// Parse plots from result.extra and create PlotData objects.
@@ -561,6 +609,7 @@ class AppProvider with ChangeNotifier {
     } catch (e) {
       _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error');
     } finally {
+      await fetchWorkspaceVariables();
       notifyListeners();
     }
   }
@@ -578,11 +627,10 @@ class AppProvider with ChangeNotifier {
   /// Fetch workspace variables from the backend.
   Future<void> fetchWorkspaceVariables() async {
     try {
-      final workspace = await UniLabBridge.instance.getWorkspace();
-      if (workspace.isEmpty) return;
+      final response = await UniLabBridge.instance.getWorkspace();
+      final Map<String, dynamic> variables = (response['variables'] as Map<String, dynamic>?) ?? {};
 
-      final vars = (workspace['variables'] as Map<String, dynamic>?)
-          ?.entries
+      final vars = variables.entries
           .map((e) {
             final info = e.value as Map<String, dynamic>;
             final shape = info['shape'] as List<dynamic>?;
@@ -594,9 +642,9 @@ class AppProvider with ChangeNotifier {
               typeClass: info['dtype']?.toString() ?? 'unknown',
             );
           })
-          .toList() ?? [];
+          .toList();
 
-      _workspaceVariables = workspace['variables'] ?? {};
+      _workspaceVariables = variables;
       onVariablesUpdated?.call(vars);
       notifyListeners();
     } catch (e) {
@@ -642,9 +690,19 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  void clearWorkspace() {
-    _workspaceVariables.clear();
-    notifyListeners();
+  Future<void> clearWorkspace() async {
+    try {
+      await UniLabBridge.instance.execute('clear all');
+      _workspaceVariables.clear();
+      onVariablesUpdated?.call([]);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error clearing backend workspace: $e');
+      // Fallback: just clear local state
+      _workspaceVariables.clear();
+      onVariablesUpdated?.call([]);
+      notifyListeners();
+    }
   }
 
   void stopExecution() {

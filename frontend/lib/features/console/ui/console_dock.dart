@@ -20,7 +20,7 @@ class ConsoleDock extends StatefulWidget {
 
 class _ConsoleDockState extends State<ConsoleDock> {
   String _activeTab = 'Console';
-  final List<String> _tabs = ['Console', 'Problems', 'Terminal', 'Run'];
+  final List<String> _tabs = ['Console', 'Problems', 'Terminal'];
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +36,6 @@ class _ConsoleDockState extends State<ConsoleDock> {
         break;
       case 'Terminal':
         activeView = const AppTerminalView();
-        break;
-      case 'Run':
-        activeView = Center(child: UiText(text: 'Run Output View', color: ui.colors.textMuted));
         break;
       default:
         activeView = const SizedBox.shrink();

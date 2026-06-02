@@ -575,9 +575,28 @@ class TranspilerEngine(BaseEngine):
 
     def _get_variables(self):
         vars_snap = {}
+        runtime_names = set(dir(runtime))
+        
         for k, v in self.globals.items():
-            if k.startswith('_') or k in dir(runtime) or k == 'np' or k == 'ans' and v is None:
+            if k.startswith('_') or k in ('np', 'plt', 'ans', 'addpath'):
                 continue
+            
+            # Skip core modules
+            import types
+            if isinstance(v, types.ModuleType):
+                continue
+                
+            # Keep only user-defined functions or non-callable values
+            if callable(v):
+                # If it's a built-in runtime function, skip it
+                if k in runtime_names:
+                    continue
+                # If it's a python builtin or np function, skip it
+                if hasattr(v, '__module__') and (v.__module__ == 'builtins' or 'numpy' in v.__module__):
+                    continue
+                # If it doesn't have source code (compiled/builtin), likely not user-defined
+                if not hasattr(v, '__code__'):
+                    continue
             
             # Determine Class (MATLAB style)
             dtype = type(v).__name__

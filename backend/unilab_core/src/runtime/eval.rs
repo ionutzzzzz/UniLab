@@ -764,12 +764,12 @@ impl Evaluator {
                         Ok(Value::Matrix(res))
                     }
                     BinaryOperator::Eq => {
-                        let res = Array2::from_shape_fn(a.raw_dim(), |d| if a[d] == b[d] { 1.0 } else { 0.0 });
-                        Ok(Value::Matrix(res))
+                        let res = Array2::from_shape_fn(a.raw_dim(), |d| a[d] == b[d]);
+                        Ok(Value::LogicalMatrix(res))
                     }
                     BinaryOperator::Ne => {
-                        let res = Array2::from_shape_fn(a.raw_dim(), |d| if a[d] != b[d] { 1.0 } else { 0.0 });
-                        Ok(Value::Matrix(res))
+                        let res = Array2::from_shape_fn(a.raw_dim(), |d| a[d] != b[d]);
+                        Ok(Value::LogicalMatrix(res))
                     }
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Matrix", op)),
                 }
@@ -821,12 +821,12 @@ impl Evaluator {
                     BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(a.mapv(|x| x * b))),
                     BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(a.mapv(|x| x / b))),
                     BinaryOperator::Pow | BinaryOperator::DotPow => Ok(Value::Matrix(a.mapv(|x| x.powf(b)))),
-                    BinaryOperator::Eq => Ok(Value::Matrix(a.mapv(|x| if x == b { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Ne => Ok(Value::Matrix(a.mapv(|x| if x != b { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Lt => Ok(Value::Matrix(a.mapv(|x| if x < b { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Gt => Ok(Value::Matrix(a.mapv(|x| if x > b { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Le => Ok(Value::Matrix(a.mapv(|x| if x <= b { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Ge => Ok(Value::Matrix(a.mapv(|x| if x >= b { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(a.mapv(|x| x == b))),
+                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(a.mapv(|x| x != b))),
+                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(a.mapv(|x| x < b))),
+                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(a.mapv(|x| x > b))),
+                    BinaryOperator::Le => Ok(Value::LogicalMatrix(a.mapv(|x| x <= b))),
+                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(a.mapv(|x| x >= b))),
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Scalar", op)),
                 }
             }
@@ -836,12 +836,12 @@ impl Evaluator {
                     BinaryOperator::Sub => Ok(Value::Matrix(b.mapv(|x| a - x))),
                     BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(b.mapv(|x| a * x))),
                     BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(b.mapv(|x| a / x))),
-                    BinaryOperator::Eq => Ok(Value::Matrix(b.mapv(|x| if a == x { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Ne => Ok(Value::Matrix(b.mapv(|x| if a != x { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Lt => Ok(Value::Matrix(b.mapv(|x| if a < x { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Gt => Ok(Value::Matrix(b.mapv(|x| if a > x { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Le => Ok(Value::Matrix(b.mapv(|x| if a <= x { 1.0 } else { 0.0 }))),
-                    BinaryOperator::Ge => Ok(Value::Matrix(b.mapv(|x| if a >= x { 1.0 } else { 0.0 }))),
+                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(b.mapv(|x| a == x))),
+                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(b.mapv(|x| a != x))),
+                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(b.mapv(|x| a < x))),
+                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(b.mapv(|x| a > x))),
+                    BinaryOperator::Le => Ok(Value::LogicalMatrix(b.mapv(|x| a <= x))),
+                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(b.mapv(|x| a >= x))),
                     _ => Err(format!("Operator {:?} not implemented for Scalar/Matrix", op)),
                 }
             }
@@ -1296,8 +1296,11 @@ impl Evaluator {
                                         res_vals = v;
                                     }
                                 } else {
-                                    for ret_name in returns {
-                                        res_vals.push(self.env.read().unwrap().get(ret_name).unwrap_or(Value::Void));
+                                    let limit = nargout.max(1);
+                                    for (i, ret_name) in returns.iter().enumerate() {
+                                        if i < limit {
+                                            res_vals.push(self.env.read().unwrap().get(ret_name).unwrap_or(Value::Void));
+                                        }
                                     }
                                 }
 
@@ -1342,6 +1345,16 @@ impl Evaluator {
                             };
                             return Ok(Value::Matrix(Array2::from_shape_vec(shape, res_data).unwrap()));
                         }
+                        Value::LogicalMatrix(mask) => {
+                            let flat_m = m.as_slice().unwrap();
+                            for (i, &b) in mask.iter().enumerate() {
+                                if b {
+                                    res_data.push(flat_m[i]);
+                                }
+                            }
+                            let len = res_data.len();
+                            return Ok(Value::Matrix(Array2::from_shape_vec((len, 1), res_data).unwrap()));
+                        }
                         Value::Colon => {
                             let data = m.iter().cloned().collect();
                             return Ok(Value::Matrix(Array2::from_shape_vec((m.len(), 1), data).unwrap()));
@@ -1352,6 +1365,9 @@ impl Evaluator {
                     let rows_idx: Vec<usize> = match &args[0] {
                         Value::Scalar(r) => vec![*r as usize - 1],
                         Value::Matrix(mat) => mat.iter().map(|&r| r as usize - 1).collect(),
+                        Value::LogicalMatrix(mat) => {
+                            mat.iter().enumerate().filter(|&(_, &b)| b).map(|(i, _)| i).collect()
+                        }
                         Value::CellArray(v) => v.iter().map(|v| match v {
                             Value::Scalar(s) => Ok(*s as usize - 1),
                             _ => Err("Invalid index in CellArray".to_string()),
@@ -1362,6 +1378,9 @@ impl Evaluator {
                     let cols_idx: Vec<usize> = match &args[1] {
                         Value::Scalar(c) => vec![*c as usize - 1],
                         Value::Matrix(mat) => mat.iter().map(|&c| c as usize - 1).collect(),
+                        Value::LogicalMatrix(mat) => {
+                            mat.iter().enumerate().filter(|&(_, &b)| b).map(|(i, _)| i).collect()
+                        }
                         Value::CellArray(v) => v.iter().map(|v| match v {
                             Value::Scalar(s) => Ok(*s as usize - 1),
                             _ => Err("Invalid index in CellArray".to_string()),
@@ -1388,12 +1407,18 @@ impl Evaluator {
                      let rows_idx: Vec<usize> = match &args[0] {
                          Value::Scalar(r) => vec![*r as usize - 1],
                          Value::Matrix(mat) => mat.iter().map(|&r| r as usize - 1).collect(),
+                         Value::LogicalMatrix(mat) => {
+                             mat.iter().enumerate().filter(|&(_, &b)| b).map(|(i, _)| i).collect()
+                         }
                          Value::Colon => (0..m.nrows()).collect(),
                          _ => return Err("Invalid row index".to_string()),
                      };
                      let cols_idx: Vec<usize> = match &args[1] {
                          Value::Scalar(c) => vec![*c as usize - 1],
                          Value::Matrix(mat) => mat.iter().map(|&c| c as usize - 1).collect(),
+                         Value::LogicalMatrix(mat) => {
+                             mat.iter().enumerate().filter(|&(_, &b)| b).map(|(i, _)| i).collect()
+                         }
                          Value::Colon => (0..m.ncols()).collect(),
                          _ => return Err("Invalid col index".to_string()),
                      };
@@ -1426,6 +1451,16 @@ impl Evaluator {
                                  (indices.nrows(), indices.ncols())
                              };
                              return Ok(Value::ComplexMatrix(Array2::from_shape_vec(shape, res_data).unwrap()));
+                         }
+                         Value::LogicalMatrix(mask) => {
+                             let flat_m = m.as_slice().unwrap();
+                             for (i, &b) in mask.iter().enumerate() {
+                                 if b {
+                                     res_data.push(flat_m[i]);
+                                 }
+                             }
+                             let len = res_data.len();
+                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec((len, 1), res_data).unwrap()));
                          }
                          Value::Colon => {
                              let data = m.iter().cloned().collect();
