@@ -26,11 +26,13 @@ class AutoloadDict(dict):
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
         if not key.startswith('_') and key not in self._loading:
+            # print(f"DEBUG: Variable set: {key}")
             self.engine._trigger_workspace_changed()
 
     def __delitem__(self, key):
         super().__delitem__(key)
         if not key.startswith('_'):
+            # print(f"DEBUG: Variable deleted: {key}")
             self.engine._trigger_workspace_changed()
 
     def __getitem__(self, key):

@@ -329,12 +329,12 @@ class _FileTreeItemState extends State<_FileTreeItem> {
               if (!isDirectory)
                 ContextMenuButtonConfig(
                   'Run',
-                  onPressed: () {
+                  onPressed: appProvider.isExecuting ? null : () {
                      appProvider.openFile(entity).then((_) {
                        appProvider.runActiveFile();
                      });
                   },
-                  icon: Icon(LucideIcons.play, size: 16, color: ui.colors.success),
+                  icon: Icon(LucideIcons.play, size: 16, color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.success),
                 ),
               ContextMenuButtonConfig(
                 'Rename',

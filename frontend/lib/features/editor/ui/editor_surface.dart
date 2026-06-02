@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../theme/syntax_themes.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../providers/app_provider.dart';
 import 'package:context_menus/context_menus.dart';
 
 class EditorSurface extends StatefulWidget {
@@ -59,6 +60,8 @@ class _EditorSurfaceState extends State<EditorSurface> {
       'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
     };
 
+    final appProvider = context.watch<AppProvider>();
+
     return Listener(
       onPointerSignal: (pointerSignal) {
         if (pointerSignal is PointerScrollEvent) {
@@ -105,8 +108,8 @@ class _EditorSurfaceState extends State<EditorSurface> {
           ),
           ContextMenuButtonConfig(
             'Run Selection',
-            icon: Icon(Icons.play_arrow, size: 16, color: ui.colors.accent),
-            onPressed: () {},
+            icon: Icon(Icons.play_arrow, size: 16, color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.accent),
+            onPressed: appProvider.isExecuting ? null : () {},
           ),
           ContextMenuButtonConfig(
             'Peek Definition',

@@ -1,23 +1,60 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ffi';
+import 'dart:isolate';
+import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 
-/// Socket-based bridge to Python backend server
+// FFI Signatures
+typedef UnilabInitNative = Int32 Function(Pointer<Utf8> backendPath);
+typedef UnilabInit = int Function(Pointer<Utf8> backendPath);
+
+typedef UnilabCreateSessionNative = Pointer<Utf8> Function(Pointer<Utf8> username);
+typedef UnilabCreateSession = Pointer<Utf8> Function(Pointer<Utf8> username);
+
+typedef UnilabExecuteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code);
+typedef UnilabExecute = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code);
+
+typedef UnilabGetWorkspaceNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
+typedef UnilabGetWorkspace = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
+
+typedef UnilabGetAutocompleteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text);
+typedef UnilabGetAutocomplete = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text);
+
+typedef UnilabListFilesNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
+typedef UnilabListFiles = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
+
+typedef UnilabCreateFileNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> filename, Pointer<Utf8> content);
+typedef UnilabCreateFile = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> filename, Pointer<Utf8> content);
+
+typedef UnilabFreeStringNative = Void Function(Pointer<Utf8> ptr);
+typedef UnilabFreeString = void Function(Pointer<Utf8> ptr);
+
+typedef WorkspaceCallbackNative = Void Function(Pointer<Utf8> sessionId, Pointer<Utf8> variablesJson);
+typedef UnilabSetWorkspaceCallbackNative = Void Function(Pointer<NativeFunction<WorkspaceCallbackNative>> callback);
+typedef UnilabSetWorkspaceCallback = void Function(Pointer<NativeFunction<WorkspaceCallbackNative>> callback);
+
 class UniLabBridge {
   static UniLabBridge? _instance;
-  Socket? _socket;
-  StreamSubscription<List<int>>? _subscription;
-  final Queue<Completer<Map<String, dynamic>>> _pendingRequests = Queue();
   static final _eventController = StreamController<Map<String, dynamic>>.broadcast();
-
+  
   String? _sessionId;
   bool _initialized = false;
-  String? _buffer = '';
+  
+  // Keep callback alive
+  NativeCallable<WorkspaceCallbackNative>? _wsCallback;
+  
+  // Isolate communication
+  SendPort? _workerSendPort;
+  final ReceivePort _mainReceivePort = ReceivePort();
+  final Completer<void> _workerReady = Completer<void>();
 
-  UniLabBridge._();
+  UniLabBridge._() {
+    _startWorker();
+  }
 
   static UniLabBridge get instance {
     _instance ??= UniLabBridge._();
@@ -26,9 +63,7 @@ class UniLabBridge {
 
   static void resetInstance() {
     _instance?._initialized = false;
-    _instance?._sessionId = null;
-    _instance?._socket?.close().ignore();
-    _instance?._subscription?.cancel().ignore();
+    _instance?._workerSendPort?.send({'command': 'shutdown'});
     _instance = null;
   }
 
@@ -36,334 +71,294 @@ class UniLabBridge {
   bool get initialized => _initialized;
   Stream<Map<String, dynamic>> get events => _eventController.stream;
 
-  /// Initialize the bridge and start the Python server
+  Future<void> _startWorker() async {
+    await Isolate.spawn(_workerEntry, _mainReceivePort.sendPort);
+    
+    _mainReceivePort.listen((message) {
+      if (message is SendPort) {
+        _workerSendPort = message;
+        _workerReady.complete();
+      } else if (message is Map<String, dynamic>) {
+        if (message['type'] == 'event') {
+          _eventController.add(message);
+        }
+      }
+    });
+  }
+
+  Future<dynamic> _sendCommand(String command, Map<String, dynamic> params) async {
+    await _workerReady.future;
+    final responsePort = ReceivePort();
+    _workerSendPort!.send({
+      'command': command,
+      'params': params,
+      'replyPort': responsePort.sendPort,
+    });
+    
+    try {
+      final result = await responsePort.first.timeout(const Duration(seconds: 15));
+      if (result is Map && result['error'] != null) {
+        throw Exception(result['error']);
+      }
+      return result;
+    } on TimeoutException {
+      throw Exception('Command $command timed out');
+    } finally {
+      responsePort.close();
+    }
+  }
+
+  /// Initialize the bridge.
   Future<void> initialize(String backendPath) async {
     if (_initialized) return;
 
-    try {
-      // Start Python server as subprocess
-      await _startPythonServer(backendPath);
+    // Create the workspace callback in the main isolate
+    _wsCallback = NativeCallable<WorkspaceCallbackNative>.listener(_onWorkspaceChanged);
+    
+    await _sendCommand('initialize', {
+      'backendPath': backendPath,
+      'callbackPtr': _wsCallback!.nativeFunction.address,
+    });
 
-      // Connect to the server
-      await _connectToServer();
-
-      _initialized = true;
-      debugPrint('[UniLabBridge] Initialized successfully');
-    } catch (e) {
-      _initialized = false;
-      debugPrint('[UniLabBridge] Initialization failed: $e');
-      rethrow;
-    }
+    _initialized = true;
+    debugPrint('[UniLabBridge] FFI Bridge Initialized successfully (via Worker Isolate)');
   }
 
-  Future<void> _startPythonServer(String backendPath) async {
+  static void _onWorkspaceChanged(Pointer<Utf8> sessionIdPtr, Pointer<Utf8> variablesJsonPtr) {
+    final sessionId = sessionIdPtr.toDartString();
+    final variablesJson = variablesJsonPtr.toDartString();
+    
     try {
-      // Start server in background (don't wait for it)
-      Process.start(
-        'python3',
-        [
-          p.join(backendPath, 'unilab_server.py'),
-          '--host', '127.0.0.1',
-          '--port', '9999',
-        ],
-        workingDirectory: backendPath,
-      ).then((process) {
-        debugPrint('[UniLabBridge] Python server process started (PID: ${process.pid})');
-        // Stream output for debugging
-        process.stdout
-            .transform(utf8.decoder)
-            .listen((output) => debugPrint('[Server] $output'));
-        process.stderr
-            .transform(utf8.decoder)
-            .listen((output) => debugPrint('[Server Error] $output'));
-      }).catchError((e) {
-        debugPrint('[UniLabBridge] Failed to start server process: $e');
-      });
+      final variables = jsonDecode(variablesJson) as Map<String, dynamic>;
 
-      debugPrint('[UniLabBridge] Started Python server process');
-    } catch (e) {
-      debugPrint('[UniLabBridge] Error starting server: $e');
-      // Server might already be running, try to connect anyway
-    }
-  }
-
-  Future<void> _connectToServer() async {
-    // Wait for server to be ready (give it time to start)
-    await Future.delayed(const Duration(seconds: 2));
-
-    try {
-      _socket = await Socket.connect('127.0.0.1', 9999);
-      debugPrint('[UniLabBridge] Connected to Python server');
-
-      // Listen for responses - accumulate data and process line by line
-      _buffer = '';
-      _subscription = _socket!.listen((data) {
-        _buffer = (_buffer ?? '') + utf8.decode(data);
-        final parts = _buffer!.split('\n');
-        // Process all complete lines
-        for (int i = 0; i < parts.length - 1; i++) {
-          if (parts[i].isNotEmpty) {
-            _handleServerResponse(parts[i]);
-          }
-        }
-        // Keep the incomplete last part in buffer
-        _buffer = parts.last;
+      _eventController.add({
+        'type': 'event',
+        'event': 'workspace_updated',
+        'session_id': sessionId,
+        'variables': variables,
       });
     } catch (e) {
-      debugPrint('[UniLabBridge] Failed to connect to server: $e');
-      rethrow;
-    }
-  }
-
-  void _handleServerResponse(String line) {
-    try {
-      if (line.isEmpty) return;
-
-      final preview = line.length > 100 ? '${line.substring(0, 100)}...' : line;
-      debugPrint('[UniLabBridge] Received line from server: $preview');
-
-      final response = jsonDecode(line) as Map<String, dynamic>;
-      debugPrint('[UniLabBridge] Parsed response: type=${response["type"]}, method=${response["method"]}, hasPending=${_pendingRequests.isNotEmpty}');
-
-      // Check if this is an event or a response
-      if (response['type'] == 'event') {
-        // Broadcast event
-        debugPrint('[UniLabBridge] Broadcasting event: ${response["event"]}');
-        _eventController.add(response);
-      } else if (_pendingRequests.isNotEmpty) {
-        // Reply to a pending request
-        debugPrint('[UniLabBridge] Completing pending request');
-        final completer = _pendingRequests.removeFirst();
-        completer.complete(response);
-      } else {
-        debugPrint('[UniLabBridge] No pending requests to match this response');
-      }
-    } catch (e) {
-      debugPrint('[UniLabBridge] Error handling server response: $e');
-    }
-  }
-
-  Future<Map<String, dynamic>> _sendRequest(String method, Map<String, dynamic> params) async {
-    if (!_initialized) throw StateError('Bridge not initialized');
-
-    final request = {
-      'method': method,
-      'params': params,
-    };
-
-    final completer = Completer<Map<String, dynamic>>();
-    _pendingRequests.add(completer);
-
-    final requestJson = jsonEncode(request);
-    debugPrint('[UniLabBridge] Sending request: $method');
-    _socket!.writeln(requestJson);
-
-    try {
-      final response = await completer.future.timeout(const Duration(seconds: 30));
-      debugPrint('[UniLabBridge] Received response for $method: ${response.keys.join(", ")}');
-      return response;
-    } on TimeoutException {
-      debugPrint('[UniLabBridge] Request timeout for $method after 30 seconds');
-      rethrow;
+      debugPrint('[UniLabBridge] Error parsing workspace update: $e');
     }
   }
 
   /// Create a new session
   Future<String> createSession(String username) async {
-    try {
-      final response = await _sendRequest('create_session', {'username': username});
-
-      if (response['success'] == true && response['session_id'] != null) {
-        _sessionId = response['session_id'] as String;
-        debugPrint('[UniLabBridge] Session created: $_sessionId');
-        return _sessionId!;
-      } else {
-        throw Exception('Failed to create session: ${response['error']}');
-      }
-    } catch (e) {
-      debugPrint('[UniLabBridge] createSession error: $e');
-      rethrow;
-    }
+    final response = await _sendCommand('create_session', {'username': username});
+    _sessionId = response['session_id'];
+    return _sessionId!;
   }
 
   /// Execute code in the current session
   Future<ExecutionResult> execute(String code) async {
-    if (!_initialized || _sessionId == null) {
-      throw StateError('Bridge not initialized or session not created');
-    }
-
-    try {
-      final response = await _sendRequest('execute', {
-        'session_id': _sessionId,
-        'code': code,
-      });
-
-      return ExecutionResult.fromJson(response);
-    } catch (e) {
-      debugPrint('[UniLabBridge] execute error: $e');
-      rethrow;
-    }
+    if (_sessionId == null) throw StateError('Session not created');
+    final response = await _sendCommand('execute', {
+      'sessionId': _sessionId,
+      'code': code,
+    });
+    return ExecutionResult.fromJson(response);
   }
 
   /// Get workspace variables
   Future<Map<String, dynamic>> getWorkspace() async {
-    if (!_initialized || _sessionId == null) {
-      throw StateError('Bridge not initialized');
-    }
-
-    try {
-      final response = await _sendRequest('get_workspace', {
-        'session_id': _sessionId,
-      });
-
-      return response['variables'] as Map<String, dynamic>? ?? {};
-    } catch (e) {
-      debugPrint('[UniLabBridge] getWorkspace error: $e');
-      return {};
-    }
+    if (_sessionId == null) return {};
+    final response = await _sendCommand('get_workspace', {'sessionId': _sessionId});
+    return response['variables'] ?? {};
   }
 
   /// Get autocomplete suggestions
   Future<List<String>> getAutocomplete(String text) async {
-    if (!_initialized || _sessionId == null) {
-      return [];
-    }
-
-    try {
-      final response = await _sendRequest('get_autocomplete', {
-        'session_id': _sessionId,
-        'text': text,
-      });
-
-      if (response['suggestions'] is List) {
-        return List<String>.from(response['suggestions'] as List<dynamic>);
-      }
-      return [];
-    } catch (e) {
-      debugPrint('[UniLabBridge] getAutocomplete error: $e');
-      return [];
-    }
+    if (_sessionId == null) return [];
+    final response = await _sendCommand('get_autocomplete', {
+      'sessionId': _sessionId,
+      'text': text,
+    });
+    return List<String>.from(response['suggestions'] ?? []);
   }
 
   /// List files in the session workspace
   Future<List<Map<String, dynamic>>> listFiles() async {
-    if (!_initialized || _sessionId == null) {
-      return [];
-    }
-
-    try {
-      final response = await _sendRequest('list_files', {
-        'session_id': _sessionId,
-      });
-
-      if (response['files'] is List) {
-        return List<Map<String, dynamic>>.from(
-          (response['files'] as List<dynamic>).map((f) => f as Map<String, dynamic>)
-        );
-      }
-      return [];
-    } catch (e) {
-      debugPrint('[UniLabBridge] listFiles error: $e');
-      return [];
-    }
+    if (_sessionId == null) return [];
+    final response = await _sendCommand('list_files', {'sessionId': _sessionId});
+    return List<Map<String, dynamic>>.from(response['files'] ?? []);
   }
 
   /// Create or overwrite a file
   Future<void> createFile(String filename, String content) async {
-    if (!_initialized || _sessionId == null) {
-      throw StateError('Bridge not initialized');
-    }
-
-    try {
-      final response = await _sendRequest('create_file', {
-        'session_id': _sessionId,
-        'filename': filename,
-        'content': content,
-      });
-
-      if (response['success'] != true) {
-        throw Exception('Failed to create file: ${response['error']}');
-      }
-      debugPrint('[UniLabBridge] File created: $filename');
-    } catch (e) {
-      debugPrint('[UniLabBridge] createFile error: $e');
-      rethrow;
-    }
+    if (_sessionId == null) return;
+    await _sendCommand('create_file', {
+      'sessionId': _sessionId,
+      'filename': filename,
+      'content': content,
+    });
   }
 
-  /// Get server info
   Future<Map<String, dynamic>> getInfo() async {
-    if (!_initialized) throw StateError('Bridge not initialized');
-
-    try {
-      return await _sendRequest('get_info', {});
-    } catch (e) {
-      debugPrint('[UniLabBridge] getInfo error: $e');
-      return {
-        'version': '0.1.0',
-        'name': 'UniLab Python Server',
-        'status': 'error',
-      };
-    }
+    return {
+      'version': '0.1.0 (FFI-Worker)',
+      'name': 'UniLab Core FFI Worker',
+      'status': 'active',
+      'capabilities': ['execution', 'workspace', 'files', 'autocomplete']
+    };
   }
 
-  /// Find the backend path
+  // Find the backend path
   static Future<String> findBackendPath() async {
     try {
-      // Try relative path from executable
       final exe = File(Platform.resolvedExecutable);
       final backendPath = p.join(exe.parent.path, '..', '..', '..', 'backend');
-      final backendDir = Directory(backendPath);
-      if (await backendDir.exists()) {
-        debugPrint('[UniLabBridge] Found backend at: $backendPath');
-        return backendPath;
-      }
-    } catch (e) {
-      debugPrint('[UniLabBridge] Relative path lookup failed: $e');
-    }
-
-    // Try environment variable
+      if (await Directory(backendPath).exists()) return backendPath;
+    } catch (_) {}
+    
     final envPath = Platform.environment['UNILAB_BACKEND_PATH'];
-    if (envPath != null && await Directory(envPath).exists()) {
-      debugPrint('[UniLabBridge] Found backend via UNILAB_BACKEND_PATH: $envPath');
-      return envPath;
-    }
-
-    // Try common paths
+    if (envPath != null && await Directory(envPath).exists()) return envPath;
+    
     final commonPaths = [
-      '/home/john/Documents/GitHub/UniLab/backend',
-      p.join(Directory.current.path, 'backend'),
+      '/home/john/Documents/GitHub/UniLab/backend', 
+      p.join(Directory.current.path, 'backend')
     ];
-
     for (final path in commonPaths) {
-      if (await Directory(path).exists()) {
-        debugPrint('[UniLabBridge] Found backend at: $path');
-        return path;
+      if (await Directory(path).exists()) return path;
+    }
+    throw StateError('Cannot find backend directory.');
+  }
+
+  // --- Worker Isolate Entry Point ---
+  static void _workerEntry(SendPort mainSendPort) {
+    final workerReceivePort = ReceivePort();
+    mainSendPort.send(workerReceivePort.sendPort);
+
+    late DynamicLibrary lib;
+    late UnilabInit unilabInit;
+    late UnilabCreateSession unilabCreateSession;
+    late UnilabExecute unilabExecute;
+    late UnilabGetWorkspace unilabGetWorkspace;
+    late UnilabGetAutocomplete unilabGetAutocomplete;
+    late UnilabListFiles unilabListFiles;
+    late UnilabCreateFile unilabCreateFile;
+    late UnilabFreeString unilabFreeString;
+    late UnilabSetWorkspaceCallback unilabSetWorkspaceCallback;
+
+    workerReceivePort.listen((message) {
+      if (message is! Map) return;
+      final command = message['command'];
+      final params = message['params'] ?? {};
+      final SendPort? replyPort = message['replyPort'];
+
+      try {
+        switch (command) {
+          case 'initialize':
+            final backendPath = params['backendPath'] as String;
+            final callbackAddr = params['callbackPtr'] as int;
+
+            // Load library
+            String libName = Platform.isLinux ? 'libunilab_core.so' : (Platform.isMacOS ? 'libunilab_core.dylib' : 'unilab_core.dll');
+            final locations = [
+              p.join(backendPath, 'target', 'release', libName),
+              p.join(backendPath, 'target', 'debug', libName),
+              libName,
+              p.join(Directory.current.path, libName),
+            ];
+            
+            bool loaded = false;
+            for (final loc in locations) {
+              try {
+                lib = DynamicLibrary.open(loc);
+                loaded = true;
+                break;
+              } catch (_) {}
+            }
+            if (!loaded) throw Exception('Could not load library $libName');
+
+            unilabInit = lib.lookupFunction<UnilabInitNative, UnilabInit>('unilab_init');
+            unilabCreateSession = lib.lookupFunction<UnilabCreateSessionNative, UnilabCreateSession>('unilab_create_session');
+            unilabExecute = lib.lookupFunction<UnilabExecuteNative, UnilabExecute>('unilab_execute');
+            unilabGetWorkspace = lib.lookupFunction<UnilabGetWorkspaceNative, UnilabGetWorkspace>('unilab_get_workspace');
+            unilabGetAutocomplete = lib.lookupFunction<UnilabGetAutocompleteNative, UnilabGetAutocomplete>('unilab_get_autocomplete');
+            unilabListFiles = lib.lookupFunction<UnilabListFilesNative, UnilabListFiles>('unilab_list_files');
+            unilabCreateFile = lib.lookupFunction<UnilabCreateFileNative, UnilabCreateFile>('unilab_create_file');
+            unilabFreeString = lib.lookupFunction<UnilabFreeStringNative, UnilabFreeString>('unilab_free_string');
+            unilabSetWorkspaceCallback = lib.lookupFunction<UnilabSetWorkspaceCallbackNative, UnilabSetWorkspaceCallback>('unilab_set_workspace_callback');
+
+            final pathPtr = backendPath.toNativeUtf8();
+            unilabInit(pathPtr);
+            malloc.free(pathPtr);
+
+            // Register callback
+            final cbPtr = Pointer<NativeFunction<WorkspaceCallbackNative>>.fromAddress(callbackAddr);
+            unilabSetWorkspaceCallback(cbPtr);
+            
+            replyPort?.send({'success': true});
+            break;
+
+          case 'create_session':
+            final userPtr = (params['username'] as String).toNativeUtf8();
+            final resPtr = unilabCreateSession(userPtr);
+            malloc.free(userPtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'execute':
+            final sidPtr = (params['sessionId'] as String).toNativeUtf8();
+            final codePtr = (params['code'] as String).toNativeUtf8();
+            final resPtr = unilabExecute(sidPtr, codePtr);
+            malloc.free(sidPtr);
+            malloc.free(codePtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'get_workspace':
+            final sidPtr = (params['sessionId'] as String).toNativeUtf8();
+            final resPtr = unilabGetWorkspace(sidPtr);
+            malloc.free(sidPtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'get_autocomplete':
+            final sidPtr = (params['sessionId'] as String).toNativeUtf8();
+            final textPtr = (params['text'] as String).toNativeUtf8();
+            final resPtr = unilabGetAutocomplete(sidPtr, textPtr);
+            malloc.free(sidPtr);
+            malloc.free(textPtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'list_files':
+            final sidPtr = (params['sessionId'] as String).toNativeUtf8();
+            final resPtr = unilabListFiles(sidPtr);
+            malloc.free(sidPtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'create_file':
+            final sidPtr = (params['sessionId'] as String).toNativeUtf8();
+            final namePtr = (params['filename'] as String).toNativeUtf8();
+            final contPtr = (params['content'] as String).toNativeUtf8();
+            final resPtr = unilabCreateFile(sidPtr, namePtr, contPtr);
+            malloc.free(sidPtr);
+            malloc.free(namePtr);
+            malloc.free(contPtr);
+            final res = jsonDecode(resPtr.toDartString());
+            unilabFreeString(resPtr);
+            replyPort?.send(res);
+            break;
+
+          case 'shutdown':
+            Isolate.exit();
+        }
+      } catch (e) {
+        replyPort?.send({'error': e.toString()});
       }
-    }
-
-    throw StateError(
-      'Cannot find backend directory. '
-      'Set UNILAB_BACKEND_PATH environment variable or ensure backend/ is relative to the executable.',
-    );
+    });
   }
-
-  Future<void> dispose() async {
-    if (_initialized) {
-      await _subscription?.cancel();
-      await _socket?.close();
-      await _eventController.close();
-      _initialized = false;
-    }
-  }
-}
-
-// Helper for managing a queue
-class Queue<T> {
-  final _list = <T>[];
-
-  void add(T value) => _list.add(value);
-  T removeFirst() => _list.removeAt(0);
-  bool get isEmpty => _list.isEmpty;
-  bool get isNotEmpty => _list.isNotEmpty;
 }

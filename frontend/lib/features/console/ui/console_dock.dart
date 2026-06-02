@@ -255,14 +255,17 @@ class _ConsoleViewState extends State<_ConsoleView> {
                   controller: _controller,
                   focusNode: _focusNode,
                   autofocus: true,
+                  enabled: !appProvider.isExecuting,
                   style: ui.typography.consoleBody.copyWith(
-                    color: ui.colors.textPrimary,
+                    color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.textPrimary,
                     fontSize: 12,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
+                    hintText: appProvider.isExecuting ? 'Waiting for execution to finish...' : null,
+                    hintStyle: TextStyle(color: ui.colors.textDisabled),
                   ),
                   onSubmitted: (value) {
                     if (value.isNotEmpty) {

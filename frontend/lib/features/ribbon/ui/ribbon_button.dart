@@ -15,6 +15,7 @@ class RibbonButton extends StatefulWidget {
     this.isLarge = false,
     this.color,
     this.hasDropdown = false,
+    this.loading = false,
   });
 
   final String label;
@@ -24,6 +25,7 @@ class RibbonButton extends StatefulWidget {
   final bool isLarge;
   final Color? color;
   final bool hasDropdown;
+  final bool loading;
 
   @override
   State<RibbonButton> createState() => _RibbonButtonState();
@@ -36,7 +38,7 @@ class _RibbonButtonState extends State<RibbonButton> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final settings = context.watch<SettingsProvider>().settings;
-    final isEnabled = widget.onTap != null;
+    final isEnabled = widget.onTap != null && !widget.loading;
     final animDuration = settings.animationEnabled ? const Duration(milliseconds: 150) : Duration.zero;
 
     Color bgColor = Colors.transparent;
@@ -67,7 +69,7 @@ class _RibbonButtonState extends State<RibbonButton> {
           onExit: (_) => setState(() => _isHovered = false),
           cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
           child: GestureDetector(
-            onTap: widget.onTap,
+            onTap: isEnabled ? widget.onTap : null,
             child: AnimatedScale(
               scale: _isHovered && isEnabled ? 1.02 : 1.0,
               duration: animDuration,
@@ -97,11 +99,20 @@ class _RibbonButtonState extends State<RibbonButton> {
                     AnimatedContainer(
                       duration: animDuration,
                       transform: Matrix4.identity()..translate(0.0, _isHovered ? -1.0 : 0.0),
-                      child: UiIcon(
-                        widget.icon,
-                        size: widget.isLarge ? 24 : 18, // Slightly smaller icon for standard buttons
-                        color: fgColor,
-                      ),
+                      child: widget.loading
+                        ? SizedBox(
+                            width: widget.isLarge ? 24 : 18,
+                            height: widget.isLarge ? 24 : 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: fgColor,
+                            ),
+                          )
+                        : UiIcon(
+                            widget.icon,
+                            size: widget.isLarge ? 24 : 18, // Slightly smaller icon for standard buttons
+                            color: fgColor,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Flexible(
@@ -110,7 +121,7 @@ class _RibbonButtonState extends State<RibbonButton> {
                         children: [
                           Flexible(
                             child: UiText(
-                              text: widget.label,
+                              text: widget.loading ? 'Running...' : widget.label,
                               variant: UiTextVariant.label,
                               fontSize: 10,
                               fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
@@ -119,7 +130,7 @@ class _RibbonButtonState extends State<RibbonButton> {
                               overflow: TextOverflow.visible,
                             ),
                           ),
-                          if (widget.hasDropdown)
+                          if (widget.hasDropdown && !widget.loading)
                             Icon(Icons.keyboard_arrow_down, size: 12, color: fgColor),
                         ],
                       ),

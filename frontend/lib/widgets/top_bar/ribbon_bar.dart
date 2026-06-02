@@ -153,6 +153,7 @@ class _RibbonBarState extends State<RibbonBar> with SingleTickerProviderStateMix
               label: 'Run',
               onPressed: () => appProvider.runActiveFile(),
               isLarge: true,
+              loading: appProvider.isExecuting,
               tooltip: 'Run the active script (F5)',
             ),
             _RibbonButton(
@@ -503,6 +504,7 @@ class _RibbonButton extends StatefulWidget {
   final bool isLarge;
   final bool isActive;
   final String? tooltip;
+  final bool loading;
 
   const _RibbonButton({
     required this.icon,
@@ -512,6 +514,7 @@ class _RibbonButton extends StatefulWidget {
     this.isLarge = false,
     this.isActive = false,
     this.tooltip,
+    this.loading = false,
   });
 
   @override
@@ -524,23 +527,25 @@ class _RibbonButtonState extends State<_RibbonButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isEnabled = !widget.loading;
     
     // Transparent background by default, accent color on hover
-    final Color bgColor = _isHovered 
+    final Color bgColor = (_isHovered && isEnabled) 
         ? theme.primaryColor 
         : Colors.transparent;
         
     // Standardize foreground to use textPrimary equivalent from theme
     // On hover, we use White for maximum contrast against the accent background.
-    final Color fgColor = _isHovered 
+    final Color fgColor = (_isHovered && isEnabled) 
         ? Colors.white 
         : (widget.iconColor ?? (widget.isActive ? theme.primaryColor : (theme.textTheme.bodyMedium?.color ?? const Color(0xFFE2E4E9))));
 
     final content = MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
+      cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTap: widget.onPressed,
+        onTap: isEnabled ? widget.onPressed : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: widget.isLarge ? 64 : 54,
@@ -549,7 +554,7 @@ class _RibbonButtonState extends State<_RibbonButton> {
             color: bgColor,
             borderRadius: BorderRadius.circular(4),
             // Borders only visible on hover to maintain clean default state
-            border: _isHovered
+            border: (_isHovered && isEnabled)
                 ? Border.all(
                     color: theme.primaryColor.withValues(alpha: 0.5),
                     width: 1,
@@ -560,21 +565,31 @@ class _RibbonButtonState extends State<_RibbonButton> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                widget.icon,
-                size: widget.isLarge ? 20 : 16,
-                color: fgColor,
-              ),
+              if (widget.loading)
+                SizedBox(
+                  width: widget.isLarge ? 20 : 16,
+                  height: widget.isLarge ? 20 : 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: fgColor,
+                  ),
+                )
+              else
+                Icon(
+                  widget.icon,
+                  size: widget.isLarge ? 20 : 16,
+                  color: fgColor,
+                ),
               const SizedBox(height: 2),
               Flexible(
                 child: Text(
-                  widget.label,
+                  widget.loading ? 'Running...' : widget.label,
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 10,
                     color: fgColor,
                     height: 1.1,
-                    fontWeight: _isHovered ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: (_isHovered && isEnabled) ? FontWeight.bold : FontWeight.normal,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 1,

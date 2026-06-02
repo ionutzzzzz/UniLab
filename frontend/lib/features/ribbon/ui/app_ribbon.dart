@@ -216,7 +216,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final registry = ref.watch(commandRegistryProvider);
-    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final appProvider = p.Provider.of<AppProvider>(context);
     
     final cmdRun = registry.get('run.run');
     final cmdStop = registry.get('run.stop');
@@ -256,6 +256,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
               label: 'Run Script',
               icon: LucideIcons.playCircle,
               isLarge: true,
+              loading: appProvider.isExecuting,
               onTap: cmdRun != null ? () => cmdRun.run(CommandContext(context)) : null,
             ),
             RibbonButton(

@@ -67,6 +67,7 @@ class QuickActionsBar extends StatelessWidget {
             'Run',
             () => appProvider.runActiveFile(),
             color: const Color(0xFF4EC9B0),
+            loading: appProvider.isExecuting,
           ),
           _buildQuickButton(
             context,
@@ -94,22 +95,33 @@ class QuickActionsBar extends StatelessWidget {
     String tooltip,
     VoidCallback onPressed, {
     Color? color,
+    bool loading = false,
   }) {
+    final isEnabled = !loading;
     return Tooltip(
-      message: tooltip,
+      message: loading ? 'Executing...' : tooltip,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onPressed,
+          onTap: isEnabled ? onPressed : null,
           hoverColor: Theme.of(context).hoverColor,
           borderRadius: BorderRadius.zero,
           child: Padding(
             padding: const EdgeInsets.all(4),
-            child: Icon(
-              icon,
-              size: 14,
-              color: color ?? const Color(0xFFCCCCCC),
-            ),
+            child: loading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    size: 14,
+                    color: isEnabled ? (color ?? const Color(0xFFCCCCCC)) : Colors.grey,
+                  ),
           ),
         ),
       ),
