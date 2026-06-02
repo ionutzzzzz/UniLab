@@ -135,23 +135,28 @@ class UniLabServer:
             
             # Set up real-time workspace update callback
             async def on_workspace_changed(variables):
-                event = {
-                    "type": "event",
-                    "event": "workspace_updated",
-                    "session_id": session_id,
-                    "variables": variables
-                }
-                data = (json.dumps(event) + '\n').encode()
-                
-                writers = self.session_writers.get(session_id, [])
-                for w in list(writers):
-                    try:
-                        w.write(data)
-                        await w.drain()
-                    except Exception as e:
-                        print(f"Error broadcasting to writer: {e}")
-                        if w in writers:
-                            writers.remove(w)
+                try:
+                    # Safely serialize variables to JSON
+                    json_str = json.dumps(variables)
+                    event = {
+                        "type": "event",
+                        "event": "workspace_updated",
+                        "session_id": session_id,
+                        "variables": json.loads(json_str)  # Re-parse to ensure clean JSON
+                    }
+                    data = (json.dumps(event) + '\n').encode()
+
+                    writers = self.session_writers.get(session_id, [])
+                    for w in list(writers):
+                        try:
+                            w.write(data)
+                            await w.drain()
+                        except Exception as e:
+                            print(f"Error broadcasting to writer: {e}")
+                            if w in writers:
+                                writers.remove(w)
+                except Exception as e:
+                    print(f"Error in on_workspace_changed: {e}")
 
             engine.on_workspace_changed = on_workspace_changed
             self.sessions[session_id] = engine
