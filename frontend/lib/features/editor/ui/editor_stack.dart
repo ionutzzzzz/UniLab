@@ -33,6 +33,7 @@ class _EditorStackState extends State<EditorStack> {
   bool _showFindReplace = false;
   Timer? _autoSaveTimer;
   String? _lastFileId;
+  StreamSubscription? _actionSubscription;
 
   @override
   void initState() {
@@ -42,6 +43,87 @@ class _EditorStackState extends State<EditorStack> {
       language: matlab,
     );
     _controller.addListener(_onCodeChanged);
+
+    // Listen to actions from Ribbon via AppProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appProvider = context.read<AppProvider>();
+      _actionSubscription = appProvider.editorActions.listen((action) {
+        debugPrint('EditorStack: Received editor action: $action');
+        if (!mounted) {
+          debugPrint('EditorStack: Not mounted, ignoring action');
+          return;
+        }
+        switch (action) {
+          case 'editor.find':
+            _toggleFindReplace();
+            break;
+          case 'editor.gotoLine':
+            _showGoToLineDialog();
+            break;
+        }
+      });
+    });
+  }
+
+  void _showGoToLineDialog() {
+    final ui = UiTheme.of(context);
+    final controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        title: UiText(text: 'Go to Line', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: ui.colors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Line number',
+            hintStyle: TextStyle(color: ui.colors.textMuted),
+          ),
+          onSubmitted: (val) {
+            final line = int.tryParse(val);
+            if (line != null) {
+              _goToLine(line);
+            }
+            Navigator.pop(context);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: UiText(text: 'Cancel', color: ui.colors.textMuted),
+          ),
+          TextButton(
+            onPressed: () {
+              final line = int.tryParse(controller.text);
+              if (line != null) {
+                _goToLine(line);
+              }
+              Navigator.pop(context);
+            },
+            child: UiText(text: 'Go', color: ui.colors.accent, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _goToLine(int line) {
+    if (line < 1) return;
+    final text = _controller.text;
+    final lines = text.split('\n');
+    if (line > lines.length) return;
+
+    int pos = 0;
+    for (int i = 0; i < line - 1; i++) {
+      pos += lines[i].length + 1;
+    }
+    
+    _controller.selection = TextSelection.collapsed(offset: pos);
+    _focusNode.requestFocus();
   }
 
   void _onCodeChanged() {
@@ -80,6 +162,7 @@ class _EditorStackState extends State<EditorStack> {
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
+    _actionSubscription?.cancel();
     _controller.removeListener(_onCodeChanged);
     _controller.dispose();
     _focusNode.dispose();
@@ -165,11 +248,14 @@ class _EditorStackState extends State<EditorStack> {
                           Expanded(child: content),
                         ],
                       ),
-                      if (_showFindReplace && showMinimap) // Only show find in code editor
+                      if (_showFindReplace) 
                         Positioned(
                           top: 0,
                           right: 20,
-                          child: FindReplaceBar(onClose: _toggleFindReplace),
+                          child: FindReplaceBar(
+                            onClose: _toggleFindReplace,
+                            controller: _controller,
+                          ),
                         ),
                     ],
                   ),

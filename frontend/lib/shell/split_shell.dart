@@ -29,6 +29,8 @@ class SplitShell extends ConsumerStatefulWidget {
 class _SplitShellState extends ConsumerState<SplitShell> {
   MultiSplitViewController? _horizontalController;
   MultiSplitViewController? _verticalController;
+  final GlobalKey _horizontalKey = GlobalKey(debugLabel: 'main_horizontal_split');
+  final GlobalKey _verticalKey = GlobalKey(debugLabel: 'center_vertical_split');
 
   @override
   void initState() {
@@ -101,7 +103,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
         ),
       ),
       child: MultiSplitView(
-        key: const ValueKey('center_vertical_split'),
+        key: _verticalKey,
         axis: Axis.vertical,
         controller: _verticalController,
         builder: (context, area) {
@@ -122,7 +124,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
         ),
       ),
       child: MultiSplitView(
-        key: const ValueKey('main_horizontal_split'),
+        key: _horizontalKey,
         controller: _horizontalController,
         builder: (context, area) {
           if (area.data == 'left') return widget.leftPanel;

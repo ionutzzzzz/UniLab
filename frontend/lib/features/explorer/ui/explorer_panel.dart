@@ -21,9 +21,17 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 }
 
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _showSearch = false;
   final Set<String> _expandedPaths = {};
   final Set<String> _selectedPaths = {};
   String? _lastSelectedPath;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
   
   // Flat list to determine order for shift-click
   final List<String> _flatVisiblePaths = [];
@@ -105,62 +113,82 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    UiIconButton(icon: LucideIcons.filePlus, tooltip: 'New File', size: 24, iconSize: 14, onPressed: () => appProvider.addNewFile()),
-                    SizedBox(width: ui.spacing.xs),
-                    UiIconButton(
-                      icon: LucideIcons.folderPlus,
-                      tooltip: 'New Folder',
-                      size: 24,
-                      iconSize: 14,
-                      onPressed: () {
-                        if (kIsWeb) return;
-                        showDialog(
-                          context: context,
-                          builder: (context) {
-                            final controller = TextEditingController();
-                            return AlertDialog(
-                              backgroundColor: ui.colors.panel,
-                              surfaceTintColor: Colors.transparent,
-                              title: UiText(text: 'New Folder', variant: UiTextVariant.title),
-                              content: TextField(
-                                controller: controller,
-                                style: TextStyle(color: ui.colors.textPrimary),
-                                decoration: InputDecoration(
-                                  hintText: 'Folder Name',
-                                  hintStyle: TextStyle(color: ui.colors.textMuted),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _HeaderAction(
+                        icon: _showSearch ? LucideIcons.x : LucideIcons.search,
+                        onPressed: () {
+                          setState(() {
+                            _showSearch = !_showSearch;
+                            if (!_showSearch) _searchController.clear();
+                          });
+                        },
+                        tooltip: 'Search',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.refreshCw,
+                        onPressed: () => appProvider.refreshProjectFiles(),
+                        tooltip: 'Refresh',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.filePlus,
+                        onPressed: () => appProvider.addNewFile(),
+                        tooltip: 'New File',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.folderPlus,
+                        onPressed: () {
+                          if (kIsWeb) return;
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              final controller = TextEditingController();
+                              return AlertDialog(
+                                backgroundColor: ui.colors.panel,
+                                title: Text('New Folder', style: TextStyle(color: ui.colors.textPrimary)),
+                                content: TextField(
+                                  controller: controller,
+                                  style: TextStyle(color: ui.colors.textPrimary),
+                                  decoration: InputDecoration(
+                                    hintText: 'Folder Name',
+                                    hintStyle: TextStyle(color: ui.colors.textMuted),
+                                  ),
+                                  autofocus: true,
                                 ),
-                                autofocus: true,
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: UiText(text: 'Cancel', color: ui.colors.textMuted),
-                                ),
-                                TextButton(
-                                  onPressed: () async {
-                                    final name = controller.text;
-                                    if (name.isNotEmpty) {
-                                      final path = path_utils.join(appProvider.projectRoot, name);
-                                      await io.Directory(path).create(recursive: true);
-                                      appProvider.refreshProjectFiles();
-                                    }
-                                    if (context.mounted) {
-                                      Navigator.pop(context);
-                                    }
-                                  },
-                                  child: UiText(text: 'Create', color: ui.colors.accent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    SizedBox(width: ui.spacing.xs),
-                    UiIconButton(icon: LucideIcons.refreshCcw, tooltip: 'Refresh', size: 24, iconSize: 14, onPressed: () => appProvider.refreshProjectFiles()),
-                  ],
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final name = controller.text;
+                                      if (name.isNotEmpty) {
+                                        final path = path_utils.join(appProvider.projectRoot, name);
+                                        await io.Directory(path).create(recursive: true);
+                                        appProvider.refreshProjectFiles();
+                                      }
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    child: Text('Create', style: TextStyle(color: ui.colors.accent)),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                        tooltip: 'New Folder',
+                        ui: ui,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -307,6 +335,31 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String tooltip;
+  final UiTheme ui;
+
+  const _HeaderAction({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+    required this.ui,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 14, color: ui.colors.icon),
+      onPressed: onPressed,
+      tooltip: tooltip,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
     );
   }
 }
