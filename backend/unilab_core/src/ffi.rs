@@ -8,8 +8,18 @@ use serde_json::json;
 static SESSIONS: OnceLock<Mutex<HashMap<String, Py<PyAny>>>> = OnceLock::new();
 static BACKEND_PATH: OnceLock<String> = OnceLock::new();
 
+type WorkspaceCallback = unsafe extern "C" fn(session_id: *const c_char, variables_json: *const c_char);
+static WORKSPACE_CALLBACK: Mutex<Option<WorkspaceCallback>> = Mutex::new(None);
+
 fn get_sessions_map() -> &'static Mutex<HashMap<String, Py<PyAny>>> {
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Set a callback to be invoked when the workspace variables change.
+#[unsafe(no_mangle)]
+pub extern "C" fn unilab_set_workspace_callback(callback: WorkspaceCallback) {
+    let mut cb = WORKSPACE_CALLBACK.lock().unwrap();
+    *cb = Some(callback);
 }
 
 /// Initialize the FFI bridge: set sys.path, create sessions map, set UNILAB_WEB_MODE.
@@ -18,6 +28,24 @@ fn get_sessions_map() -> &'static Mutex<HashMap<String, Py<PyAny>>> {
 pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
     if backend_path.is_null() {
         return -1;
+    }
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        // Fix for "undefined symbol: PyContextVar_Type" when loading Python extensions.
+        // We need to load libpython with RTLD_GLOBAL so that extension modules can see core symbols.
+        let libs = [
+            "libpython3.13.so.1.0\0",
+            "libpython3.12.so.1.0\0",
+            "libpython3.11.so.1.0\0",
+            "libpython3.10.so.1.0\0",
+            "libpython3.so\0",
+        ];
+        for lib in libs {
+            if !libc::dlopen(lib.as_ptr() as *const _, libc::RTLD_GLOBAL | libc::RTLD_NOW).is_null() {
+                break;
+            }
+        }
     }
 
     let catch_result = std::panic::catch_unwind(|| {
@@ -111,6 +139,32 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
                 .map_err(|e| format!("Failed to get TranspilerEngine class: {}", e))?;
             let engine = engine_cls.call1((session_info,))
                 .map_err(|e| format!("Failed to create TranspilerEngine: {}", e))?;
+
+            // Set up real-time workspace update callback for FFI
+            let py_session_id = session_id.clone();
+            let on_changed = pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _kwargs| {
+                let variables = args.get_item(0).unwrap();
+                let py = variables.py();
+                
+                let json_mod = py.import("json").unwrap();
+                let variables_json: String = json_mod
+                    .call_method1("dumps", (variables,))
+                    .unwrap()
+                    .extract()
+                    .unwrap();
+
+                if let Some(cb) = *WORKSPACE_CALLBACK.lock().unwrap() {
+                    let c_sid = CString::new(py_session_id.clone()).unwrap();
+                    let c_json = CString::new(variables_json).unwrap();
+                    unsafe {
+                        cb(c_sid.as_ptr(), c_json.as_ptr());
+                    }
+                }
+                Ok::<PyObject, PyErr>(py.None())
+            }).map_err(|e| format!("Failed to create closure: {}", e))?;
+
+            engine.setattr("on_workspace_changed", on_changed)
+                .map_err(|e| format!("Failed to set on_workspace_changed: {}", e))?;
 
             // Store session
             let mut sessions = get_sessions_map().lock().unwrap();
@@ -215,25 +269,25 @@ pub extern "C" fn unilab_get_workspace(session_id: *const c_char) -> *mut c_char
                 .ok_or_else(|| "Session not found".to_string())?;
             let engine = engine.bind(py);
 
-            // Get globals dict directly
-            let globals_dict = engine.getattr("globals")
-                .map_err(|e| format!("Failed to get globals: {}", e))?;
+            // Call _get_variables() instead of just getting globals
+            let vars_dict = engine.call_method0("_get_variables")
+                .map_err(|e| format!("Failed to call _get_variables: {}", e))?;
 
             let json_mod = py.import("json")
                 .map_err(|e| format!("Failed to import json: {}", e))?;
-            let globals_json = json_mod
-                .call_method1("dumps", (globals_dict,))
-                .map_err(|e| format!("Failed to dumps globals: {}", e))?
+            let vars_json = json_mod
+                .call_method1("dumps", (vars_dict,))
+                .map_err(|e| format!("Failed to dumps variables: {}", e))?
                 .extract::<String>()
                 .map_err(|e| format!("Failed to extract JSON: {}", e))?;
 
-            let globals_value: serde_json::Value = serde_json::from_str(&globals_json)
+            let vars_value: serde_json::Value = serde_json::from_str(&vars_json)
                 .unwrap_or(json!({}));
 
             let result = json!({
-                "variables": globals_value,
+                "variables": vars_value,
                 "total_size_bytes": 0,
-                "variable_count": if let Some(obj) = globals_value.as_object() { obj.len() } else { 0 }
+                "variable_count": if let Some(obj) = vars_value.as_object() { obj.len() } else { 0 }
             });
 
             Ok(result.to_string())

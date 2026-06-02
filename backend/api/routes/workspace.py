@@ -1,6 +1,6 @@
 """Workspace management endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from typing import Optional, List
 from backend.api.dependencies import get_core
 from backend.api.schemas import (
@@ -9,6 +9,65 @@ from backend.api.schemas import (
 from backend.core.unilab_core import UniLabCore
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["workspace"])
+
+
+@router.websocket("/{session_id}/ws")
+async def workspace_ws(
+    websocket: WebSocket,
+    session_id: str,
+    core: UniLabCore = Depends(get_core)
+):
+    """WebSocket for real-time workspace updates."""
+    await websocket.accept()
+    
+    # Listener function to be called by UniLabCore event pump
+    async def workspace_listener(event):
+        if event.get("type") == "workspace_update" and event.get("session_id") == session_id:
+            try:
+                # MATLAB-style workspace update format
+                variables = event.get("variables", {})
+                
+                # Transform to expected format if needed (matching WorkspaceResponse)
+                formatted_vars = {}
+                for name, info in variables.items():
+                    formatted_vars[name] = {
+                        "name": name,
+                        "dtype": info.get('dtype', 'unknown'),
+                        "shape": info.get('shape'),
+                        "preview": str(info.get('preview', ''))[:200],
+                        "size_bytes": info.get('bytes', 0)
+                    }
+                
+                await websocket.send_json({
+                    "event": "workspace_updated",
+                    "session_id": session_id,
+                    "variables": formatted_vars
+                })
+            except Exception:
+                # If sending fails (e.g. connection closed), we don't need to do anything here
+                # the finally block or a future message will handle cleanup if needed.
+                pass
+
+    # Register listener in core
+    hook_name = f"ws_listener_{session_id}"
+    if hook_name not in core._plugin_hooks:
+        core._plugin_hooks[hook_name] = []
+    core._plugin_hooks[hook_name].append(workspace_listener)
+    
+    try:
+        # Keep connection open until client disconnects
+        while True:
+            # We can also receive commands here if needed in the future
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        # Cleanup hook
+        if hook_name in core._plugin_hooks:
+            if workspace_listener in core._plugin_hooks[hook_name]:
+                core._plugin_hooks[hook_name].remove(workspace_listener)
+            if not core._plugin_hooks[hook_name]:
+                del core._plugin_hooks[hook_name]
 
 
 @router.get("/{session_id}/workspace", response_model=WorkspaceResponse)

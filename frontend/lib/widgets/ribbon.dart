@@ -145,16 +145,17 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
           ui: ui,
           children: [
             _RibbonButton(
-              icon: LucideIcons.play,
-              label: 'Run',
-              onPressed: () => appProvider.runActiveFile(),
+              icon: appProvider.isExecuting ? LucideIcons.loader : LucideIcons.play,
+              label: appProvider.isExecuting ? 'Running...' : 'Run',
+              onPressed: appProvider.isExecuting ? null : () => appProvider.runActiveFile(),
               isLarge: true,
               ui: ui,
+              isLoading: appProvider.isExecuting,
             ),
             _RibbonButton(
               icon: LucideIcons.square,
               label: 'Stop',
-              onPressed: () {},
+              onPressed: () => appProvider.stopExecution(),
               ui: ui,
             ),
           ],
@@ -397,10 +398,11 @@ class _RibbonSection extends StatelessWidget {
 class _RibbonButton extends StatefulWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final Color? iconColor;
   final bool isLarge;
   final UiTheme ui;
+  final bool isLoading;
 
   const _RibbonButton({
     required this.icon,
@@ -409,33 +411,69 @@ class _RibbonButton extends StatefulWidget {
     required this.ui,
     this.iconColor,
     this.isLarge = false,
+    this.isLoading = false,
   });
 
   @override
   State<_RibbonButton> createState() => _RibbonButtonState();
 }
 
-class _RibbonButtonState extends State<_RibbonButton> {
+class _RibbonButtonState extends State<_RibbonButton> with SingleTickerProviderStateMixin {
   bool _isHovered = false;
+  late AnimationController _loadingController;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadingController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    if (widget.isLoading) {
+      _loadingController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_RibbonButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLoading && !_loadingController.isAnimating) {
+      _loadingController.repeat();
+    } else if (!widget.isLoading && _loadingController.isAnimating) {
+      _loadingController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadingController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isDisabled = widget.onPressed == null;
+
     // Transparent background by default, accent color on hover
-    final Color bgColor = _isHovered ? widget.ui.colors.accent : Colors.transparent;
-    
+    final Color bgColor = isDisabled
+        ? widget.ui.colors.panel.withValues(alpha: 0.5)
+        : (_isHovered ? widget.ui.colors.accent : Colors.transparent);
+
     // Standardize foreground to use textPrimary (high contrast)
     // On hover, we use textInverse for maximum clarity against the accent color.
-    final Color fgColor = _isHovered 
-        ? widget.ui.colors.textInverse 
-        : (widget.iconColor ?? widget.ui.colors.textPrimary);
+    final Color fgColor = isDisabled
+        ? widget.ui.colors.textDisabled
+        : (_isHovered
+          ? widget.ui.colors.textInverse
+          : (widget.iconColor ?? widget.ui.colors.textPrimary));
 
     return IntrinsicWidth(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1.0),
         child: MouseRegion(
-          onEnter: (_) => setState(() => _isHovered = true),
-          onExit: (_) => setState(() => _isHovered = false),
-          cursor: SystemMouseCursors.click,
+          onEnter: isDisabled ? null : (_) => setState(() => _isHovered = true),
+          onExit: isDisabled ? null : (_) => setState(() => _isHovered = false),
+          cursor: isDisabled ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
           child: GestureDetector(
             onTap: widget.onPressed,
             child: AnimatedContainer(
@@ -449,30 +487,40 @@ class _RibbonButtonState extends State<_RibbonButton> {
                 color: bgColor,
                 borderRadius: BorderRadius.circular(6.0),
                 border: Border.all(
-                  color: _isHovered ? widget.ui.colors.border : Colors.transparent,
+                  color: _isHovered && !isDisabled ? widget.ui.colors.border : Colors.transparent,
                   width: 1.0,
                 ),
-                boxShadow: _isHovered ? widget.ui.colors.shadowSm : null,
+                boxShadow: _isHovered && !isDisabled ? widget.ui.colors.shadowSm : null,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    widget.icon, 
-                    size: 20,
-                    color: fgColor,
-                  ),
+                  if (widget.isLoading)
+                    RotationTransition(
+                      turns: _loadingController,
+                      child: Icon(
+                        widget.icon,
+                        size: 20,
+                        color: fgColor,
+                      ),
+                    )
+                  else
+                    Icon(
+                      widget.icon,
+                      size: 20,
+                      color: fgColor,
+                    ),
                   const SizedBox(height: 6),
                   Flexible(
                     child: Text(
-                      widget.label, 
+                      widget.label,
                       maxLines: 2,
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10, 
-                        color: fgColor, 
+                        fontSize: 10,
+                        color: fgColor,
                         height: 1.1,
                         fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
                       )

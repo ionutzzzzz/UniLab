@@ -31,6 +31,7 @@ class UniLabServer:
         self.host = host
         self.port = port
         self.sessions = {}
+        self.session_writers = {}
 
     async def handle_connection(self, reader, writer):
         """Handle a client connection."""
@@ -43,7 +44,7 @@ class UniLabServer:
 
                 try:
                     request = json.loads(line.decode().strip())
-                    response = await self.process_request(request)
+                    response = await self.process_request(request, writer)
                 except json.JSONDecodeError as e:
                     response = {"error": f"Invalid JSON: {e}"}
                 except Exception as e:
@@ -53,16 +54,29 @@ class UniLabServer:
                 writer.write(json.dumps(response).encode() + b'\n')
                 await writer.drain()
         finally:
+            # Clean up writer from all sessions
+            for sid in list(self.session_writers.keys()):
+                if writer in self.session_writers[sid]:
+                    self.session_writers[sid].remove(writer)
+            
             writer.close()
             await writer.wait_closed()
 
-    async def process_request(self, request):
+    async def process_request(self, request, writer):
         """Process a JSON-RPC request."""
         method = request.get('method')
         params = request.get('params', {})
+        session_id = params.get('session_id')
+
+        # Register writer for session if it exists
+        if session_id and session_id in self.sessions:
+            if session_id not in self.session_writers:
+                self.session_writers[session_id] = []
+            if writer not in self.session_writers[session_id]:
+                self.session_writers[session_id].append(writer)
 
         if method == 'create_session':
-            return self.create_session(params.get('username', 'default_user'))
+            return self.create_session(params.get('username', 'default_user'), writer)
         elif method == 'execute':
             return await self.execute(params.get('session_id'), params.get('code'))
         elif method == 'get_workspace':
@@ -102,7 +116,7 @@ class UniLabServer:
             'count': len(self.sessions)
         }
 
-    def create_session(self, username):
+    def create_session(self, username, writer=None):
         """Create a new session."""
         try:
             session_id = str(uuid.uuid4())
@@ -118,7 +132,34 @@ class UniLabServer:
             )
 
             engine = TranspilerEngine(session_info)
+            
+            # Set up real-time workspace update callback
+            async def on_workspace_changed(variables):
+                event = {
+                    "type": "event",
+                    "event": "workspace_updated",
+                    "session_id": session_id,
+                    "variables": variables
+                }
+                data = (json.dumps(event) + '\n').encode()
+                
+                writers = self.session_writers.get(session_id, [])
+                for w in list(writers):
+                    try:
+                        w.write(data)
+                        await w.drain()
+                    except Exception as e:
+                        print(f"Error broadcasting to writer: {e}")
+                        if w in writers:
+                            writers.remove(w)
+
+            engine.on_workspace_changed = on_workspace_changed
             self.sessions[session_id] = engine
+
+            if writer:
+                if session_id not in self.session_writers:
+                    self.session_writers[session_id] = []
+                self.session_writers[session_id].append(writer)
 
             return {
                 'session_id': session_id,

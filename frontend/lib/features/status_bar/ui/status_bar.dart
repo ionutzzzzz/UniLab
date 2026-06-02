@@ -3,8 +3,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
+import '../../../providers/app_provider.dart';
 import '../domain/status_bar_slot.dart';
 
 // Use a unique name for the provider to avoid hot-reload type conflicts
@@ -43,13 +45,34 @@ final statusBarSlotsProvider = Provider<List<StatusBarSlot>>((ref) {
   ];
 });
 
-class AppStatusBar extends ConsumerWidget {
+class AppStatusBar extends StatefulWidget {
   const AppStatusBar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<AppStatusBar> createState() => _AppStatusBarState();
+}
+
+class _AppStatusBarState extends State<AppStatusBar> {
+  @override
+  Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final slots = ref.watch(statusBarSlotsProvider);
+    final appProvider = p.Provider.of<AppProvider>(context);
+
+    // Build the status label based on execution state
+    final statusLabel = appProvider.isExecuting ? 'Running script...' : 'Ready';
+    final statusColor = appProvider.isExecuting ? ui.colors.warning : ui.colors.success;
+
+    final slots = [
+      StatusBarSlot(
+        id: 'status',
+        label: statusLabel,
+        alignment: StatusBarSlotAlignment.left,
+        priority: 100,
+      ),
+      const StatusBarSlot(id: 'branch', label: 'main', icon: LucideIcons.gitBranch, alignment: StatusBarSlotAlignment.left, priority: 90),
+      const StatusBarSlot(id: 'cursor', label: 'Ln 1, Col 1', alignment: StatusBarSlotAlignment.right, priority: 100),
+      const StatusBarSlot(id: 'encoding', label: 'UTF-8', alignment: StatusBarSlotAlignment.right, priority: 90),
+    ];
 
     final leftSlots = slots.where((s) => s.alignment == StatusBarSlotAlignment.left).toList()
       ..sort((a, b) => b.priority.compareTo(a.priority));
@@ -128,20 +151,25 @@ class _SlotWidgetState extends State<_SlotWidget> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isStatusSlot) ...[
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: ui.colors.success,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: ui.colors.success.withValues(alpha: 0.5),
-                    blurRadius: 4,
-                  ),
-                ],
-              ),
-            ),
+            // Get current status color from context
+            Builder(builder: (ctx) {
+              final appProvider = p.Provider.of<AppProvider>(ctx);
+              final statusColor = appProvider.isExecuting ? ui.colors.warning : ui.colors.success;
+              return Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.5),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+              );
+            }),
             SizedBox(width: ui.spacing.sm),
           ],
           if (widget.slot.icon != null) ...[

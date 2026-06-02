@@ -5,15 +5,17 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 
+/// Socket-based bridge to Python backend server
 class UniLabBridge {
   static UniLabBridge? _instance;
-  late Socket _socket;
+  Socket? _socket;
   StreamSubscription<List<int>>? _subscription;
   final Queue<Completer<Map<String, dynamic>>> _pendingRequests = Queue();
+  final _eventController = StreamController<Map<String, dynamic>>.broadcast();
 
   String? _sessionId;
   bool _initialized = false;
-  String? _serverProcessHandle;
+  String? _buffer = '';
 
   UniLabBridge._();
 
@@ -22,8 +24,17 @@ class UniLabBridge {
     return _instance!;
   }
 
+  static void resetInstance() {
+    _instance?._initialized = false;
+    _instance?._sessionId = null;
+    _instance?._socket?.close().ignore();
+    _instance?._subscription?.cancel().ignore();
+    _instance = null;
+  }
+
   String? get sessionId => _sessionId;
   bool get initialized => _initialized;
+  Stream<Map<String, dynamic>> get events => _eventController.stream;
 
   /// Initialize the bridge and start the Python server
   Future<void> initialize(String backendPath) async {
@@ -85,10 +96,10 @@ class UniLabBridge {
       debugPrint('[UniLabBridge] Connected to Python server');
 
       // Listen for responses - accumulate data and process line by line
-      var buffer = '';
-      _subscription = _socket.listen((data) {
-        buffer += utf8.decode(data);
-        final parts = buffer.split('\n');
+      _buffer = '';
+      _subscription = _socket!.listen((data) {
+        _buffer = (_buffer ?? '') + utf8.decode(data);
+        final parts = _buffer!.split('\n');
         // Process all complete lines
         for (int i = 0; i < parts.length - 1; i++) {
           if (parts[i].isNotEmpty) {
@@ -96,7 +107,7 @@ class UniLabBridge {
           }
         }
         // Keep the incomplete last part in buffer
-        buffer = parts.last;
+        _buffer = parts.last;
       });
     } catch (e) {
       debugPrint('[UniLabBridge] Failed to connect to server: $e');
@@ -108,11 +119,24 @@ class UniLabBridge {
     try {
       if (line.isEmpty) return;
 
-      final response = jsonDecode(line) as Map<String, dynamic>;
+      final preview = line.length > 100 ? '${line.substring(0, 100)}...' : line;
+      debugPrint('[UniLabBridge] Received line from server: $preview');
 
-      if (_pendingRequests.isNotEmpty) {
+      final response = jsonDecode(line) as Map<String, dynamic>;
+      debugPrint('[UniLabBridge] Parsed response: type=${response["type"]}, method=${response["method"]}, hasPending=${_pendingRequests.isNotEmpty}');
+
+      // Check if this is an event or a response
+      if (response['type'] == 'event') {
+        // Broadcast event
+        debugPrint('[UniLabBridge] Broadcasting event: ${response["event"]}');
+        _eventController.add(response);
+      } else if (_pendingRequests.isNotEmpty) {
+        // Reply to a pending request
+        debugPrint('[UniLabBridge] Completing pending request');
         final completer = _pendingRequests.removeFirst();
         completer.complete(response);
+      } else {
+        debugPrint('[UniLabBridge] No pending requests to match this response');
       }
     } catch (e) {
       debugPrint('[UniLabBridge] Error handling server response: $e');
@@ -130,9 +154,18 @@ class UniLabBridge {
     final completer = Completer<Map<String, dynamic>>();
     _pendingRequests.add(completer);
 
-    _socket.writeln(jsonEncode(request));
+    final requestJson = jsonEncode(request);
+    debugPrint('[UniLabBridge] Sending request: $method');
+    _socket!.writeln(requestJson);
 
-    return completer.future.timeout(Duration(seconds: 30));
+    try {
+      final response = await completer.future.timeout(const Duration(seconds: 30));
+      debugPrint('[UniLabBridge] Received response for $method: ${response.keys.join(", ")}');
+      return response;
+    } on TimeoutException {
+      debugPrint('[UniLabBridge] Request timeout for $method after 30 seconds');
+      rethrow;
+    }
   }
 
   /// Create a new session
@@ -258,25 +291,19 @@ class UniLabBridge {
     }
   }
 
-  /// Get server information
+  /// Get server info
   Future<Map<String, dynamic>> getInfo() async {
     if (!_initialized) throw StateError('Bridge not initialized');
+
     try {
       return await _sendRequest('get_info', {});
     } catch (e) {
       debugPrint('[UniLabBridge] getInfo error: $e');
-      return {};
-    }
-  }
-
-  /// List active sessions
-  Future<Map<String, dynamic>> listSessions() async {
-    if (!_initialized) throw StateError('Bridge not initialized');
-    try {
-      return await _sendRequest('list_sessions', {});
-    } catch (e) {
-      debugPrint('[UniLabBridge] listSessions error: $e');
-      return {};
+      return {
+        'version': '0.1.0',
+        'name': 'UniLab Python Server',
+        'status': 'error',
+      };
     }
   }
 
@@ -324,7 +351,8 @@ class UniLabBridge {
   Future<void> dispose() async {
     if (_initialized) {
       await _subscription?.cancel();
-      await _socket.close();
+      await _socket?.close();
+      await _eventController.close();
       _initialized = false;
     }
   }

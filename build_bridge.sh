@@ -24,7 +24,14 @@ fi
 if [ -f "target/release/$SO_NAME" ]; then
     mkdir -p "$DEST_DIR"
     cp "target/release/$SO_NAME" "$DEST_DIR"
-    echo "✓ Bridge built: $DEST_DIR$SO_NAME"
+    echo "✓ Bridge built and copied to: $DEST_DIR$SO_NAME"
+
+    # Also try to copy to the active flutter build bundle if it exists
+    BUNDLE_DIR="../frontend/build/linux/x64/debug/bundle/lib/"
+    if [ -d "$BUNDLE_DIR" ]; then
+        cp "target/release/$SO_NAME" "$BUNDLE_DIR"
+        echo "✓ Synced to active bundle: $BUNDLE_DIR$SO_NAME"
+    fi
 else
     echo "✗ Failed to find $SO_NAME in target/release/"
     ls -la target/release/ | grep unilab_core || true

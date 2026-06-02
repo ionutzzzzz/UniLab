@@ -36,6 +36,7 @@ class AppProvider with ChangeNotifier {
   BackendStatus _backendStatus = BackendStatus.connecting;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
+  StreamSubscription? _bridgeEventSubscription;
 
   // Callbacks to push state into Riverpod (using domain WorkspaceVariable)
   final void Function(List<domain.WorkspaceVariable>)? onVariablesUpdated;
@@ -102,23 +103,63 @@ class AppProvider with ChangeNotifier {
   @override
   void dispose() {
     _watcherSubscription?.cancel();
+    _bridgeEventSubscription?.cancel();
     super.dispose();
   }
 
   /// Initialize the FFI bridge to the Rust backend.
   Future<void> _initBridge() async {
     try {
+      // In case of hot reload/restart with corrupted state
+      if (UniLabBridge.instance.initialized && UniLabBridge.instance.sessionId == null) {
+        UniLabBridge.resetInstance();
+      }
+
       final backendPath = await UniLabBridge.findBackendPath();
       await UniLabBridge.instance.initialize(backendPath);
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
       _serverInfo = await UniLabBridge.instance.getInfo();
+      
+      // Listen for real-time events from the bridge
+      _bridgeEventSubscription?.cancel();
+      _bridgeEventSubscription = UniLabBridge.instance.events.listen((event) {
+        if (event['event'] == 'workspace_updated') {
+          _handleWorkspaceUpdateEvent(event);
+        }
+      });
+
       await fetchWorkspaceVariables();
       _addConsoleMessage('UniLab bridge initialized (v${_serverInfo['version'] ?? 'unknown'}).', ConsoleMessageType.success);
     } catch (e) {
       _backendStatus = BackendStatus.error;
+      debugPrint('[AppProvider] Bridge initialization error: $e');
       _addConsoleMessage('Bridge initialization error: $e', ConsoleMessageType.error);
     }
+    notifyListeners();
+  }
+
+  void _handleWorkspaceUpdateEvent(Map<String, dynamic> event) {
+    final variables = event['variables'] as Map<String, dynamic>? ?? {};
+    _updateVariablesFromMap(variables);
+  }
+
+  void _updateVariablesFromMap(Map<String, dynamic> variables) {
+    _workspaceVariables = variables;
+
+    final vars = _workspaceVariables.entries.map((e) {
+      final info = e.value as Map<String, dynamic>;
+      final shape = info['shape'] as List<dynamic>?;
+      final sizeStr = shape != null ? shape.join('x') : '1x1';
+      return domain.WorkspaceVariable(
+        name: e.key,
+        value: info['preview']?.toString() ?? '',
+        size: sizeStr,
+        typeClass: info['dtype']?.toString() ?? 'unknown',
+      );
+    }).toList();
+    
+    onVariablesUpdated?.call(vars);
     notifyListeners();
   }
 
@@ -507,29 +548,7 @@ class AppProvider with ChangeNotifier {
 
   /// Convert ExecutionResult variables to WorkspaceVariable list and push to Riverpod.
   void _updateVariablesFromResult(ExecutionResult result) {
-    // Completely sync with backend result
-    _workspaceVariables = result.variables;
-
-    if (_workspaceVariables.isEmpty) {
-      onVariablesUpdated?.call([]);
-      notifyListeners();
-      return;
-    }
-
-    final vars = _workspaceVariables.entries.map((e) {
-      final info = e.value as Map<String, dynamic>;
-      final shape = info['shape'] as List<dynamic>?;
-      final sizeStr = shape != null ? shape.join('x') : '1x1';
-      return domain.WorkspaceVariable(
-        name: e.key,
-        value: info['preview']?.toString() ?? '',
-        size: sizeStr,
-        typeClass: info['dtype']?.toString() ?? 'unknown',
-      );
-    }).toList();
-    
-    onVariablesUpdated?.call(vars);
-    notifyListeners();
+    _updateVariablesFromMap(result.variables);
   }
 
   /// Parse plots from result.extra and create PlotData objects.
@@ -595,6 +614,16 @@ class AppProvider with ChangeNotifier {
     _addConsoleMessage('>> $command', ConsoleMessageType.output, source: 'System');
 
     try {
+      // Wait for bridge to be fully initialized and session created
+      int retries = 0;
+      while (!UniLabBridge.instance.initialized || UniLabBridge.instance.sessionId == null) {
+        if (retries > 50) {  // 5 second timeout
+          throw Exception('Bridge initialization timeout');
+        }
+        await Future.delayed(Duration(milliseconds: 100));
+        retries++;
+      }
+
       final result = await UniLabBridge.instance.execute(command);
 
       if (result.stdout.isNotEmpty) {
@@ -627,26 +656,8 @@ class AppProvider with ChangeNotifier {
   /// Fetch workspace variables from the backend.
   Future<void> fetchWorkspaceVariables() async {
     try {
-      final response = await UniLabBridge.instance.getWorkspace();
-      final Map<String, dynamic> variables = (response['variables'] as Map<String, dynamic>?) ?? {};
-
-      final vars = variables.entries
-          .map((e) {
-            final info = e.value as Map<String, dynamic>;
-            final shape = info['shape'] as List<dynamic>?;
-            final sizeStr = shape != null ? shape.join('x') : '1x1';
-            return domain.WorkspaceVariable(
-              name: e.key,
-              value: info['preview']?.toString() ?? '',
-              size: sizeStr,
-              typeClass: info['dtype']?.toString() ?? 'unknown',
-            );
-          })
-          .toList();
-
-      _workspaceVariables = variables;
-      onVariablesUpdated?.call(vars);
-      notifyListeners();
+      final variables = await UniLabBridge.instance.getWorkspace();
+      _updateVariablesFromMap(variables);
     } catch (e) {
       debugPrint('fetchWorkspaceVariables error: $e');
     }

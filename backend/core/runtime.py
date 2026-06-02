@@ -14,6 +14,8 @@ from backend.core.simulation.engine import unilab_simulate as simulate
 
 # ContextVar for thread-safe session workspace path
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
+# ContextVar for engine update callback
+unilab_update_ctx = ContextVar('unilab_update_callback', default=None)
 
 # Store for 3D plot data (fig_num -> {type, x, y, z})
 _unilab_3d_data_store = {}
@@ -843,6 +845,27 @@ def disp(x):
 
 def clc():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+def pause(n=None):
+    """Pauses execution for n seconds or until a key is pressed."""
+    # Trigger a workspace update whenever we pause
+    cb = unilab_update_ctx.get()
+    if cb:
+        try:
+            cb()
+        except:
+            pass
+
+    if n is None:
+        # MATLAB pause without arguments waits for a keypress
+        # In a headless/terminal environment, we just wait a bit or use input()
+        # but input() might block the whole process. Let's just sleep a bit.
+        time.sleep(0.5)
+    else:
+        try:
+            time.sleep(float(n))
+        except:
+            pass
 
 def whos():
     """Lists variables in the current workspace."""
@@ -2192,9 +2215,7 @@ def sort(x, axis=None):
 def unique(x): return np.unique(x)
 def inv(x): return np.linalg.inv(np.atleast_2d(x))
 def det(x): return np.linalg.det(np.atleast_2d(x))
-def eig(x):
-    eigenvalues, eigenvectors = np.linalg.eig(np.atleast_2d(x))
-    return eigenvectors, np.diag(eigenvalues)
+
 def svd(x):
     U, S, Vh = np.linalg.svd(np.atleast_2d(x))
     return U, np.diag(S), Vh.T
@@ -2556,7 +2577,7 @@ def diag(v, k=0):
     # 1D input: create diagonal matrix
     return np.diag(v, k)
 
-def eig(x):
+def unilab_eig(x):
     n_out = unilab_get_nargout()
     x_mat = np.atleast_2d(x)
     if n_out <= 1:

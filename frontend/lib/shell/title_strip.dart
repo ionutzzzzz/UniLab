@@ -11,7 +11,7 @@ class TitleStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
+
     Widget content = Row(
       children: [
         SizedBox(width: ui.spacing.md),
@@ -27,7 +27,9 @@ class TitleStrip extends StatelessWidget {
                 ui.colors.canvas,
               ],
             ),
-            borderRadius: BorderRadius.circular(8), // Slightly more square for professional look
+            borderRadius: BorderRadius.circular(
+              8,
+            ), // Slightly more square for professional look
             border: Border.all(color: ui.colors.border.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
@@ -55,14 +57,10 @@ class TitleStrip extends StatelessWidget {
                 letterSpacing: 0.5,
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 1,
-                height: 10,
-                color: ui.colors.divider,
-              ),
+              Container(width: 1, height: 10, color: ui.colors.divider),
               const SizedBox(width: 8),
               UiText(
-                text: 'v1.1.2',
+                text: 'v1.2.2',
                 variant: UiTextVariant.label,
                 color: ui.colors.accent,
                 fontWeight: FontWeight.w800,
@@ -94,7 +92,10 @@ class TitleStrip extends StatelessWidget {
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,
         border: Border(
-          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.4), width: 1.0),
+          bottom: BorderSide(
+            color: Colors.black.withValues(alpha: 0.4),
+            width: 1.0,
+          ),
         ),
         boxShadow: [
           // Inner top highlight
@@ -115,9 +116,7 @@ class TitleStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: kIsWeb ? content : DragToMoveArea(child: content),
-          ),
+          Expanded(child: kIsWeb ? content : DragToMoveArea(child: content)),
           if (!kIsWeb) const WindowButtons(),
         ],
       ),
@@ -199,9 +198,9 @@ class _WindowButtonState extends State<_WindowButton> {
           child: Icon(
             widget.icon,
             size: 16,
-            color: _isHovered 
-              ? (widget.isClose ? Colors.white : ui.colors.textPrimary) 
-              : ui.colors.textMuted,
+            color: _isHovered
+                ? (widget.isClose ? Colors.white : ui.colors.textPrimary)
+                : ui.colors.textMuted,
           ),
         ),
       ),

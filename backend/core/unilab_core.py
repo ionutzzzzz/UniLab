@@ -76,9 +76,20 @@ class UniLabCore:
         self._locks[session_id] = asyncio.Lock()
         
         # Factory for engines
-        self.engines[session_id] = TranspilerEngine(s)
+        engine_instance = TranspilerEngine(s)
         
-        await self.engines[session_id].start()
+        # Set up real-time workspace update callback
+        async def on_workspace_changed(variables):
+            await self._event_queue.put({
+                "type": "workspace_update",
+                "session_id": session_id,
+                "variables": variables
+            })
+        
+        engine_instance.on_workspace_changed = on_workspace_changed
+        self.engines[session_id] = engine_instance
+        
+        await engine_instance.start()
         self._metrics["sessions_created"] += 1
         return s
 

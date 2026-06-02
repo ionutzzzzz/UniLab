@@ -23,6 +23,16 @@ class AutoloadDict(dict):
         self.engine = engine
         self._loading = set()
 
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if not key.startswith('_') and key not in self._loading:
+            self.engine._trigger_workspace_changed()
+
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        if not key.startswith('_'):
+            self.engine._trigger_workspace_changed()
+
     def __getitem__(self, key):
         try:
             hash(key)
@@ -67,7 +77,13 @@ class AutoloadDict(dict):
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
+        # Ensure runtime is fresh (especially important in embedded FFI mode)
+        import importlib
+        importlib.reload(runtime)
+        
         self.transpiler = UniLabTranspiler()
+        self.on_workspace_changed = None
+        self._workspace_changed_timer = None
         
         # Set initial CWD to sample folder in web mode
         if os.environ.get('UNILAB_WEB_MODE') == '1':
@@ -129,6 +145,33 @@ class TranspilerEngine(BaseEngine):
         # Load persistent workspace if it exists
         self._load_workspace()
 
+    def _trigger_workspace_changed(self):
+        """Triggers a workspace update notification with rate-limiting."""
+        if not self.on_workspace_changed:
+            return
+
+        # Simple rate limiting for real-time updates: 100ms
+        now = time.time()
+        if hasattr(self, '_last_ws_update') and now - self._last_ws_update < 0.1:
+            return
+        self._last_ws_update = now
+
+        try:
+            vars_snap = self._get_variables()
+            if asyncio.iscoroutinefunction(self.on_workspace_changed):
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Use a trailing-edge timer or just fire-and-forget for async
+                    loop.create_task(self.on_workspace_changed(vars_snap))
+                except RuntimeError:
+                    pass
+            else:
+                # FFI/Sync callback - call immediately
+                self.on_workspace_changed(vars_snap)
+        except Exception as e:
+            # Silent failure for notification errors
+            pass
+
     def _load_standard_libraries(self):
         # backend/core/engines/transpiler.py -> backend/stdlib/libraries
         current_dir = pathlib.Path(__file__).parent
@@ -189,8 +232,9 @@ class TranspilerEngine(BaseEngine):
         os.chdir(self.cwd)
         
         # Set context-safe workspace path for the runtime
-        from ..runtime import unilab_workspace_ctx
+        from ..runtime import unilab_workspace_ctx, unilab_update_ctx
         token = unilab_workspace_ctx.set(str(self.workspace_path))
+        update_token = unilab_update_ctx.set(lambda: self._trigger_workspace_changed())
         
         try:
             # --- Shell Command Handling ---
@@ -343,6 +387,9 @@ class TranspilerEngine(BaseEngine):
                     
                     # Save workspace after successful execution
                     self._save_workspace()
+
+                    # Final workspace update push
+                    self._trigger_workspace_changed()
                 except NameError as ne:
                     success = False
                     var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
@@ -592,7 +639,8 @@ class TranspilerEngine(BaseEngine):
                 if k in runtime_names:
                     continue
                 # If it's a python builtin or np function, skip it
-                if hasattr(v, '__module__') and (v.__module__ == 'builtins' or 'numpy' in v.__module__):
+                mod_name = getattr(v, '__module__', '') or ''
+                if mod_name == 'builtins' or 'numpy' in mod_name:
                     continue
                 # If it doesn't have source code (compiled/builtin), likely not user-defined
                 if not hasattr(v, '__code__'):
