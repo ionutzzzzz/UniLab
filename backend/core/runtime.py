@@ -6,6 +6,7 @@ import time
 import pathlib
 import builtins
 import inspect
+import math
 import scipy.signal as signal
 from contextvars import ContextVar
 from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
@@ -688,15 +689,6 @@ def unilab_freqfreqz(b, a, worN=None):
 
 def unilab_conv(a, v, mode='full'):
     return signal.convolve(_unilab_vec(a), _unilab_vec(v), mode=mode)
-
-def unilab_eig(A):
-    n_out = unilab_get_nargout()
-    if n_out <= 1:
-        return np.linalg.eigvals(A).reshape(-1, 1)
-    
-    # [V, D]
-    d, v = np.linalg.eig(A)
-    return v, np.diag(d)
 
 def unilab_xcorr(a, v=None, mode='full'):
     if v is None: v = a
@@ -2216,7 +2208,7 @@ def meshgrid(*args):
         x = processed_args[0]
         return np.meshgrid(x, x)
     return np.meshgrid(*processed_args)
-def randperm(n): return np.random.permutation(int(n)) + 1
+def randperm(n): return np.random.permutation(_unilab_to_int(n)) + 1
 def _is_symbolic(x):
     return hasattr(x, '__module__') and 'sympy' in x.__module__
 
@@ -2553,12 +2545,27 @@ def ode45(f, tspan, y0, options=None):
 
 def diag(v, k=0):
     v = np.asarray(v)
+    k = int(k)
     if v.ndim == 2:
         if v.shape[0] == 1 or v.shape[1] == 1:
+            # Vector input: create diagonal matrix
             return np.diag(v.flatten(), k)
-        # Extract diagonal from matrix
-        return np.diag(v, k).reshape(-1, 1)
+        else:
+            # Matrix input: extract diagonal as column vector
+            return np.diag(v, k).reshape(-1, 1)
+    # 1D input: create diagonal matrix
     return np.diag(v, k)
+
+def eig(x):
+    n_out = unilab_get_nargout()
+    x_mat = np.atleast_2d(x)
+    if n_out <= 1:
+        # Return eigenvalues as a column vector
+        return np.linalg.eigvals(x_mat).reshape(-1, 1)
+    
+    # [V, D] = eig(A)
+    eigenvalues, eigenvectors = np.linalg.eig(x_mat)
+    return eigenvectors, np.diag(eigenvalues)
 
 def num2str(x, precision=None):
     if precision is not None:
@@ -3276,6 +3283,7 @@ def list_libraries():
     print("\n" + "-" * 50)
 
 def unilab_clear_workspace(g):
+    print("::CLEAR_WORKSPACE::")
     import types
     import backend.core.runtime as rt
     keys_to_keep = {'np', 'plt', 'os', 'signal', 'fft', 'ifft', '__builtins__', 'addpath'}
@@ -3325,7 +3333,9 @@ def unilab_clear_workspace(g):
 
 def unilab_clear_variables(g, names):
     for name in names:
-        if name in g: del g[name]
+        if name in g: 
+            print(f"::CLEAR_VAR::{name}")
+            del g[name]
 
 def unilab_iter(x):
     if isinstance(x, np.ndarray):
@@ -3405,3 +3415,136 @@ def find_peaks(x, min_height=-np.inf):
         return np.array(peaks).reshape(1, -1)
     return np.array(peaks).reshape(-1, 1), np.array(locs).reshape(-1, 1)
 
+
+def _unilab_to_int(x):
+    if isinstance(x, np.ndarray):
+        return int(x.item())
+    return int(x)
+
+def sum(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.sum(x, axis=axis)
+def mean(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.mean(x, axis=axis)
+def std(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.std(x, axis=axis)
+def var(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.var(x, axis=axis)
+def min(x, *args):
+    n_out = unilab_get_nargout()
+    if len(args) == 0:
+        if n_out > 1:
+            return np.min(x), np.argmin(x) + 1
+        return np.min(x)
+    if len(args) == 1:
+        y = args[0]
+        if n_out > 1:
+             # min(A, B) doesn't typically return indices in MATLAB the same way
+             return np.minimum(x, y), 0
+        return np.minimum(x, y)
+    return np.min(x)
+
+def max(x, *args):
+    n_out = unilab_get_nargout()
+    if len(args) == 0:
+        if n_out > 1:
+            return np.max(x), np.argmax(x) + 1
+        return np.max(x)
+    if len(args) == 1:
+        y = args[0]
+        if n_out > 1:
+             return np.maximum(x, y), 0
+        return np.maximum(x, y)
+    return np.max(x)
+def round(x): return np.round(x)
+def floor(x): return np.floor(x)
+def ceil(x): return np.ceil(x)
+def sin(x): return np.sin(x)
+def cos(x): return np.cos(x)
+def tan(x): return np.tan(x)
+def tanh(x): return np.tanh(x)
+def exp(x): return np.exp(x)
+def log(x): return np.log(x)
+def log10(x): return np.log10(x)
+def sqrt(x): return np.sqrt(x)
+def abs(x): return np.abs(x)
+def rand(*args): return np.random.rand(*[_unilab_to_int(a) for a in args])
+def randn(*args): return np.random.randn(*[_unilab_to_int(a) for a in args])
+# randperm already defined? Let's check again.
+def reshape(x, *shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.reshape(x, shape)
+def linspace(start, stop, n=100): return np.linspace(start, stop, _unilab_to_int(n))
+def zeros(*shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.zeros(shape)
+def ones(*shape): 
+    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
+        s = np.asarray(shape[0]).flatten()
+        shape = [_unilab_to_int(a) for a in s]
+    else:
+        shape = [_unilab_to_int(a) for a in shape]
+    return np.ones(shape)
+def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is not None else _unilab_to_int(n))
+def factorial(n): return float(math.factorial(_unilab_to_int(n)))
+def trapz(y, x=None): return np.trapz(y, x=x)
+def inv(x): return np.linalg.inv(x)
+def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
+def det(x): return np.linalg.det(x)
+
+def mod(x, y): return np.mod(x, y)
+def rem(x, y): return np.remainder(x, y)
+
+def real(x): return np.real(x)
+def imag(x): return np.imag(x)
+
+def sort(x, axis=-1): 
+    if axis != -1: axis = _unilab_to_int(axis) - 1
+    return np.sort(x, axis=axis)
+
+def fft(x, n=None, axis=-1): return scipy_fft(x, n=n, axis=axis)
+def ifft(x, n=None, axis=-1): return scipy_ifft(x, n=n, axis=axis)
+
+def mldivide(A, B): 
+    if A.ndim == 2 and B.ndim == 2:
+        if A.shape[0] == A.shape[1]:
+            return np.linalg.solve(A, B)
+        else:
+            return np.linalg.lstsq(A, B, rcond=None)[0]
+    return np.linalg.lstsq(A, B, rcond=None)[0]
+
+def sinh(x): return np.sinh(x)
+def cosh(x): return np.cosh(x)
+def asinh(x): return np.arcsinh(x)
+def acosh(x): return np.arccosh(x)
+def atanh(x): return np.arctanh(x)
+
+def strcmp(s1, s2): return bool(s1 == s2)
+def isequal(a, b): return np.array_equal(a, b)
+def cumsum(x, axis=None): 
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.cumsum(x, axis=axis)
+def randi(imax, *shape):
+    if len(shape) == 0: shape = (1, 1)
+    elif len(shape) == 1: shape = (int(shape[0]), int(shape[0]))
+    else: shape = [int(s) for s in shape]
+    return np.random.randint(1, _unilab_to_int(imax) + 1, size=shape)
+
+def argmin(x, axis=None):
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    # MATLAB argmin (min with 2 outputs) returns 1-based index
+    return np.argmin(x, axis=axis) + 1
+def argmax(x, axis=None):
+    if axis is not None: axis = _unilab_to_int(axis) - 1
+    return np.argmax(x, axis=axis) + 1

@@ -1,0 +1,148 @@
+// UniLab Pest Grammar (MATLAB-compatible)
+
+WHITESPACE = _ { " " | "\t" | ("..." ~ (!NEWLINE ~ ANY)* ~ NEWLINE?) }
+COMMENT = _ { "%" ~ (!NEWLINE ~ ANY)* }
+
+start = { SOI ~ separator* ~ (stmt_sep ~ separator*)* ~ stmt_no_sep? ~ EOI }
+
+separator = { ";" | "," | NEWLINE }
+stmt_sep = { statement ~ separator }
+stmt_no_sep = { statement ~ separator? }
+
+statement = {
+    function_def
+    | if_stmt
+    | for_stmt
+    | while_stmt
+    | switch_stmt
+    | try_stmt
+    | clear_stmt
+    | global_stmt
+    | return_stmt
+    | break_stmt
+    | continue_stmt
+    | import_stmt
+    | export_stmt
+    | assignment
+    | command_call
+    | expression
+}
+
+assignment = { multi_assignment | single_assignment }
+multi_assignment = { lhs_list ~ "=" ~ expression }
+single_assignment = { postfix_expr ~ "=" ~ expression }
+
+lhs_list = { "[" ~ (identifier_or_unary ~ (","? ~ identifier_or_unary)*)? ~ "]" }
+identifier_or_unary = { identifier | unary_op }
+
+if_stmt = { "if" ~ expression ~ separator+ ~ block ~ (elseif_clause)* ~ else_clause? ~ "end" }
+elseif_clause = { "elseif" ~ expression ~ separator+ ~ block }
+else_clause = { "else" ~ separator* ~ block }
+
+for_stmt = { "for" ~ identifier ~ "=" ~ expression ~ separator+ ~ block ~ "end" }
+while_stmt = { "while" ~ expression ~ separator+ ~ block ~ "end" }
+
+switch_stmt = { "switch" ~ expression ~ separator+ ~ case_clause* ~ otherwise_clause? ~ "end" }
+case_clause = { "case" ~ expression ~ separator+ ~ block }
+otherwise_clause = { "otherwise" ~ block }
+
+try_stmt = { "try" ~ block ~ "catch" ~ identifier? ~ block ~ "end" }
+
+function_def = { "function" ~ function_ret? ~ identifier ~ "(" ~ func_params? ~ ")" ~ block ~ "end" }
+function_ret = { (identifier | lhs_list) ~ "=" }
+func_params = { identifier_or_unary ~ (","? ~ identifier_or_unary)* }
+
+block = { (separator* ~ (!keyword_end ~ stmt_sep ~ separator*)* ~ (!keyword_end ~ stmt_no_sep)?) }
+keyword_end = { "end" | "elseif" | "else" | "case" | "otherwise" | "catch" }
+
+clear_stmt = { "clear" ~ (identifier | "all")* }
+global_stmt = { "global" ~ identifier+ }
+return_stmt = { "return" }
+break_stmt = { "break" }
+continue_stmt = { "continue" }
+
+import_stmt = { "import" ~ qualified_name }
+export_stmt = { "export" ~ identifier }
+
+expression = { anonymous_func | logical_or }
+
+logical_or = { logical_and ~ (or_op ~ logical_and)* }
+or_op = { "||" | "|" }
+logical_and = { comparison ~ (and_op ~ comparison)* }
+and_op = { "&&" | "&" }
+comparison = { range_expr ~ (comp_op ~ range_expr)* }
+
+range_expr = {
+    addition ~ (":" ~ addition ~ (":" ~ addition)?)?
+}
+
+addition = { multiplication ~ (add_op ~ multiplication)* }
+multiplication = { unary ~ (mul_op ~ unary)* }
+unary = { unary_op ~ unary | power }
+power = { postfix_expr ~ (pow_op ~ unary)* }
+
+postfix_expr = {
+    atom ~ postfix_op*
+}
+
+postfix_op = {
+    function_call
+    | cell_indexing
+    | transpose
+    | attr_access
+}
+
+function_call = { "(" ~ call_args? ~ ")" }
+cell_indexing = { "{" ~ call_args? ~ "}" }
+transpose = { "'" }
+attr_access = { "." ~ identifier }
+
+call_args = { arg_item ~ ("," ~ arg_item)* }
+arg_item = { keyword_arg | expression | colon_arg }
+colon_arg = { ":" }
+keyword_arg = { identifier ~ "=" ~ expression }
+
+atom = {
+    number
+    | string
+    | function_handle
+    | end_kw
+    | identifier
+    | "(" ~ expression ~ ")"
+    | matrix
+    | cell_array
+}
+
+end_kw = @{ "end" }
+
+anonymous_func = { "@" ~ "(" ~ func_params? ~ ")" ~ expression }
+function_handle = { "@" ~ qualified_name }
+
+qualified_name = { identifier ~ ("." ~ identifier)* }
+
+matrix = { "[" ~ (row | ";" | NEWLINE)* ~ "]" }
+row = { expression ~ (","? ~ expression)* }
+
+cell_array = { "{" ~ (row | ";" | NEWLINE)* ~ "}" }
+
+command_call = { identifier ~ (identifier | string | number)+ }
+
+identifier = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+keyword = @{
+    ("function" | "end" | "if" | "elseif" | "else" | "for" | "while" | "switch" | "case" | "otherwise" | "try" | "catch" | "global" | "clear" | "return" | "break" | "continue" | "import" | "export") ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+number = @{
+    ("0x" ~ ASCII_HEX_DIGIT+)
+    | (ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)? ~ ("i" | "j")?)
+    | ("." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)? ~ ("i" | "j")?)
+    | (ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)? ~ ("i" | "j")?)
+}
+
+string = @{ ("'" ~ ("''" | (!"'" ~ ANY))* ~ "'") | ("\"" ~ ("\"\"" | (!"\"" ~ ANY))* ~ "\"") }
+
+add_op = { "+" | "-" | ".+" | ".-" }
+mul_op = { "*" | "/" | "\\" | ".*" | "./" | ".\\" }
+pow_op = { "^" | ".^" }
+unary_op = { "+" | "-" | "~" }
+comp_op = { "==" | "~=" | ">=" | "<=" | ">" | "<" }

@@ -1,96 +1,190 @@
-# UniLab UI/UX Redesign Blueprint: Achieving Professional IDE Standards
+# UniLab — IDE Redesign Blueprint
 
-This document outlines a comprehensive architectural and visual redesign to elevate the Flutter-based UniLab interface. The goal is to achieve the premium, highly functional aesthetic of industry-standard tools like MATLAB 2025R and Microsoft Word, optimizing specifically for heavy simulation, numerical analysis, and engineering workflows.
+> A senior-level UI/UX and Flutter engineering plan to rebuild UniLab as a modern, premium desktop IDE for simulations, numerical analysis, modeling, and research. Inspired by MATLAB R2025, refined by VS Code's density and JetBrains' polish, and adapted to Flutter desktop best practices.
 
----
-
-## 1. Critical Bug Fixes (Immediate Remediation)
-
-Before polishing the aesthetics, the core layout constraints must be stabilized.
-
-### 1.1. Ribbon Overflow ("BOTTOM OVERFLOWED BY 4.0 PIXELS")
-The red and yellow warning tape under the "Run" section is a standard Flutter layout exception. It occurs when a child widget (likely a `Column` containing the icon and text) exceeds the fixed vertical bounds of its parent container.
-* **The Fix:** Wrap the text labels under the ribbon icons in an `Expanded` or `Flexible` widget, or adjust the parent container's height to accommodate the font scaling. Ensure `Text` widgets have `overflow: TextOverflow.ellipsis` and `maxLines: 1`. 
-* **UX Impact:** Prevents the UI from breaking on different monitor resolutions or OS scaling settings.
-
-### 1.2. The Line Numbering Glitch
-The line index in the editor is still wrapping digits inappropriately (e.g., displaying `1` and `4` vertically instead of `14`). 
-* **The Fix:** The container holding the line numbers must have a strictly defined, fixed width. 
-* **Implementation:**
-    ```dart
-    Container(
-      width: 45.0, // Fixed width prevents wrapping
-      alignment: Alignment.centerRight,
-      padding: EdgeInsets.only(right: 8.0),
-      color: Color(0xFF252526), // Subtle contrast from editor background
-      child: Text(
-        lineNumber.toString(),
-        style: TextStyle(
-          fontFamily: 'JetBrains Mono', // STRICTLY Monospace
-          color: Colors.grey[600],
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.clip, // Never wrap line numbers
-      ),
-    )
-    ```
-
-### 1.3. The Debug Banner
-The yellow and black striped banner in the top right corner is the Flutter `Debug` banner interacting strangely with the window controls. 
-* **The Fix:** Set `debugShowCheckedModeBanner: false` in your `MaterialApp` root widget to instantly clean up the title bar.
+This document serves as the primary frontend redesign specification and the source of truth for the UniLab UI rewrite.
 
 ---
 
-## 2. The Ribbon & Navigation Architecture (The "Word/MATLAB" Feel)
+## 1. Design Audit & Product Principles
 
-Professional tools use the ribbon to categorize complex actions without cluttering the main workspace. Your current ribbon is too sparse and the icons are too prominent.
+### 1.1 Product Principles (The Lens for Every Decision)
 
-### 2.1. Iconography and Density
-* **Scale Down:** Reduce the size of the ribbon icons by at least 20%. Professional IDEs prioritize code space over UI elements.
-* **Grouping:** Use subtle `VerticalDivider` widgets to separate logical groups (e.g., `File Operations` | `Execution` | `Environment`).
-* **Action Text:** The text beneath the icons (e.g., "Run Section", "Stop") needs a smaller, cleaner sans-serif font (like Inter or Roboto, size 10-11pt) with reduced opacity (e.g., 70% white) so it doesn't compete with the editor text.
-
-### 2.2. Tab States
-The "HOME", "PLOTS", "EDITOR" tabs currently feel like plain text. 
-* **Active State:** The active tab should have a distinct background color that merges seamlessly with the ribbon background below it, creating a unified physical "folder tab" look. 
-* **Hover State:** Implement a subtle lighter background fill when hovering over inactive tabs.
+1. **Scientific IDE Workflow:** Transform UniLab into a professional desktop-class scientific IDE focused on numerical computing, simulations, data analysis, modeling, research, engineering workflows, and scientific scripting.
+2. **Density is a Feature:** Researchers run UniLab in a window next to a paper PDF and a terminal. Every extra pixel of chrome is one fewer line of code visible. Default to *compact*; let users opt up.
+3. **Keyboard Before Mouse:** Anything reachable by ribbon must also be reachable by command palette and ideally a shortcut.
+4. **The Editor is the Hero:** Ribbon, sidebars, console — all of them must visually defer to the editor surface. Zero color competition; muted icons; recessed chrome.
+5. **No Mystery State:** Variables, run status, kernel state, file dirty markers — always visible, never hidden behind a click.
+6. **Flat, Not Floppy:** Sharp 1px borders, near-zero radii on shell panels, modest radii (6px) only on transient surfaces (popovers, menus, the palette). Avoid excessive card-based layouts and generic mobile-app styling.
 
 ---
 
-## 3. Workspace Panel (Optimized for Analysis)
+## 2. MATLAB 2025 Inspired Features & Architecture
 
-When debugging state-space models, computing Markov parameters, or inspecting large Hankel matrices, a floating "No variables in workspace" text is insufficient. The workspace needs to feel like a data laboratory.
+We aim to deliver an experience comparable to MATLAB 2025 and VS Code without merely cloning them. 
 
-### 3.1. Tabular Structure (Always On)
-Even when the workspace is empty, it should display a data grid header. This establishes expectations for the user.
-* **Headers:** `Name` | `Value` | `Size` | `Class` | `Min` | `Max`
-* **Implementation:** Use a package like `pluto_grid` or `syncfusion_flutter_datagrid` to create a robust, resizable data table. This allows users to sort variables by size or class instantly.
+### 2.1 Workspace Experience
+- **Variable Explorer:** Live representation of runtime variables.
+- **Workspace Browser:** Intuitive tree/grid for navigating variables and objects.
+- **Dataset Viewer & Data Inspector:** Deep inspection of matrices, dataframes, and arrays.
+- **Memory Management Views:** Track memory usage of active variables and kernel state.
 
-### 3.2. Visual Hierarchy
-* Remove the `Workspace`, `Variables`, `Inputs`, `Plots` nested accordion dropdowns if they aren't strictly necessary. Flat, tabbed structures at the bottom or top of the side panel are much faster to navigate than accordions.
+### 2.2 Editor Experience
+Target quality comparable to VS Code and MATLAB Editor:
+- **Advanced Code Editor:** Robust editing surface.
+- **Syntax Highlighting & Formatting:** Professional syntax colors and code auto-formatting.
+- **Minimap & Breadcrumbs:** Fast navigation across large scripts.
+- **Code Folding & Auto-completion:** Reduce cognitive load.
+- **Function Navigation & Multi-cursor support:** High-productivity text manipulation.
+- **Diagnostics Panel & Error Highlighting:** Inline squiggles with clear, actionable problem panels.
+- **Search and Replace:** Fully featured find/replace bar.
+- **Editor Tabs:** Support for multiple open scripts, dirty markers, and context menus.
+
+### 2.3 Integrated Terminal Experience
+Do not create a fake terminal UI. Integrate with actual system processes using `xterm.dart` and `pty`.
+- **Windows:** PowerShell or PowerShell Core (if available).
+- **Linux:** User default shell (`bash`, `zsh`, `fish`).
+- **macOS:** User default shell (`zsh`, `bash`).
+- **Features:** Persistent sessions, multiple terminal tabs, terminal history, ANSI colors, resize support, split terminals, and terminal panel docking.
+
+### 2.4 Project Management
+- **Project & File Explorer:** Fast file tree for navigating the current workspace.
+- **Search Panel:** Global project-wide search.
+- **Open Editors Panel:** Quick access to dirty/open files.
+- **Recent Projects & Workspace Management:** Quickly swap between environments.
+
+### 2.5 Analysis Tools
+- **Plot Management & Figure Windows:** Rich visualizations integrated directly into the UI or as detached windows.
+- **Simulation Results Viewer:** Tailored tools for modeling outputs.
+- **Data Tables & Model Explorer:** Structured views of algorithms.
+- **Research Notebooks & Output Management:** Save, document, and reproduce findings easily.
+
+### 2.6 Layout System
+Support professional IDE layouts:
+- **Dockable & Resizable Panels:** Use `multi_split_view` and similar tools.
+- **Persistent Panel State:** Remember exact panel dimensions across sessions.
+- **Saved Workspaces:** Named layouts.
+- **Multiple Screen Support & Flexible Sidebars:** Tailor to heavy multi-monitor setups.
 
 ---
 
-## 4. Editor and Terminal Polish
+## 3. Flutter Architecture Modernization
 
-The editor is the focal point. It must be visually flawless.
+Refactor toward a scalable architecture favoring composition over inheritance. 
 
-### 4.1. Strict Typography
-* **The Rule:** The Editor and the Terminal/Output MUST use a dedicated programming font. `JetBrains Mono`, `Fira Code`, or `Cascadia Code` are highly recommended. 
-* **Sizing:** Default editor font size should be around 14pt with a line height of 1.4 or 1.5 to prevent code from feeling cramped.
+### 3.1 Design System
+A strict design token layer to handle responsive desktop behavior and theme consistency:
+- `AppTheme`: The central hub for injecting themes via `ThemeExtension`.
+- `ColorTokens`: Semantic mapping (e.g., `surface.panel`, `text.muted`).
+- `TypographyTokens`: Role-tied scales (`ui.title`, `code.body`) rather than generic MD3 styles.
+- `SpacingTokens`: Rigid constants for `space.sm`, `radius.md`, etc.
+- `ElevationTokens` & `AnimationTokens`: Flat design defaults, snappy/invisible motion (e.g., 90ms ease-out hover states).
 
-### 4.2. Terminal Layout
-* **Padding:** The `>> Ready` prompt is touching the absolute left edge. Add a `Padding` of at least `12.0` pixels around the inner content of the terminal.
-* **Input Field:** The "Filter output..." box is massively oversized. It should be a compact, subtle search bar (max height 28px) aligned to the right side of the terminal tab bar, not spanning the entire width above the console.
+### 3.2 Reusable Component Library
+Create reusable widgets for:
+- IDE panels & Workspace panels
+- Toolbars & Status bars
+- Sidebars & Terminal containers
+- Tabs, Split views, and Data viewers.
 
-### 4.3. Editor Gutter and Active Line
-* **Gutter:** Make the background color of the line number column slightly different from the main code area (e.g., Editor: `#1E1E1E`, Gutter: `#252526`).
-* **Active Line Highlight:** Implement a feature where the line the cursor is currently on has a very faint, full-width highlight (e.g., `#2C2C2D`). This is standard in all modern IDEs and prevents losing track of the cursor during complex algorithmic work.
+### 3.3 Layout & State Management System
+- **State Management:** Riverpod to decouple UI components, ensuring 60fps performance during long simulations.
+- **Command Model:** A unified `CommandRegistry` for every menu item, ribbon button, keyboard shortcut, and command-palette entry. 
+- **Layout Architecture:** Dedicated Panel Manager and Workspace Manager for handling docking, splits, and breakpoints.
 
 ---
 
-## 5. Global Panel Management
+## 4. Visual Design Refresh — Soft "Pastel Slate" Aesthetic
 
-To truly mimic MATLAB's customizable layout:
-* **Draggable Splitters:** The borders between "FILES", "EDITOR", and "WORKSPACE" must be draggable. Users need to be able to collapse the file tree entirely to focus on code and matrix outputs. Consider the `multi_split_view` Flutter package for robust, native-feeling panel resizing.
-* **Borders:** Use a very subtle, dark grey (`#333333`) for all panel borders. Avoid thick lines; 1px borders are sufficient to define the structural boundaries of the IDE.
+Design goals inspired by MATLAB 2025's modern web/desktop iteration:
+- **Premium Dark Theme (Muted/Pastel):** Instead of harsh blacks (`#000000`) and grays (`#1E1E1E`), the UI adopts a calm, professional slate aesthetic. 
+    - Canvas (Editor background): `#1E2127`
+    - Shell Panels (Sidebars, console): `#252A31`
+    - Headers & Overlays: `#2B3038`
+- **Soft Accent Colors:** Replace harsh primary blues (`#007ACC`) with a softer pastel accent (`#4AA3FF`).
+- **Clean Typography & Spacing:** Use slightly rounded components (6px - 8px radii) for transient surfaces, but keep panel lines sharp (1px dividers using `#3A414C`).
+- **Syntax Highlighting:** A softer, pastel-inspired syntax theme (similar to Nord or Tokyo Night) to reduce eye strain during long coding sessions. Muted pinks, soft teals, and calm blues.
+
+---
+
+## 5. Implementation Roadmap
+
+Sequenced for **continuous shippability** — every phase must yield production-quality code.
+
+### Phase 0 — Foundations (Completed)
+- Create strict design tokens (`UiTheme`, `UiColors`, `UiTypography`).
+- Build atom widgets (`UiButton`, `UiInputField`, `UiIcon`).
+- Hide default title bar via `window_manager`.
+
+### Phase 1 — Shell Skeleton (Completed)
+- Build the persistent 5-zone shell (`MainShell`, `SplitShell`).
+- Implement layout persistence and shell breakpoints.
+- Build the `StatusBar` with priority-sorted left/right slots.
+
+### Phase 2 — Editor (Completed)
+- Replace generic textfields with `flutter_code_editor`.
+- Implement `EditorTabBar`, `EditorBreadcrumbs`, and `GutterStyle`.
+- Support multiple editor tabs.
+
+### Phase 3 — Command Model & Ribbon (Completed)
+- Implement `CommandRegistry` for uniform actions.
+- Build the `RibbonTabBar`, `RibbonBody`, and `RibbonButton`s.
+- Implement the Command Palette (`⌘K`) using fuzzy search.
+
+### Phase 4 — Workspace & Console (Completed)
+- Implement `WorkspaceSegmented` switchers for Variables, Inputs, Plots, Help.
+- Build data grids using `pluto_grid`.
+- Build `ConsoleDock` with Problems, Terminal, and Run tabs.
+
+### Phase 5 — Terminal Integration (Completed)
+- Integrate `xterm.dart` and `pty` for a real OS shell.
+- Add split terminal and session management.
+
+### Phase 6 — Visual Refinement & Polish (Completed)
+- **Soft "Pastel Slate" Theme:** Successfully transitioned the entire UI from high-contrast black/gray to a softer, more professional slate palette (`#1E2127`, `#252A31`, `#2B3038`).
+- **Pastel Accents:** Replaced harsh primary blues with a calming pastel blue (`#4AA3FF`).
+- **Refined Component Geometry:** Updated border radii across the application (6px - 10px) to match the modern aesthetic of refined desktop IDEs.
+- **Unified Tab Styling:** Synchronized the look of editor tabs, ribbon tabs, and console tabs for a cohesive experience.
+- **Enhanced Data Grids:** Softened the appearance of `pluto_grid` in the variables workspace with refined borders and pastel tones.
+- **Pastel Syntax Theme:** Updated the code editor's default syntax highlighting to use a muted, eye-friendly palette.
+
+### Phase 7 — High-Fidelity Polish & "Beauty" (Completed)
+- **Deep Pastel Slate Aesthetic:** Successfully implemented a high-contrast, professional dark theme with near-black backgrounds (`#0F1115`) and soft Matplotlib-inspired accents.
+- **Matplotlib Palette Integration:** Integrated the full `Pastel1` and `Pastel2` categorical palettes for status colors, iconography, and syntax highlighting.
+- **Advanced Depth & Dimension:** 
+    - Implemented **multi-layered shadows** and **inner top-border highlights** across the shell to simulate 3D desktop depth.
+- **Glassmorphism 2.0:** Applied backdrop blurs to the Command Palette and transient overlays for a premium integrated look.
+- **Micro-animations:** Synchronized all hover states and transitions (120ms-150ms) across ribbon buttons, tabs, and interactive dividers.
+- **Rich Iconography:** Expanded the icon system using `LucideIcons` to provide descriptive visual cues for all IDE actions.
+- **Editor Navigation:** Implemented Breadcrumbs with a **Function Navigator** dropdown for rapid internal script navigation.
+
+### Phase 8 — Advanced Scientific Editor & Ecosystem (Active)
+- **"Live Scripts" (Notebooks):** Implementing interactive blocks that can execute and display plots inline, similar to MATLAB's `.mlx` or Jupyter.
+- **Inline Figure Previews:** Generating high-res thumbnails of generated plots directly within the editor gutter/margin.
+- **LSP & Intelligent Intelligence:** Integrating Language Server Protocol for robust auto-completion, hover-definitions, and refactoring tools.
+- **Symbolic Math Rendering:** Support for rendering LaTeX formulas directly in comments or specific "Math Blocks."
+- **Panel Tearing & Detachment:** Supporting true multi-window workflows where figures and consoles can be moved to separate monitors.
+- **Saved Workspaces:** Allowing users to save and restore specific layout configurations (e.g., "Debugging Mode", "Plotting Mode").
+
+---
+
+## 6. Unified Visual Language (Matplotlib Enhanced)
+
+The "Deep Pastel Slate" aesthetic utilizes the full **Matplotlib Categorical Palette** for a descriptive, high-fidelity experience:
+
+1. **Canvas (Editor):** `#0F1115` (Deep Black-Slate)
+2. **Panels:** `#16191E` (with `#1A1D23` headers and 1px `#B3CDE3` top highlights)
+3. **Accent (Primary Blue):** `#B3CDE3` (Pastel1 Blue)
+4. **Interactive States:** 
+    - **Hover:** `#232830`
+    - **Selected:** `#2D343F` (with `#B3CDE3` indicator)
+5. **Functional Semantics:**
+    - **Error / Danger:** `#FBB4AE` (Pastel Red)
+    - **Warning / Pending:** `#FED9A6` (Pastel Orange) or `#FFFFCC` (Pastel Yellow)
+    - **Success / Valid:** `#CCEBC5` (Pastel Green)
+    - **System / Info:** `#DECBE4` (Pastel Purple)
+    - **Secondary / Support:** `#E5D8BD` (Pastel Tan)
+
+---
+
+*Last updated: 2026-05-30. Owner: the UniLab UI rewrite stream.*

@@ -63,7 +63,7 @@ class _DraggableItemState extends State<DraggableItem> {
           color: _isDragging
               ? Theme.of(context).primaryColor.withValues(alpha: 0.3)
               : Theme.of(context).hoverColor,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.zero,
           border: Border.all(
             color: _isDragging
                 ? Theme.of(context).primaryColor
@@ -95,7 +95,7 @@ class _DraggableItemState extends State<DraggableItem> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).primaryColor,
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.zero,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.3),
@@ -179,7 +179,7 @@ class _DragDropTargetState extends State<DragDropTarget> {
               width: 2,
               style: _isHovering ? BorderStyle.solid : BorderStyle.none,
             ),
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.zero,
           ),
           child: widget.child,
         );

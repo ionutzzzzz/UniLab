@@ -102,7 +102,7 @@ class QuickActionsBar extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           hoverColor: Theme.of(context).hoverColor,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.zero,
           child: Padding(
             padding: const EdgeInsets.all(4),
             child: Icon(

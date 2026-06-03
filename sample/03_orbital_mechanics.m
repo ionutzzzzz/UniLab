@@ -1,66 +1,84 @@
 % 03_orbital_mechanics.m
-% UniLab Aerospace Engineering: Orbital Mechanics & N-Body Systems
+% UniLab Orbital Mechanics: Quantum Harmonic Oscillator & Tunneling
 
 clear all;
 close all;
 clc;
 
-disp('🚀 UniLab Aerospace & Orbital Mechanics');
-disp('=======================================');
+disp('🛰️ UniLab Orbital Mechanics & Quantum Tunneling');
+disp('===============================================');
 
-%% 1. Keplerian Orbit (Satellite Dynamics)
-disp('--- 1. Satellite Orbit (Elliptical) ---');
-a_axis = 1.0; e_ecc = 0.5; 
-theta_vec = linspace(0, 2*pi, 500);
-r_orbit = a_axis * (1.0 - e_ecc^2) ./ (1.0 + e_ecc * cos(theta_vec));
-x_orbit = r_orbit .* cos(theta_vec);
-y_orbit = r_orbit .* sin(theta_vec);
+%% 1. Quantum Harmonic Oscillator (Eigenstates)
+disp('--- 1. Harmonic Oscillator Eigenstates ---');
+x = linspace(-5, 5, 500);
+m = 1; hbar = 1; omega = 1;
+
+% Hermite polynomials (recursive implementation)
+function H = hermite_poly(n, x)
+    if n == 0
+        H = ones(size(x));
+    elseif n == 1
+        H = 2 * x;
+    else
+        H = 2 * x .* hermite_poly(n-1, x) - 2 * (n-1) * hermite_poly(n-2, x);
+    end
+end
+
+% Wavefunction for level n
+function psi = quantum_ho_psi(n, x, m, hbar, omega)
+    alpha = sqrt(m * omega / hbar);
+    norm = 1 / sqrt(2^n * factorial(n)) * (alpha^2 / pi)^(1/4);
+    psi = norm * exp(-alpha^2 * x.^2 / 2) .* hermite_poly(n, alpha * x);
+end
 
 figure;
-plot(x_orbit, y_orbit, 'b-', 'LineWidth', 1.5); hold on;
-plot(0, 0, 'yo', 'MarkerSize', 15, 'MarkerFaceColor', 'y'); % Central Body
-title('Keplerian Orbit: e = 0.5');
-axis equal; grid on;
+hold on;
+colors = {'r', 'g', 'b', 'm'};
+for n = 0:3
+    psi = quantum_ho_psi(n, x, m, hbar, omega);
+    plot(x, psi + n + 0.5, 'LineWidth', 2, 'Color', colors{n+1});
+end
+title('QHO Eigenstates: \psi_n(x)');
+xlabel('Position (x)'); ylabel('Energy / Amplitude');
+grid on;
 hold off;
 
-%% 2. Restricted 3-Body Problem (Lagrangian Points)
+%% 2. Quantum Tunneling Simulation
 disp(' ');
-disp('--- 2. Restricted 3-Body Problem ---');
+disp('--- 2. Quantum Tunneling (Wave Packet) ---');
+state = struct();
+state.N = 100;
+state.x = linspace(-10, 10, state.N);
+state.dx = state.x(2) - state.x(1);
+state.dt = 0.05;
+V_barrier = zeros(1, state.N);
+V_barrier(state.N/2 - 3 : state.N/2 + 3) = 15.0; % Barrier
+state.V = V_barrier;
+k0 = 2.0;
+state.psi = exp(-0.5 * (state.x + 5).^2) .* exp(1j * k0 * state.x);
+state.psi = state.psi / sqrt(sum(abs(state.psi).^2) * state.dx);
 
-function s_nxt = cr3bp_step(s_cur, p_par)
-    s_nxt = s_cur;
-    dt_step = 0.01;
-    mu_val = p_par.mu; mu1 = 1.0 - mu_val;
-    x_p = s_cur.pos(1); y_p = s_cur.pos(2);
-    vx_v = s_cur.vel(1); vy_v = s_cur.vel(2);
-    
-    r1_d = sqrt((x_p + mu_val)^2 + y_p^2);
-    r2_d = sqrt((x_p - mu1)^2 + y_p^2);
-    
-    ax_a = x_p + 2.0*vy_v - mu1*(x_p + mu_val)/r1_d^3 - mu_val*(x_p - mu1)/r2_d^3;
-    ay_a = y_p - 2.0*vx_v - mu1*y_p/r1_d^3 - mu_val*y_p/r2_d^3;
-    
-    s_nxt.vel = s_cur.vel + [ax_a, ay_a] * dt_step;
-    s_nxt.pos = s_cur.pos + s_nxt.vel * dt_step;
-    s_nxt.h = [s_cur.h; s_nxt.pos];
-    if size(s_nxt.h, 1) > 1000, s_nxt.h = s_nxt.h(end-999:end, :); end
+function s = schrodinger_step(s, params)
+    psi = s.psi;
+    V = s.V;
+    dx = s.dx; dt = s.dt;
+    % Finite difference Hamiltonian
+    lap = zeros(1, s.N);
+    lap(2:end-1) = (psi(3:end) - 2*psi(2:end-1) + psi(1:end-2)) / dx^2;
+    H_psi = -0.5 * lap + V .* psi;
+    s.psi = psi - 1j * H_psi * dt;
+    s.psi = s.psi / sqrt(sum(abs(s.psi).^2) * dx);
 end
 
-function cr3bp_draw(ax_o, s_d)
-    plot(ax_o, s_d.h(:, 1), s_d.h(:, 2), 'b-'); hold(ax_o, 'on');
-    plot(ax_o, -0.012, 0, 'ko', 'MarkerSize', 10, 'MarkerFaceColor', 'k'); 
-    plot(ax_o, 0.988, 0, 'go', 'MarkerSize', 5, 'MarkerFaceColor', 'g');  
-    title(ax_o, 'Restricted 3-Body Problem');
-    axis(ax_o, 'equal'); grid(ax_o, 'on'); hold(ax_o, 'off');
+function schrodinger_draw(ax, s)
+    prob = abs(s.psi).^2;
+    plot(ax, s.x, prob, 'b-', 'LineWidth', 2);
+    fill(ax, s.x, s.V / 20, 'r', 'Alpha', 0.2); 
+    title(ax, 'Quantum Tunneling: Probability Density |\psi|^2');
+    ylim(ax, [0, 1.2]);
 end
 
-mu_r = 0.012277471;
-st = struct('pos', [0.5, 0.5], 'vel', [-0.5, 0.5], 'h', []);
-simulate('algorithm', 'step', @cr3bp_step, 'draw', @cr3bp_draw, 'state', st, 'mu', mu_r);
+disp('Launching Quantum Simulation...');
+simulate('algorithm', 'step', @schrodinger_step, 'draw', @schrodinger_draw, 'state', state);
 
-%% 3. Advanced N-Body Gravity
-disp(' ');
-disp('--- 3. Multi-Body Gravitational Cluster ---');
-simulate('nbody', 'G', 2.0, 'time', [0, 20]);
-
-disp('Orbital Mechanics Session Complete.');
+disp('Quantum Mechanics Suite Complete.');

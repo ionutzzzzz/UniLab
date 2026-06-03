@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../providers/app_provider.dart';
 import '../screens/settings_screen.dart';
+import '../theme/ui_theme.dart';
 
 class UniLabRibbon extends StatefulWidget {
   const UniLabRibbon({super.key});
@@ -17,6 +19,9 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -28,14 +33,13 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final appProvider = Provider.of<AppProvider>(context);
-    final ribbonBgColor = Theme.of(context).canvasColor;
-    final borderColor = Theme.of(context).dividerColor;
+    final ui = UiTheme.of(context);
 
     return Container(
       height: 110, // Compact, desktop-class height
       decoration: BoxDecoration(
-        color: ribbonBgColor,
-        border: Border(bottom: BorderSide(color: borderColor, width: 1.0)),
+        color: ui.colors.panelHeader,
+        border: Border(bottom: BorderSide(color: ui.colors.border, width: 1.0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,32 +47,43 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
           // Tab Bar Area
           Container(
             height: 30,
-            color: ribbonBgColor,
+            color: ui.colors.ribbonTabs,
             child: Row(
               children: [
                 // Highlighted "File" button area
                 Container(
-                  color: Theme.of(context).primaryColor,
+                  color: ui.colors.accent,
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   alignment: Alignment.center,
-                  child: const Text('FILE', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text('FILE', style: TextStyle(color: ui.colors.textInverse, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
                 Expanded(
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    dividerColor: Colors.transparent,
-                    indicatorColor: Theme.of(context).primaryColor,
-                    indicatorWeight: 2.0,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: const Color(0xFF999999),
-                    labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                    tabs: const [
-                      Tab(text: 'HOME'),
-                      Tab(text: 'EDITOR'),
-                      Tab(text: 'PLOTS'),
-                      Tab(text: 'APPS'),
+                  child: Row(
+                    children: [
+                      _AnimatedRibbonTab(
+                        title: 'HOME',
+                        isActive: _tabController.index == 0,
+                        onTap: () => _tabController.animateTo(0),
+                        ui: ui,
+                      ),
+                      _AnimatedRibbonTab(
+                        title: 'EDITOR',
+                        isActive: _tabController.index == 1,
+                        onTap: () => _tabController.animateTo(1),
+                        ui: ui,
+                      ),
+                      _AnimatedRibbonTab(
+                        title: 'PLOTS',
+                        isActive: _tabController.index == 2,
+                        onTap: () => _tabController.animateTo(2),
+                        ui: ui,
+                      ),
+                      _AnimatedRibbonTab(
+                        title: 'APPS',
+                        isActive: _tabController.index == 3,
+                        onTap: () => _tabController.animateTo(3),
+                        ui: ui,
+                      ),
                     ],
                   ),
                 ),
@@ -78,15 +93,15 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
           // Ribbon Body Content
           Expanded(
             child: Container(
-              color: ribbonBgColor,
+              color: ui.colors.panelHeader,
               child: TabBarView(
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildHomeTab(context, appProvider),
-                  _buildEditorTab(context, appProvider),
-                  _buildPlotsTab(context),
-                  _buildSamplesTab(context, appProvider),
+                  _buildHomeTab(context, appProvider, ui),
+                  _buildEditorTab(context, appProvider, ui),
+                  _buildPlotsTab(context, ui),
+                  _buildSamplesTab(context, appProvider, ui),
                 ],
               ),
             ),
@@ -96,54 +111,60 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildHomeTab(BuildContext context, AppProvider appProvider) {
+  Widget _buildHomeTab(BuildContext context, AppProvider appProvider, UiTheme ui) {
     return ListView(
       scrollDirection: Axis.horizontal,
       children: [
         _RibbonSection(
           title: 'FILE',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.note_add,
+              icon: LucideIcons.filePlus,
               label: 'New Script',
               onPressed: () => appProvider.addNewFile(),
               isLarge: true,
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.folder_open,
+              icon: LucideIcons.folderOpen,
               label: 'Open',
               onPressed: () {},
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.save,
+              icon: LucideIcons.save,
               label: 'Save',
               onPressed: () {},
+              ui: ui,
             ),
           ],
         ),
         _RibbonSection(
           title: 'EXECUTION',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.play_arrow,
+              icon: LucideIcons.play,
               label: 'Run',
-              iconColor: const Color(0xFF4EC9B0), // Soft code-green
               onPressed: () => appProvider.runActiveFile(),
               isLarge: true,
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.stop,
+              icon: LucideIcons.square,
               label: 'Stop',
-              iconColor: const Color(0xFFF44336),
               onPressed: () {},
+              ui: ui,
             ),
           ],
         ),
         _RibbonSection(
           title: 'ENVIRONMENT',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.settings,
+              icon: LucideIcons.settings,
               label: 'Settings',
               onPressed: () {
                 Navigator.of(context).push(
@@ -151,6 +172,7 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
                 );
               },
               isLarge: true,
+              ui: ui,
             ),
           ],
         ),
@@ -158,58 +180,68 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildEditorTab(BuildContext context, AppProvider appProvider) {
+  Widget _buildEditorTab(BuildContext context, AppProvider appProvider, UiTheme ui) {
     return ListView(
       scrollDirection: Axis.horizontal,
       children: [
         _RibbonSection(
           title: 'EDIT',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.content_cut,
+              icon: LucideIcons.scissors,
               label: 'Cut',
               onPressed: () {},
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.content_copy,
+              icon: LucideIcons.copy,
               label: 'Copy',
               onPressed: () {},
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.content_paste,
+              icon: LucideIcons.clipboard,
               label: 'Paste',
               onPressed: () {},
               isLarge: true,
+              ui: ui,
             ),
           ],
         ),
         _RibbonSection(
           title: 'NAVIGATE',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.search,
+              icon: LucideIcons.search,
               label: 'Find',
               onPressed: () {},
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.find_replace,
+              icon: LucideIcons.replace,
               label: 'Replace',
               onPressed: () {},
+              ui: ui,
             ),
           ],
         ),
         _RibbonSection(
           title: 'FORMAT',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.format_indent_increase,
+              icon: LucideIcons.indent,
               label: 'Indent',
               onPressed: () {},
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.comment,
+              icon: LucideIcons.messageSquare,
               label: 'Comment',
               onPressed: () {},
+              ui: ui,
             ),
           ],
         ),
@@ -217,23 +249,26 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildPlotsTab(BuildContext context) {
+  Widget _buildPlotsTab(BuildContext context, UiTheme ui) {
     return ListView(
       scrollDirection: Axis.horizontal,
       children: [
         _RibbonSection(
           title: 'FIGURES',
+          ui: ui,
           children: [
             _RibbonButton(
-              icon: Icons.show_chart,
+              icon: LucideIcons.lineChart,
               label: 'New Figure',
               onPressed: () {},
               isLarge: true,
+              ui: ui,
             ),
             _RibbonButton(
-              icon: Icons.delete_sweep,
+              icon: LucideIcons.eraser,
               label: 'Clear All',
               onPressed: () {},
+              ui: ui,
             ),
           ],
         ),
@@ -241,18 +276,20 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildSamplesTab(BuildContext context, AppProvider appProvider) {
+  Widget _buildSamplesTab(BuildContext context, AppProvider appProvider, UiTheme ui) {
     return ListView(
       scrollDirection: Axis.horizontal,
       children: [
         _RibbonSection(
           title: 'AVAILABLE SAMPLES',
+          ui: ui,
           children: appProvider.availableSamples.take(10).map((file) {
             final fileName = file.path.split('/').last;
             return _RibbonButton(
-              icon: Icons.science,
+              icon: LucideIcons.flaskConical,
               label: fileName.replaceAll('.m', ''),
               onPressed: () => appProvider.openSample(file),
+              ui: ui,
             );
           }).toList(),
         ),
@@ -261,17 +298,79 @@ class _UniLabRibbonState extends State<UniLabRibbon> with SingleTickerProviderSt
   }
 }
 
+class _AnimatedRibbonTab extends StatefulWidget {
+  final String title;
+  final bool isActive;
+  final VoidCallback onTap;
+  final UiTheme ui;
+
+  const _AnimatedRibbonTab({
+    required this.title,
+    required this.isActive,
+    required this.onTap,
+    required this.ui,
+  });
+
+  @override
+  State<_AnimatedRibbonTab> createState() => _AnimatedRibbonTabState();
+}
+
+class _AnimatedRibbonTabState extends State<_AnimatedRibbonTab> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _isHovered ? widget.ui.colors.accent : Colors.transparent,
+            border: Border(
+              top: BorderSide(
+                color: widget.isActive ? widget.ui.colors.accent : Colors.transparent,
+                width: 2.0,
+              ),
+              left: BorderSide(color: widget.isActive ? widget.ui.colors.border : Colors.transparent, width: 1.0),
+              right: BorderSide(color: widget.isActive ? widget.ui.colors.border : Colors.transparent, width: 1.0),
+            ),
+          ),
+          child: Text(
+            widget.title,
+            style: TextStyle(
+              fontSize: 12.0,
+              fontWeight: (widget.isActive || _isHovered) ? FontWeight.bold : FontWeight.w500,
+              color: _isHovered 
+                  ? widget.ui.colors.textInverse 
+                  : (widget.isActive ? widget.ui.colors.textPrimary : widget.ui.colors.textSecondary),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RibbonSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
+  final UiTheme ui;
 
-  const _RibbonSection({required this.title, required this.children});
+  const _RibbonSection({required this.title, required this.children, required this.ui});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        border: Border(right: BorderSide(color: Theme.of(context).dividerColor, width: 1.0)),
+        border: Border(right: BorderSide(color: ui.colors.divider, width: 1.0)),
       ),
       padding: const EdgeInsets.only(left: 4.0, right: 4.0, top: 4.0, bottom: 2.0),
       child: Column(
@@ -285,7 +384,9 @@ class _RibbonSection extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             title, 
-            style: const TextStyle(fontSize: 10, color: Color(0xFF888888))
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, color: ui.colors.textMuted)
           ),
         ],
       ),
@@ -293,49 +394,92 @@ class _RibbonSection extends StatelessWidget {
   }
 }
 
-class _RibbonButton extends StatelessWidget {
+class _RibbonButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
   final Color? iconColor;
   final bool isLarge;
+  final UiTheme ui;
 
   const _RibbonButton({
     required this.icon,
     required this.label,
     required this.onPressed,
+    required this.ui,
     this.iconColor,
     this.isLarge = false,
   });
 
   @override
+  State<_RibbonButton> createState() => _RibbonButtonState();
+}
+
+class _RibbonButtonState extends State<_RibbonButton> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          hoverColor: Theme.of(context).hoverColor,
-          borderRadius: BorderRadius.circular(4.0),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 4.0),
-            constraints: BoxConstraints(minWidth: isLarge ? 50 : 40),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon, 
-                  size: isLarge ? 26 : 18, 
-                  color: iconColor ?? const Color(0xFFCCCCCC)
+    // Transparent background by default, accent color on hover
+    final Color bgColor = _isHovered ? widget.ui.colors.accent : Colors.transparent;
+    
+    // Standardize foreground to use textPrimary (high contrast)
+    // On hover, we use textInverse for maximum clarity against the accent color.
+    final Color fgColor = _isHovered 
+        ? widget.ui.colors.textInverse 
+        : (widget.iconColor ?? widget.ui.colors.textPrimary);
+
+    return IntrinsicWidth(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1.0),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+              constraints: const BoxConstraints(
+                minWidth: 50.0,
+                minHeight: 72.0,
+              ),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(6.0),
+                border: Border.all(
+                  color: _isHovered ? widget.ui.colors.border : Colors.transparent,
+                  width: 1.0,
                 ),
-                SizedBox(height: isLarge ? 4 : 2),
-                Text(
-                  label, 
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFCCCCCC))
-                ),
-              ],
+                boxShadow: _isHovered ? widget.ui.colors.shadowSm : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    widget.icon, 
+                    size: 20,
+                    color: fgColor,
+                  ),
+                  const SizedBox(height: 6),
+                  Flexible(
+                    child: Text(
+                      widget.label, 
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10, 
+                        color: fgColor, 
+                        height: 1.1,
+                        fontWeight: _isHovered ? FontWeight.w600 : FontWeight.w500,
+                      )
+                    ), 
+                  ),
+                ],
+              ),
             ),
           ),
         ),
