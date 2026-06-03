@@ -16,6 +16,7 @@ from backend.core.simulation.engine import unilab_simulate as simulate
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
 # ContextVar for engine update callback
 unilab_update_ctx = ContextVar('unilab_update_callback', default=None)
+unilab_event_ctx = ContextVar('unilab_event_callback', default=None)
 
 # Store for 3D plot data (fig_num -> {type, x, y, z})
 _unilab_3d_data_store = {}
@@ -2889,7 +2890,27 @@ def _unilab_refresh_graph():
         fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', edgecolor='#121212', transparent=False, bbox_inches='tight', pad_inches=0.1)
         fig_num = fig.number
         fig_ver = _unilab_fig_versions.get(fig_num, 1)
-        print(f"::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}")
+
+        # Bridge emission
+        import base64
+        try:
+            with open(str(save_path), 'rb') as img_file:
+                b64_data = base64.b64encode(img_file.read()).decode('utf-8')
+                data_uri = f'data:image/png;base64,{b64_data}'
+                
+            cb = unilab_event_ctx.get()
+            if cb:
+                cb('GRAPHICAL_PLOT', json.dumps({
+                    'filename': filename,
+                    'fig': fig_num,
+                    'ver': fig_ver,
+                    'data': data_uri,
+                    'meta': meta
+                }))
+        except Exception as e:
+            print(f'Error emitting plot event: {e}')
+
+        print(f'::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}')
     except Exception as e:
         print(f"Error saving graph: {e}")
 

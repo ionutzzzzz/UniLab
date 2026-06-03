@@ -81,6 +81,7 @@ class TranspilerEngine(BaseEngine):
         super().__init__(session)
         self.transpiler = UniLabTranspiler()
         self.on_workspace_changed = None
+        self.on_event = None
         self._workspace_changed_timer = None
         self._runtime_names = set(dir(runtime))
         self._last_ws_update = 0
@@ -237,6 +238,8 @@ class TranspilerEngine(BaseEngine):
         from ..runtime import unilab_workspace_ctx, unilab_update_ctx
         token = unilab_workspace_ctx.set(str(self.workspace_path))
         update_token = unilab_update_ctx.set(lambda: self._trigger_workspace_changed())
+        from ..runtime import unilab_event_ctx
+        event_token = unilab_event_ctx.set(self.on_event)
         
         try:
             # --- Shell Command Handling ---

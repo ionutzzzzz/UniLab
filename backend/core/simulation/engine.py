@@ -1,4 +1,7 @@
 import sys
+import threading
+import queue
+import time
 import numpy as np
 from scipy import signal
 import os
@@ -54,6 +57,97 @@ try:
     from backend.stdlib.packages import ml
 except ImportError:
     ml = None
+
+
+class BridgeSimulator:
+    def __init__(self, **kwargs):
+        self.params = DotDict(kwargs.get('params', {}))
+        self.custom_controls = {}
+        self.is_running = True
+        self.event_queue = queue.Queue()
+        self.on_event = kwargs.get('on_event')
+        self.model_name = kwargs.get('model_name', 'unknown')
+        self.emit_event('SIM_START', {'model': self.model_name})
+
+    def emit_event(self, event_type, data):
+        try:
+            if self.on_event:
+                self.on_event(event_type, json.dumps(data))
+            else:
+                from backend.core.runtime import unilab_event_ctx
+                cb = unilab_event_ctx.get()
+                if cb:
+                    cb(event_type, json.dumps(data))
+                else:
+                    print(f'::{event_type}::{json.dumps(data)}')
+        except:
+            print(f'::{event_type}::{json.dumps(data)}')
+
+    def add_custom_button(self, label, callback, layout=None):
+        ctrl_id = f'btn_{label}'
+        self.custom_controls[ctrl_id] = callback
+        self.emit_event('CREATE_CONTROL', {'id': ctrl_id, 'type': 'button', 'label': label})
+        return ctrl_id
+
+    def add_custom_slider(self, label, min_val, max_val, initial_val, callback, layout=None):
+        ctrl_id = f'sl_{label}'
+        self.custom_controls[ctrl_id] = callback
+        self.emit_event('CREATE_CONTROL', {'id': ctrl_id, 'type': 'slider', 'label': label, 'min': min_val, 'max': max_val, 'value': initial_val})
+        return ctrl_id
+
+    def update_control_value(self, control_id, value):
+        self.emit_event('UPDATE_CONTROL', {'id': control_id, 'value': value})
+
+    def push_event(self, event_data):
+        self.event_queue.put(event_data)
+
+    def process_events(self):
+        while not self.event_queue.empty():
+            ev = self.event_queue.get()
+            if ev.get('type') == 'STOP':
+                self.is_running = False
+            cid = ev.get('id')
+            val = ev.get('value')
+            if cid in self.custom_controls:
+                self.custom_controls[cid](val)
+
+class BridgeAlgorithmSimulator(BridgeSimulator):
+    def __init__(self, step_f, draw_f, state, **kwargs):
+        super().__init__(model_name='algorithm', **kwargs)
+        self.step_f = step_f
+        self.draw_f = draw_f
+        self.state = state
+        self.delay = kwargs.get('delay', 0.05)
+        
+    def run(self):
+        global _current_sim_window
+        # Set context for background thread
+        from backend.core.runtime import unilab_event_ctx
+        unilab_event_ctx.set(self.on_event)
+        
+        self.emit_event('SIM_RUNNING', {'status': 'started'})
+        try:
+            while self.is_running:
+                self.process_events()
+                self.state = self.step_f(self.state, self.params)
+                fig = plt.gcf()
+                ax = plt.gca()
+                self.draw_f(ax, self.state)
+                time.sleep(self.delay)
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            self.emit_event('SIM_ERROR', {'error': str(e)})
+        self.emit_event('SIM_STOPPED', {'status': 'stopped'})
+        _current_sim_window = None
+
+def push_sim_event(event_data):
+    global _current_sim_window
+    if _current_sim_window and hasattr(_current_sim_window, 'push_event'):
+        if isinstance(event_data, str):
+            try: event_data = json.loads(event_data)
+            except: pass
+        _current_sim_window.push_event(event_data)
 
 class DotDict(dict):
     """A dictionary that allows dot notation access."""
@@ -1617,6 +1711,25 @@ class SimulatorEngine:
     @staticmethod
     def simulate(model, **kwargs):
         global _current_sim_window
+        is_bridge = os.environ.get('UNILAB_BRIDGE_MODE') == '1'
+        
+        if is_bridge:
+            if model == 'algorithm':
+                step_f = kwargs.pop('step', None)
+                draw_f = kwargs.pop('draw', None)
+                state = kwargs.pop('state', None)
+                sw = BridgeAlgorithmSimulator(step_f, draw_f, state, **kwargs)
+                _current_sim_window = sw
+                for c in kwargs.get('controls', []):
+                    if c.get('type') == 'button': sw.add_custom_button(c['label'], c['callback'])
+                    elif c.get('type') == 'slider': sw.add_custom_slider(c['label'], c['min'], c['max'], c['value'], c['callback'])
+                # Run in background thread so execute() returns and bridge stays responsive
+                threading.Thread(target=sw.run, daemon=True).start()
+                return
+            else:
+                print(f"[ Simulation model '{model}' not yet implemented for bridge mode ]")
+                return
+
         try:
             # Fix sys.argv to avoid Qt crashes on some Linux distros
             original_argv = sys.argv
@@ -1698,7 +1811,9 @@ class SimulatorEngine:
         except Exception as e: print(f"Sim Error: {e}"); import traceback; traceback.print_exc()
 
 def unilab_simulate(model, *args):
-    if os.environ.get('UNILAB_WEB_MODE') == '1' or IS_HEADLESS:
+    is_bridge = os.environ.get('UNILAB_BRIDGE_MODE') == '1'
+    if (os.environ.get('UNILAB_WEB_MODE') == '1' or IS_HEADLESS) and not is_bridge:
+
         msg = "[ Interactive simulation window skipped in web mode ]" if os.environ.get('UNILAB_WEB_MODE') == '1' else "[ Interactive simulation window skipped in headless mode ]"
         print(f"\n\x1b[38;2;253;253;150m{msg}\x1b[0m")
         return
@@ -1707,4 +1822,8 @@ def unilab_simulate(model, *args):
     if len(args) % 2 == 0:
         for i in range(0, len(args), 2):
             if isinstance(args[i], str): kwargs[args[i]] = args[i+1]
+            
+    from backend.core.runtime import unilab_event_ctx
+    kwargs['on_event'] = unilab_event_ctx.get()
+    
     SimulatorEngine.simulate(model, **kwargs)

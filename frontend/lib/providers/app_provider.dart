@@ -12,8 +12,6 @@ import '../models/editor_models.dart';
 import '../features/workspace/domain/workspace_variable.dart' as domain;
 import '../bridge/unilab_bridge.dart';
 import '../utils/file_manager.dart';
-
-// Use a conditional import to handle dart:io
 import 'dart:io' as io;
 
 enum BackendStatus { connecting, connected, error }
@@ -25,35 +23,45 @@ class AppProvider with ChangeNotifier {
   List<dynamic> _projectFiles = [];
   late String _projectRoot;
 
-  // Console: structured messages instead of raw string
   final List<ConsoleMessage> _consoleMessages = [];
-
   Map<String, dynamic> _workspaceVariables = {};
   final List<PlotData> _generatedPlots = [];
+  
+  // Simulation State
+  bool _isSimulationActive = false;
+  String? _simulationModel;
+  final List<Map<String, dynamic>> _simulationControls = [];
+  final List<PlotData> _simulationPlots = [];
+  String? _simWindowId;
+
   bool _isExecuting = false;
   final Set<String> _savingFileIds = {};
   Map<String, dynamic> _serverInfo = {};
   String _selectedConsoleTab = 'output';
+  String _selectedWorkspaceSegment = 'Variables';
 
   String? _plotsWindowId;
-
   BackendStatus _backendStatus = BackendStatus.connecting;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
   StreamSubscription? _bridgeEventSubscription;
   StreamSubscription<void>? _windowsChangedSubscription;
 
-  // Callbacks to push state into Riverpod (using domain WorkspaceVariable)
   final void Function(List<domain.WorkspaceVariable>)? onVariablesUpdated;
   final void Function(List<PlotData>)? onPlotsUpdated;
 
   List<UniLabFile> get openFiles => _openFiles;
   int get activeFileIndex => _activeFileIndex;
-  UniLabFile? get activeFile =>
-      _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
+  UniLabFile? get activeFile => _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
   List<ConsoleMessage> get consoleMessages => List.unmodifiable(_consoleMessages);
   String get consoleOutput => _consoleMessages.map((m) => m.text).join('\n');
   Map<String, dynamic> get workspaceVariables => _workspaceVariables;
+  
+  bool get isSimulationActive => _isSimulationActive;
+  String? get simulationModel => _simulationModel;
+  List<Map<String, dynamic>> get simulationControls => List.unmodifiable(_simulationControls);
+  List<PlotData> get simulationPlots => List.unmodifiable(_simulationPlots);
+
   List<PlotData> get generatedPlots => List.unmodifiable(_generatedPlots);
   bool get isExecuting => _isExecuting;
   List<dynamic> get availableSamples => _availableSamples;
@@ -62,9 +70,15 @@ class AppProvider with ChangeNotifier {
   BackendStatus get backendStatus => _backendStatus;
   Map<String, dynamic> get serverInfo => _serverInfo;
   String get selectedConsoleTab => _selectedConsoleTab;
+  String get selectedWorkspaceSegment => _selectedWorkspaceSegment;
 
   void setSelectedConsoleTab(String tab) {
     _selectedConsoleTab = tab;
+    notifyListeners();
+  }
+
+  void setSelectedWorkspaceSegment(String segment) {
+    _selectedWorkspaceSegment = segment;
     notifyListeners();
   }
 
@@ -78,26 +92,26 @@ class AppProvider with ChangeNotifier {
     _initWatcher();
     _initBridge();
     _initWindowsListener();
+
+    // Listen for control updates from simulation window
+    dmw.WindowMethodChannel('simulation_channel').setMethodCallHandler((call) async {
+      if (call.method == 'on_sim_control') {
+        final data = jsonDecode(call.arguments);
+        await sendSimControlUpdate(data['id'], data['value']);
+      }
+      return null;
+    });
   }
 
   String _discoverProjectRoot() {
     if (kIsWeb) return '/web-virtual-root';
-
     try {
-      // Start from current working directory
       io.Directory current = io.Directory.current;
-      
-      // Strategy: Look for 'sample' directory in current or parent directories
       for (int i = 0; i < 3; i++) {
         final samplePath = p.join(current.path, 'sample');
-        if (io.Directory(samplePath).existsSync()) {
-          return samplePath;
-        }
-        // If we are in 'frontend', the 'sample' is likely in the parent
+        if (io.Directory(samplePath).existsSync()) return samplePath;
         final parentSamplePath = p.join(current.parent.path, 'sample');
-        if (io.Directory(parentSamplePath).existsSync()) {
-          return parentSamplePath;
-        }
+        if (io.Directory(parentSamplePath).existsSync()) return parentSamplePath;
         current = current.parent;
       }
       return p.join(io.Directory.current.path, 'sample');
@@ -114,36 +128,116 @@ class AppProvider with ChangeNotifier {
     super.dispose();
   }
 
-  /// Initialize the FFI bridge to the Rust backend.
   Future<void> _initBridge() async {
     try {
-      // In case of hot reload/restart with corrupted state
       if (UniLabBridge.instance.initialized && UniLabBridge.instance.sessionId == null) {
         UniLabBridge.resetInstance();
       }
-
       final backendPath = await UniLabBridge.findBackendPath();
       await UniLabBridge.instance.initialize(backendPath);
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
       _serverInfo = await UniLabBridge.instance.getInfo();
       
-      // Listen for real-time events from the bridge
       _bridgeEventSubscription?.cancel();
       _bridgeEventSubscription = UniLabBridge.instance.events.listen((event) {
         if (event['event'] == 'workspace_updated') {
           _handleWorkspaceUpdateEvent(event);
+        } else if (event['type'] == 'sim_event') {
+          _handleSimEvent(event);
         }
       });
-
       await fetchWorkspaceVariables();
-      _addConsoleMessage('UniLab bridge initialized (v${_serverInfo['version'] ?? 'unknown'}).', ConsoleMessageType.success);
     } catch (e) {
       _backendStatus = BackendStatus.error;
       debugPrint('[AppProvider] Bridge initialization error: $e');
-      _addConsoleMessage('Bridge initialization error: $e', ConsoleMessageType.error);
     }
     notifyListeners();
+  }
+
+  void _handleSimEvent(Map<String, dynamic> event) {
+    final type = event['event'];
+    final data = event['data'];
+    
+    if (type == 'SIM_START') {
+      _isSimulationActive = true;
+      _simulationModel = data['model'];
+      _simulationControls.clear();
+      _simulationPlots.clear();
+      openDetachedSimWindow();
+    } else if (type == 'CREATE_CONTROL') {
+      _simulationControls.add(data);
+      _syncSimWindow();
+    } else if (type == 'GRAPHICAL_PLOT') {
+      _handleSimPlot(data);
+      _syncSimWindow();
+    } else if (type == 'SIM_STOPPED') {
+      _isSimulationActive = false;
+    }
+    notifyListeners();
+  }
+
+  void _handleSimPlot(Map<String, dynamic> data) {
+    final figNum = data['fig'];
+    final plotData = PlotData(
+      title: 'Figure $figNum',
+      type: 'image',
+      xData: [],
+      yData: [],
+      imageDataUri: data['data'],
+    );
+    final index = _simulationPlots.indexWhere((p) => p.title == 'Figure $figNum');
+    if (index != -1) {
+      _simulationPlots[index] = plotData;
+    } else {
+      _simulationPlots.add(plotData);
+    }
+  }
+
+  Future<void> sendSimControlUpdate(String id, dynamic value) async {
+    await UniLabBridge.instance.sendSimEvent({
+      'id': id,
+      'value': value,
+    });
+  }
+
+  Future<void> openDetachedSimWindow() async {
+    if (_simWindowId != null || kIsWeb) return;
+    try {
+      final window = await dmw.WindowController.create(
+        dmw.WindowConfiguration(
+          arguments: jsonEncode({
+            'type': 'simulation',
+            'model': _simulationModel,
+            'controls': _simulationControls,
+            'plots': _simulationPlots.map((p) => p.toJson()).toList(),
+          }),
+          hiddenAtLaunch: false,
+        ),
+      );
+      _simWindowId = window.windowId.toString();
+      await window.show();
+    } catch (e) {
+      debugPrint('Error creating sim window: $e');
+      _simWindowId = null;
+    }
+  }
+
+  void _syncSimWindow() {
+    if (_simWindowId == null) return;
+    try {
+      dmw.WindowController.fromWindowId(_simWindowId!).invokeMethod(
+        'update_sim_state',
+        jsonEncode({
+          'model': _simulationModel,
+          'controls': _simulationControls,
+          'plots': _simulationPlots.map((p) => p.toJson()).toList(),
+        }),
+      );
+    } catch (e) {
+      debugPrint('Error syncing sim window: $e');
+      _simWindowId = null;
+    }
   }
 
   void _handleWorkspaceUpdateEvent(Map<String, dynamic> event) {
@@ -153,7 +247,6 @@ class AppProvider with ChangeNotifier {
 
   void _updateVariablesFromMap(Map<String, dynamic> variables) {
     _workspaceVariables = variables;
-
     final vars = _workspaceVariables.entries.map((e) {
       final info = e.value as Map<String, dynamic>;
       final shape = info['shape'] as List<dynamic>?;
@@ -165,138 +258,97 @@ class AppProvider with ChangeNotifier {
         typeClass: info['dtype']?.toString() ?? 'unknown',
       );
     }).toList();
-    
     onVariablesUpdated?.call(vars);
     notifyListeners();
   }
 
-  /// Add a message to the console.
   void _addConsoleMessage(String text, ConsoleMessageType type, {String? source}) {
     if (text.isEmpty) return;
-
-    // Split multiline text into individual messages for better UI rendering and command processing
     final lines = text.split('\n');
-    
     for (var line in lines) {
       String trimmedLine = line.trim();
       if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last) continue;
-
       if (trimmedLine.contains('::CLEAR_TERMINAL::')) {
         clearConsole();
         continue;
       }
-
       if (trimmedLine.contains('::CLEAR_WORKSPACE::')) {
         clearWorkspace();
         continue;
       }
-
       if (trimmedLine.contains('::CLEAR_VAR::')) {
         final parts = trimmedLine.split('::CLEAR_VAR::');
-        if (parts.length > 1) {
-          final varName = parts[1].trim();
-          _removeVariable(varName);
-        }
+        if (parts.length > 1) _removeVariable(parts[1].trim());
         continue;
       }
-
       if (trimmedLine.contains('::OPEN_FILE::')) {
         final parts = trimmedLine.split('::OPEN_FILE::');
-        if (parts.length > 1) {
-          final filename = parts[1].trim();
-          _handleOpenFileCommand(filename);
-        }
+        if (parts.length > 1) _handleOpenFileCommand(parts[1].trim());
         continue;
       }
-      
-      _consoleMessages.add(ConsoleMessage(
-        text: line,
-        type: type,
-        source: source ?? 'System',
-      ));
+      _consoleMessages.add(ConsoleMessage(text: line, type: type, source: source ?? 'System'));
     }
-    
     notifyListeners();
   }
 
   Future<void> _handleOpenFileCommand(String filename) async {
-    // Try to find file in project root
     final fullPath = p.join(_projectRoot, filename);
     final file = io.File(fullPath);
-    if (await file.exists()) {
-      await openFile(file);
-    } else {
-      _addConsoleMessage('File not found: $filename', ConsoleMessageType.error);
-    }
+    if (await file.exists()) await openFile(file);
   }
 
   void _removeVariable(String name) {
     _workspaceVariables.remove(name);
-    // Convert current map to domain list and notify
-    final vars = _workspaceVariables.entries.map((e) {
-      final info = e.value as Map<String, dynamic>;
-      final shape = info['shape'] as List<dynamic>?;
-      final sizeStr = shape != null ? shape.join('x') : '1x1';
-      return domain.WorkspaceVariable(
-        name: e.key,
-        value: info['preview']?.toString() ?? '',
-        size: sizeStr,
-        typeClass: info['dtype']?.toString() ?? 'unknown',
-      );
-    }).toList();
-    onVariablesUpdated?.call(vars);
-    notifyListeners();
+    _updateVariablesFromMap(_workspaceVariables);
   }
 
   void _initWatcher() {
     if (kIsWeb) return;
-
     _watcherSubscription?.cancel();
     try {
       final watcher = DirectoryWatcher(_projectRoot);
-      _watcherSubscription = watcher.events.listen((event) {
-        refreshProjectFiles();
-      });
+      _watcherSubscription = watcher.events.listen((event) => refreshProjectFiles());
     } catch (e) {
       debugPrint('Watcher error: $e');
     }
   }
 
   void _initWindowsListener() {
-    if (kIsWeb) return; // Skip on web
-
+    if (kIsWeb) return;
     _windowsChangedSubscription?.cancel();
     try {
       _windowsChangedSubscription = dmw.onWindowsChanged.listen((_) {
-        // Check if the plots window still exists
-        if (_plotsWindowId != null) {
-          _checkPlotsWindowExists();
-        }
-      }, onError: (error) {
-        debugPrint('Windows listener error: $error');
-        // Don't crash the app if the listener fails
+        if (_plotsWindowId != null) _checkPlotsWindowExists();
+        if (_simWindowId != null) _checkSimWindowExists();
       });
     } catch (e) {
-      debugPrint('Windows listener init error: $e');
+      debugPrint('Windows listener error: $e');
     }
   }
 
   Future<void> _checkPlotsWindowExists() async {
     try {
       if (_plotsWindowId == null) return;
-      
       final allWindows = await dmw.WindowController.getAll();
-      final plotsWindowExists = allWindows.any((w) => w.windowId == _plotsWindowId);
-      
-      if (!plotsWindowExists) {
-        // Plots window was closed, reset the ID
+      if (!allWindows.any((w) => w.windowId.toString() == _plotsWindowId)) {
         _plotsWindowId = null;
         notifyListeners();
       }
     } catch (e) {
-      // If we can't check the windows, just clear the ID to be safe
-      debugPrint('Error checking plots window existence: $e');
       _plotsWindowId = null;
+    }
+  }
+
+  Future<void> _checkSimWindowExists() async {
+    try {
+      if (_simWindowId == null) return;
+      final allWindows = await dmw.WindowController.getAll();
+      if (!allWindows.any((w) => w.windowId.toString() == _simWindowId)) {
+        _simWindowId = null;
+        notifyListeners();
+      }
+    } catch (e) {
+      _simWindowId = null;
     }
   }
 
@@ -307,12 +359,10 @@ class AppProvider with ChangeNotifier {
 
   Future<void> refreshProjectFiles() async {
     if (kIsWeb) return;
-
     try {
       final dir = io.Directory(_projectRoot);
       if (await dir.exists()) {
         _projectFiles = await UniLabFileManager.listDirectory(_projectRoot);
-        // Sort directories first, then files
         _projectFiles.sort((a, b) {
           if (a is io.Directory && b is! io.Directory) return -1;
           if (a is! io.Directory && b is io.Directory) return 1;
@@ -334,12 +384,7 @@ class AppProvider with ChangeNotifier {
   }
 
   void addNewFile() {
-    final newFile = UniLabFile(
-      id: const Uuid().v4(),
-      name: 'Untitled${_openFiles.length + 1}.m',
-      path: '',
-      content: '',
-    );
+    final newFile = UniLabFile(id: const Uuid().v4(), name: 'Untitled${_openFiles.length + 1}.m', path: '', content: '');
     _openFiles.add(newFile);
     _activeFileIndex = _openFiles.length - 1;
     notifyListeners();
@@ -347,30 +392,17 @@ class AppProvider with ChangeNotifier {
 
   Future<void> createProjectFile(String fileName, String content) async {
     if (kIsWeb) {
-      final newFile = UniLabFile(
-        id: const Uuid().v4(),
-        name: fileName,
-        path: 'web/$fileName',
-        content: content,
-      );
+      final newFile = UniLabFile(id: const Uuid().v4(), name: fileName, path: 'web/$fileName', content: content);
       _openFiles.add(newFile);
       _activeFileIndex = _openFiles.length - 1;
       notifyListeners();
       return;
     }
-
     try {
       final path = p.join(_projectRoot, fileName);
       final file = io.File(path);
       await file.writeAsString(content);
-
-      // Also sync to backend workspace
-      try {
-        await UniLabBridge.instance.createFile(fileName, content);
-      } catch (e) {
-        debugPrint('Failed to sync file to backend: $e');
-      }
-
+      await UniLabBridge.instance.createFile(fileName, content);
       await refreshProjectFiles();
       await openFile(file);
     } catch (e) {
@@ -383,58 +415,36 @@ class AppProvider with ChangeNotifier {
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
-      final importFile = UniLabFile(
-        id: 'import-data',
-        name: 'Import Data',
-        path: 'unilab://import-data',
-        content: '',
-      );
-      _openFiles.add(importFile);
+      _openFiles.add(UniLabFile(id: 'import-data', name: 'Import Data', path: 'unilab://import-data', content: ''));
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
   }
 
   void loadSample(String name, String content) {
-    // Check if file is already open
     final existingIndex = _openFiles.indexWhere((f) => f.name == name && f.path == 'sample/$name');
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
-      final newFile = UniLabFile(
-        id: const Uuid().v4(),
-        name: name,
-        path: 'sample/$name',
-        content: content,
-      );
-      _openFiles.add(newFile);
+      _openFiles.add(UniLabFile(id: const Uuid().v4(), name: name, path: 'sample/$name', content: content));
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
   }
 
   Future<void> openSample(dynamic file) async {
-    if (kIsWeb) return;
-    final name = p.basename((file as io.File).path);
-    final content = await UniLabFileManager.readFile(file);
-    loadSample(name, content);
+    final content = await UniLabFileManager.readFile(file as io.File);
+    loadSample(p.basename(file.path), content);
   }
 
   Future<void> openFile(dynamic file) async {
-    if (kIsWeb) return;
     final path = (file as io.File).absolute.path;
-    final name = p.basename(path);
-
-    // Check if file is already open
-    final existingIndex = _openFiles.indexWhere(
-      (f) => f.path == path,
-    );
+    final existingIndex = _openFiles.indexWhere((f) => f.path == path);
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
       final content = await UniLabFileManager.readFile(file);
-      final newFile = UniLabFile(id: const Uuid().v4(), name: name, path: path, content: content);
-      _openFiles.add(newFile);
+      _openFiles.add(UniLabFile(id: const Uuid().v4(), name: p.basename(path), path: path, content: content));
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
@@ -442,131 +452,65 @@ class AppProvider with ChangeNotifier {
 
   void closeFile(int index) {
     _openFiles.removeAt(index);
-    if (_activeFileIndex >= _openFiles.length) {
-      _activeFileIndex = _openFiles.length - 1;
-    }
+    if (_activeFileIndex >= _openFiles.length) _activeFileIndex = _openFiles.length - 1;
     notifyListeners();
   }
 
   void setActiveFile(int index) {
-    debugPrint('AppProvider: Setting active file to index $index');
     _activeFileIndex = index;
     notifyListeners();
   }
 
   void reorderOpenFile(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
+    if (oldIndex < newIndex) newIndex -= 1;
     final UniLabFile file = _openFiles.removeAt(oldIndex);
     _openFiles.insert(newIndex, file);
-
-    // Keep active file index consistent
-    if (_activeFileIndex == oldIndex) {
-      _activeFileIndex = newIndex;
-    } else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex) {
-      _activeFileIndex -= 1;
-    } else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex) {
-      _activeFileIndex += 1;
-    }
+    if (_activeFileIndex == oldIndex) _activeFileIndex = newIndex;
+    else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex) _activeFileIndex -= 1;
+    else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex) _activeFileIndex += 1;
     notifyListeners();
   }
 
   void updateFileContent(String id, String content) {
     final index = _openFiles.indexWhere((f) => f.id == id);
     if (index != -1 && _openFiles[index].content != content) {
-      _openFiles[index] = _openFiles[index].copyWith(
-        content: content,
-        isModified: true,
-      );
+      _openFiles[index] = _openFiles[index].copyWith(content: content, isModified: true);
       notifyListeners();
     }
   }
 
   void updateActiveFileContent(String content) {
-    if (activeFile != null) {
-      updateFileContent(activeFile!.id, content);
-    }
+    if (activeFile != null) updateFileContent(activeFile!.id, content);
   }
 
   Future<void> saveActiveFile() async {
-    if (_activeFileIndex < 0 || _activeFileIndex >= _openFiles.length || kIsWeb) return;
-
+    if (_activeFileIndex < 0 || kIsWeb) return;
     final fileToSave = _openFiles[_activeFileIndex];
-    final fileId = fileToSave.id;
-
-    if (_savingFileIds.contains(fileId)) {
-       debugPrint('AppProvider: Save already in progress for file: $fileId');
-       return;
-    }
-
-    // Safeguard: Only save text files to prevent corruption of binary files
-    if (fileToSave.path.isNotEmpty && !UniLabFileManager.isTextFile(fileToSave.path)) {
-      debugPrint('AppProvider: Skipping save for binary file: ${fileToSave.path}');
-      return;
-    }
-
-    String savePath = fileToSave.path;
-    _savingFileIds.add(fileId);
-
+    if (_savingFileIds.contains(fileToSave.id)) return;
+    _savingFileIds.add(fileToSave.id);
     try {
-      if (savePath.isEmpty) {
-        final directory = io.Directory(_projectRoot);
-        if (!await directory.exists()) {
-          await directory.create(recursive: true);
-        }
-        savePath = p.join(_projectRoot, fileToSave.name);
-      }
-
+      String savePath = fileToSave.path.isEmpty ? p.join(_projectRoot, fileToSave.name) : fileToSave.path;
       final file = io.File(savePath);
       await file.writeAsString(fileToSave.content);
-
-      // Also sync to backend workspace
-      try {
-        await UniLabBridge.instance.createFile(fileToSave.name, fileToSave.content);
-      } catch (e) {
-        debugPrint('Failed to sync file to backend: $e');
-      }
-
-      // Re-verify the file is still open and find its current index (it might have moved)
-      final currentIndex = _openFiles.indexWhere((f) => f.id == fileId);
-      if (currentIndex != -1) {
-        _openFiles[currentIndex] = _openFiles[currentIndex].copyWith(
-          path: savePath,
-          isModified: false,
-        );
-        notifyListeners();
-      }
-
+      await UniLabBridge.instance.createFile(fileToSave.name, fileToSave.content);
+      final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
+      if (idx != -1) _openFiles[idx] = _openFiles[idx].copyWith(path: savePath, isModified: false);
       await refreshProjectFiles();
     } catch (e) {
       _addConsoleMessage('Error saving file: $e', ConsoleMessageType.error);
     } finally {
-      _savingFileIds.remove(fileId);
+      _savingFileIds.remove(fileToSave.id);
+      notifyListeners();
     }
   }
 
   Future<void> deleteFile(dynamic entity) async {
-    if (kIsWeb) return;
     try {
       final ioEntity = entity as io.FileSystemEntity;
       if (await ioEntity.exists()) {
-        final fileName = p.basename(ioEntity.path);
         await ioEntity.delete(recursive: true);
-
-        // Also delete from backend
-        try {
-          await UniLabBridge.instance.createFile(fileName, ''); // Could add delete method later
-        } catch (e) {
-          debugPrint('Failed to sync file deletion to backend: $e');
-        }
-
-        // If it was an open file, close it
         final openIndex = _openFiles.indexWhere((f) => f.path == ioEntity.path);
-        if (openIndex != -1) {
-          closeFile(openIndex);
-        }
-
+        if (openIndex != -1) closeFile(openIndex);
         await refreshProjectFiles();
       }
     } catch (e) {
@@ -577,47 +521,23 @@ class AppProvider with ChangeNotifier {
   void updateMovedFilePaths(String oldPath, String newPath) {
     bool changed = false;
     for (int i = 0; i < _openFiles.length; i++) {
-      final file = _openFiles[i];
-      if (file.path == oldPath) {
-        _openFiles[i] = file.copyWith(path: newPath);
-        changed = true;
-      } else if (file.path.startsWith(oldPath + '/')) {
-        final remainingPath = file.path.substring(oldPath.length);
-        _openFiles[i] = file.copyWith(path: newPath + remainingPath);
+      if (_openFiles[i].path == oldPath) {
+        _openFiles[i] = _openFiles[i].copyWith(path: newPath);
         changed = true;
       }
     }
-    if (changed) {
-      notifyListeners();
-    }
+    if (changed) notifyListeners();
   }
 
   Future<void> runActiveFile() async {
-    if (activeFile == null) {
-      debugPrint('[AppProvider] runActiveFile: No active file to run');
-      return;
-    }
-
+    if (activeFile == null) return;
     _isExecuting = true;
-    debugPrint('[AppProvider] runActiveFile: Starting execution for ${activeFile!.name}');
     _addConsoleMessage('>> Running ${activeFile!.name}...', ConsoleMessageType.output, source: 'System');
-
     try {
-      debugPrint('[AppProvider] runActiveFile: Calling bridge.execute');
       final result = await UniLabBridge.instance.execute(activeFile!.content);
-      debugPrint('[AppProvider] runActiveFile: Bridge execution completed. Success: ${result.success}');
-
-      if (result.stdout.isNotEmpty) {
-        _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
-      }
-      if (result.stderr.isNotEmpty) {
-        _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
-      }
-
-      // Update workspace variables from result
+      if (result.stdout.isNotEmpty) _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
+      if (result.stderr.isNotEmpty) _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
       _updateVariablesFromResult(result);
-
-      // Parse plots from result.extra
       _updatePlotsFromResult(result);
     } catch (e) {
       _addConsoleMessage('Execution Error: $e', ConsoleMessageType.error, source: 'Error');
@@ -628,245 +548,88 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  /// Convert ExecutionResult variables to WorkspaceVariable list and push to Riverpod.
-  void _updateVariablesFromResult(ExecutionResult result) {
-    _updateVariablesFromMap(result.variables);
-  }
+  void _updateVariablesFromResult(ExecutionResult result) => _updateVariablesFromMap(result.variables);
 
-  /// Parse plots from result.extra and create PlotData objects.
   void _updatePlotsFromResult(ExecutionResult result) {
-    final wasEmpty = _generatedPlots.isEmpty;
     _generatedPlots.clear();
-
-    final b64List = result.extra['plot_data_b64'] as List<dynamic>? ?? [];
-    final plot3dList = result.extra['plot_3d_data'] as List<dynamic>? ?? [];
-
-    // Base64 PNG plots
+    final b64List = result.extra['plot_data_b64'] as List? ?? [];
     for (int i = 0; i < b64List.length; i++) {
-      final dataUri = b64List[i] as String;
-      _generatedPlots.add(PlotData(
-        title: 'Figure ${i + 1}',
-        type: 'image',
-        xData: [],
-        yData: [],
-        imageDataUri: dataUri,
-      ));
+      _generatedPlots.add(PlotData(title: 'Figure ${i + 1}', type: 'image', xData: [], yData: [], imageDataUri: b64List[i]));
     }
-
-    // 3D / structured data plots
-    for (int i = 0; i < plot3dList.length; i++) {
-      final raw = plot3dList[i] as Map<String, dynamic>;
-      final xRaw = (raw['x'] as List<dynamic>?)
-          ?.map((v) => (v as num).toDouble())
-          .toList() ?? [];
-      final yRaw = (raw['y'] as List<dynamic>?)
-          ?.map((v) => (v as num).toDouble())
-          .toList() ?? [];
-      _generatedPlots.add(PlotData(
-        title: 'Figure ${b64List.length + i + 1}',
-        type: raw['type']?.toString() ?? 'line',
-        xData: xRaw,
-        yData: yRaw,
-      ));
-    }
-
     onPlotsUpdated?.call(_generatedPlots);
-    
-    // Sync to detached window if open
     if (_plotsWindowId != null) {
       try {
-        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod(
-          'update_plots',
-          jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()),
-        );
-      } catch (e) {
-        debugPrint('Error syncing plots to window: $e');
-        // If window is gone, clear the ID
-        _plotsWindowId = null;
-      }
+        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod('update_plots', jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()));
+      } catch (e) { _plotsWindowId = null; }
     }
-
-    // Auto-switch to plots tab if any were generated
     if (_generatedPlots.isNotEmpty) {
       _selectedConsoleTab = 'plots';
-      notifyListeners();
-      
-      // Auto-open plots window if it was closed and plots were just generated
-      // (disabled on web due to multi-window limitations)
-      if (wasEmpty && _plotsWindowId == null && !kIsWeb) {
-        openDetachedPlotsWindow();
-      }
+      if (_plotsWindowId == null && !kIsWeb) openDetachedPlotsWindow();
     }
+    notifyListeners();
   }
 
   Future<void> openDetachedPlotsWindow() async {
-    if (_plotsWindowId != null) {
-      // Already open, just bring to front if possible (WindowManager doesn't easily do this for multi-window yet)
-      return;
-    }
-
-    // Skip multi-window on web
-    if (kIsWeb) {
-      debugPrint('Multi-window not available on this platform. Show plots in main window instead.');
-      return;
-    }
-
+    if (_plotsWindowId != null || kIsWeb) return;
     try {
-      final window = await dmw.WindowController.create(
-        dmw.WindowConfiguration(
-          arguments: jsonEncode({
-            'type': 'plots',
-            'plots': _generatedPlots.map((p) => p.toJson()).toList(),
-          }),
-          hiddenAtLaunch: false,
-        ),
-      );
-      
-      _plotsWindowId = window.windowId;
+      final window = await dmw.WindowController.create(dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots', 'plots': _generatedPlots.map((p) => p.toJson()).toList()}), hiddenAtLaunch: false));
+      _plotsWindowId = window.windowId.toString();
       await window.show();
-
-      // Reset ID when window is closed
-      // Note: desktop_multi_window doesn't have a direct close listener yet in this version,
-      // we might need to handle it via method channel from the sub-window later.
-    } catch (e) {
-      debugPrint('Error creating plots window: $e');
-      _plotsWindowId = null;
-    }
+    } catch (e) { _plotsWindowId = null; }
   }
 
-  void clearConsole() {
-    _consoleMessages.clear();
-    notifyListeners();
-  }
+  void clearConsole() { _consoleMessages.clear(); notifyListeners(); }
+  void clearPlots() { _generatedPlots.clear(); onPlotsUpdated?.call([]); notifyListeners(); }
 
-  void clearPlots() {
-    _generatedPlots.clear();
-    onPlotsUpdated?.call([]);
-    notifyListeners();
-  }
-
-  /// Execute a command from the console REPL.
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
-
     _isExecuting = true;
     _addConsoleMessage('>> $command', ConsoleMessageType.output, source: 'System');
-
     try {
-      // Wait for bridge to be fully initialized and session created
-      int retries = 0;
-      while (!UniLabBridge.instance.initialized || UniLabBridge.instance.sessionId == null) {
-        if (retries > 50) {  // 5 second timeout
-          throw Exception('Bridge initialization timeout');
-        }
-        await Future.delayed(Duration(milliseconds: 100));
-        retries++;
-      }
-
       final result = await UniLabBridge.instance.execute(command);
-
-      if (result.stdout.isNotEmpty) {
-        _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
-      }
-      if (result.stderr.isNotEmpty) {
-        _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
-      }
-
+      if (result.stdout.isNotEmpty) _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
+      if (result.stderr.isNotEmpty) _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
       _updateVariablesFromResult(result);
       _updatePlotsFromResult(result);
-    } catch (e) {
-      _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error');
-    } finally {
-      _isExecuting = false;
-      await fetchWorkspaceVariables();
-      notifyListeners();
-    }
+    } catch (e) { _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error'); }
+    finally { _isExecuting = false; await fetchWorkspaceVariables(); notifyListeners(); }
   }
 
-  /// Get autocomplete suggestions from the backend.
   Future<List<String>> getAutocomplete(String prefix) async {
-    try {
-      return await UniLabBridge.instance.getAutocomplete(prefix);
-    } catch (e) {
-      debugPrint('Autocomplete error: $e');
-      return [];
-    }
+    try { return await UniLabBridge.instance.getAutocomplete(prefix); }
+    catch (e) { return []; }
   }
 
-  /// Fetch workspace variables from the backend.
   Future<void> fetchWorkspaceVariables() async {
-    try {
-      final variables = await UniLabBridge.instance.getWorkspace();
-      _updateVariablesFromMap(variables);
-    } catch (e) {
-      debugPrint('fetchWorkspaceVariables error: $e');
-    }
+    try { _updateVariablesFromMap(await UniLabBridge.instance.getWorkspace()); }
+    catch (e) {}
   }
 
   Future<void> openFilePicker() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'm', 'txt', 'csv', 'json', 'md', 'py', 'pdf',
-        'png', 'jpg', 'jpeg', 'gif', 'webp',
-        'mp3', 'wav', 'm4a', 'ogg'
-      ],
-    );
-    
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['m', 'txt', 'csv', 'json', 'md', 'py', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp3', 'wav', 'm4a', 'ogg']);
     if (result != null) {
       if (kIsWeb) {
-        // Handle web file selection
         final fileData = result.files.single;
-        final name = fileData.name;
-        final content = String.fromCharCodes(fileData.bytes!);
-        
-        final newFile = UniLabFile(id: const Uuid().v4(), name: name, path: 'web/$name', content: content);
-        _openFiles.add(newFile);
+        _openFiles.add(UniLabFile(id: const Uuid().v4(), name: fileData.name, path: 'web/${fileData.name}', content: String.fromCharCodes(fileData.bytes!)));
         _activeFileIndex = _openFiles.length - 1;
-        notifyListeners();
-      } else if (result.files.single.path != null) {
-        io.File file = io.File(result.files.single.path!);
-        await openFile(file);
-      }
+      } else if (result.files.single.path != null) await openFile(io.File(result.files.single.path!));
+      notifyListeners();
     }
   }
 
   Future<void> openFolderPicker() async {
-    if (kIsWeb) return;
-    
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-    
-    if (selectedDirectory != null) {
-      setProjectRoot(selectedDirectory);
-    }
+    if (selectedDirectory != null) setProjectRoot(selectedDirectory);
   }
 
   Future<void> clearWorkspace() async {
-    try {
-      await UniLabBridge.instance.execute('clear all');
-      _workspaceVariables.clear();
-      onVariablesUpdated?.call([]);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error clearing backend workspace: $e');
-      // Fallback: just clear local state
-      _workspaceVariables.clear();
-      onVariablesUpdated?.call([]);
-      notifyListeners();
-    }
+    try { await UniLabBridge.instance.execute('clear all'); _workspaceVariables.clear(); onVariablesUpdated?.call([]); notifyListeners(); }
+    catch (e) {}
   }
 
-  void stopExecution() {
-    _isExecuting = false;
-    _addConsoleMessage('>> Execution stopped by user.', ConsoleMessageType.warning, source: 'System');
-  }
+  void stopExecution() { _isExecuting = false; UniLabBridge.instance.sendSimEvent({'type': 'STOP'}); _addConsoleMessage('>> Execution stopped by user.', ConsoleMessageType.warning, source: 'System'); }
 
-  // Editor Actions
   final StreamController<String> _editorActionController = StreamController<String>.broadcast();
   Stream<String> get editorActions => _editorActionController.stream;
-
-  void triggerEditorAction(String action) {
-    debugPrint('AppProvider: Triggering editor action: $action');
-    _editorActionController.add(action);
-  }
+  void triggerEditorAction(String action) => _editorActionController.add(action);
 }

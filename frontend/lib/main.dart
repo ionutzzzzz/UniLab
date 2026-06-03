@@ -5,7 +5,6 @@ import 'package:window_manager/window_manager.dart';
 import 'package:context_menus/context_menus.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
 import 'dart:convert';
-import 'dart:io';
 import 'theme/app_theme.dart';
 import 'providers/app_provider.dart';
 import 'providers/settings_provider.dart';
@@ -14,6 +13,7 @@ import 'providers/riverpod_providers.dart' as rp;
 import 'shell/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/plots_window_screen.dart';
+import 'screens/simulation_window_screen.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +34,59 @@ void main(List<String> args) async {
     }
   }
 
+  // ------------------------------------------------------------------
+  // SECONDARY WINDOW (SIMULATION)
+  // ------------------------------------------------------------------
+  if (windowType == 'simulation') {
+    runApp(
+      ProviderScope(
+        child: p.MultiProvider(
+          providers: [
+            p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+          ],
+          child: Consumer(
+            builder: (context, ref, child) {
+              final settingsProvider = p.Provider.of<SettingsProvider>(context);
+              final settings = settingsProvider.settings;
+              final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
+              final lightTheme = AppTheme.createTheme(
+                settings,
+                Brightness.light,
+              );
+
+              // FIX: Wrapped SimulationWindowScreen in MaterialApp for proper context
+              return MaterialApp(
+                debugShowCheckedModeBanner: false,
+                themeMode: settings.themeMode,
+                theme: lightTheme,
+                darkTheme: darkTheme,
+                home: SimulationWindowScreen(
+                  windowId: windowController.windowId.toString(),
+                  args: argument,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+
+  // ------------------------------------------------------------------
+  // SECONDARY WINDOW (PLOTS)
+  // ------------------------------------------------------------------
   if (windowType == 'plots') {
+    await windowManager.ensureInitialized();
+
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(800, 600),
+      titleBarStyle: TitleBarStyle.hidden,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+    });
+
     runApp(
       ProviderScope(
         child: p.MultiProvider(
@@ -57,8 +109,7 @@ void main(List<String> args) async {
                 theme: lightTheme,
                 darkTheme: darkTheme,
                 home: PlotsWindowScreen(
-                  windowId: windowController.windowId
-                      .toString(), // Ensure string
+                  windowId: windowController.windowId.toString(),
                   args: argument,
                 ),
               );
@@ -67,9 +118,12 @@ void main(List<String> args) async {
         ),
       ),
     );
-    return; // Exit main() early so the rest doesn't run
+    return;
   }
 
+  // ------------------------------------------------------------------
+  // MAIN WINDOW
+  // ------------------------------------------------------------------
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS ||

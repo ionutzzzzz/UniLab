@@ -126,6 +126,18 @@ class PlotData {
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
+  factory PlotData.fromJson(Map<String, dynamic> json) {
+    return PlotData(
+      id: json['id'] as String?,
+      title: json['title'] as String? ?? 'Figure',
+      type: json['type'] as String? ?? 'line',
+      xData: (json['xData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
+      yData: (json['yData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
+      imageDataUri: json['imageDataUri'] as String?,
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+    );
+  }
+
   PlotData copyWith({
     String? id,
     String? title,
