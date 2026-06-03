@@ -152,9 +152,11 @@ class _ConsoleViewState extends State<_ConsoleView> {
   }
 
   void _submitCommand() {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    if (appProvider.isExecuting) return; // Prevent submission while busy
+    
     final value = _controller.text.trim();
     if (value.isNotEmpty) {
-      final appProvider = Provider.of<AppProvider>(context, listen: false);
       appProvider.runConsoleCommand(value);
       _controller.clear();
 
@@ -245,45 +247,46 @@ class _ConsoleViewState extends State<_ConsoleView> {
       },
       child: Column(
         children: [
-          // Console History
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: EdgeInsets.all(ui.spacing.md),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final msg = messages[index];
-                final isError = msg.type == ConsoleMessageType.error;
-                final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isCommand)
-                        UiText(
-                          text: ' ',
-                          variant: UiTextVariant.consoleBody,
-                          fontWeight: FontWeight.bold,
-                          color: ui.colors.accent,
-                          fontSize: settings.fontSize,
-                        ),
-                      Expanded(
-                        child: UiText(
-                          text: msg.text,
-                          variant: UiTextVariant.consoleBody,
-                          color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
-                          fontSize: settings.fontSize,
-                        ),
+                  // Console History
+                  Expanded(
+                    child: SelectionArea(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: EdgeInsets.all(ui.spacing.md),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isError = msg.type == ConsoleMessageType.error;
+                          final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
+          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isCommand)
+                                  UiText(
+                                    text: ' ',
+                                    variant: UiTextVariant.consoleBody,
+                                    fontWeight: FontWeight.bold,
+                                    color: ui.colors.accent,
+                                    fontSize: settings.fontSize,
+                                  ),
+                                Expanded(
+                                  child: UiText(
+                                    text: msg.text,
+                                    variant: UiTextVariant.consoleBody,
+                                    color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
+                                    fontSize: settings.fontSize,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          // Input Line
+                    ),
+                  ),          // Input Line
           Container(
             padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
             decoration: BoxDecoration(
@@ -304,7 +307,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
                     controller: _controller,
                     focusNode: _focusNode,
                     autofocus: true,
-                    enabled: !appProvider.isExecuting,
+                    enabled: true, // Always enabled to maintain focus
                     maxLines: null,
                     minLines: 1,
                     style: ui.typography.consoleBody.copyWith(

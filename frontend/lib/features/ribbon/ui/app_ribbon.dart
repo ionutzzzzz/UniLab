@@ -294,7 +294,9 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Command Only',
               icon: LucideIcons.maximize,
-              onTap: () {},
+              onTap: () {
+                ref.read(shellLayoutProvider.notifier).setCommandOnlyMode();
+              },
             ),
           ],
         ),

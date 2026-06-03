@@ -98,11 +98,13 @@ class ProblemsView extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: mockProblems.length,
-              itemBuilder: (context, index) {
-                return _ProblemRow(problem: mockProblems[index], fontSize: settings.fontSize);
-              },
+            child: SelectionArea(
+              child: ListView.builder(
+                itemCount: mockProblems.length,
+                itemBuilder: (context, index) {
+                  return _ProblemRow(problem: mockProblems[index], fontSize: settings.fontSize);
+                },
+              ),
             ),
           ),
         ],

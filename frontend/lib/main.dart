@@ -76,7 +76,6 @@ void main(List<String> args) async {
   // SECONDARY WINDOW (PLOTS)
   // ------------------------------------------------------------------
   if (windowType == 'plots') {
-    // FIX: Removed all windowManager code from here to prevent the GLX crash.
     runApp(
       ProviderScope(
         child: p.MultiProvider(
@@ -118,7 +117,6 @@ void main(List<String> args) async {
       (defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.windows)) {
-    // It is perfectly safe to initialize windowManager here in the main window
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(

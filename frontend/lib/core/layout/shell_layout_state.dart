@@ -70,6 +70,15 @@ class ShellLayoutNotifier extends Notifier<ShellLayoutState> {
     state = state.copyWith(showBottomPanel: !state.showBottomPanel);
   }
 
+  void setCommandOnlyMode() {
+    state = state.copyWith(
+      showLeftPanel: false,
+      showRightPanel: false,
+      showBottomPanel: true,
+      layoutId: state.layoutId + 1,
+    );
+  }
+
   void resetLayout() {
     // Safely retrieve current ID, protecting against hot-reload nullability bugs
     int currentId = 0;

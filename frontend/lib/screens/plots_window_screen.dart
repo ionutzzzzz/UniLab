@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:window_manager/window_manager.dart';
+// import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/editor_models.dart';
@@ -66,6 +66,7 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
 
   @override
   void dispose() {
+    _channel.setMethodCallHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

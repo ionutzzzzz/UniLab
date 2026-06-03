@@ -61,7 +61,7 @@ class TitleStrip extends StatelessWidget {
               Container(width: 1, height: 10, color: ui.colors.divider),
               const SizedBox(width: 8),
               UiText(
-                text: 'v1.2.2',
+                text: 'v1.3.4',
                 variant: UiTextVariant.label,
                 color: ui.colors.accent,
                 fontWeight: FontWeight.w800,
