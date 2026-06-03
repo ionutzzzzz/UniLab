@@ -427,7 +427,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             border: Border(
               bottom: BorderSide(
                 color: Colors.black.withValues(alpha: 0.4),
-                width: 1.0,
+                width: ui.spacing.strokeHair,
               ),
             ),
           ),

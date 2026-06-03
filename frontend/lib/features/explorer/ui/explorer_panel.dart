@@ -104,6 +104,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               border: Border(
                 bottom: BorderSide(
                   color: ui.colors.divider.withValues(alpha: 0.5),
+                  width: ui.spacing.strokeHair,
                 ),
               ),
             ),

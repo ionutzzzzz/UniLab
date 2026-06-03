@@ -189,7 +189,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     Widget centerContent = MultiSplitViewTheme(
       key: const ValueKey('center_vertical_theme'),
       data: MultiSplitViewThemeData(
-        dividerThickness: 8,
+        dividerThickness: 2,
         dividerPainter: DividerPainters.background(
           color: ui.colors.divider,
           highlightedColor: ui.colors.accent,
@@ -210,7 +210,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     return MultiSplitViewTheme(
       key: const ValueKey('main_horizontal_theme'),
       data: MultiSplitViewThemeData(
-        dividerThickness: 8,
+        dividerThickness: 2,
         dividerPainter: DividerPainters.background(
           color: ui.colors.divider,
           highlightedColor: ui.colors.accent,

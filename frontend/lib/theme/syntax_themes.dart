@@ -248,5 +248,31 @@ class SyntaxHighlightTheme {
         Color(0xFF63cdcf), // Type
       ],
     ),
+    SyntaxHighlightTheme(
+      name: 'GitHub Light',
+      backgroundColor: Color(0xFFFFFFFF),
+      foregroundColor: Color(0xFF24292E),
+      colors: [
+        Color(0xFFD73A49), // Keyword
+        Color(0xFF032F62), // String
+        Color(0xFF005CC5), // Number
+        Color(0xFF6F42C1), // Function
+        Color(0xFFE36209), // Variable
+        Color(0xFF005CC5), // Type
+      ],
+    ),
+    SyntaxHighlightTheme(
+      name: 'Solarized Light',
+      backgroundColor: Color(0xFFFDF6E3),
+      foregroundColor: Color(0xFF657B83),
+      colors: [
+        Color(0xFF859900), // Keyword
+        Color(0xFF2AA198), // String
+        Color(0xFFD33682), // Number
+        Color(0xFF268BD2), // Function
+        Color(0xFFB58900), // Variable
+        Color(0xFFCB4B16), // Type
+      ],
+    ),
   ];
 }

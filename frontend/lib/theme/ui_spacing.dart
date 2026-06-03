@@ -43,7 +43,7 @@ class UiSpacing {
         radiusSm: BorderRadius.all(Radius.circular(6.0 * scale)),
         radiusMd: BorderRadius.all(Radius.circular(8.0 * scale)),
         radiusLg: BorderRadius.all(Radius.circular(10.0 * scale)),
-        strokeHair: 1.0,
+        strokeHair: 0.5,
         focusRing: 2.0 * scale,
       );
 }

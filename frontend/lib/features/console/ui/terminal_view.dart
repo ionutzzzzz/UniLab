@@ -55,7 +55,7 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
           height: 34,
           decoration: BoxDecoration(
             color: ui.colors.panelHeader,
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5), width: ui.spacing.strokeHair)),
           ),
           child: Row(
             children: [

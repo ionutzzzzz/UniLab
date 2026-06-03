@@ -35,8 +35,31 @@ class _EditorSurfaceState extends State<EditorSurface> {
       orElse: () => SyntaxHighlightTheme.all.first,
     );
     final colors = highlightTheme.colors;
-    final editorBg = highlightTheme.backgroundColor;
-    final editorFg = highlightTheme.foregroundColor;
+    
+    final isInterfaceLight = Theme.of(context).brightness == Brightness.light;
+    final editorBg = isInterfaceLight ? Colors.white : highlightTheme.backgroundColor;
+    
+    Color editorFg = highlightTheme.foregroundColor;
+    List<Color> syntaxColors = List.from(highlightTheme.colors);
+
+    if (isInterfaceLight) {
+      // Force default text to be dark in light mode if it's too light
+      if (editorFg.computeLuminance() > 0.6) {
+        editorFg = const Color(0xFF24292E); // Dark gray/black
+      }
+      
+      // Darken syntax colors if they are too light for a white background
+      for (int i = 0; i < syntaxColors.length; i++) {
+        if (syntaxColors[i].computeLuminance() > 0.7) {
+          final hsl = HSLColor.fromColor(syntaxColors[i]);
+          syntaxColors[i] = hsl.withLightness((hsl.lightness - 0.3).clamp(0.0, 0.7)).toColor();
+        } else if (syntaxColors[i].computeLuminance() > 0.4 && syntaxColors[i].computeLuminance() < 0.7) {
+          // Slightly darken mid-range colors for better contrast
+          final hsl = HSLColor.fromColor(syntaxColors[i]);
+          syntaxColors[i] = hsl.withLightness((hsl.lightness - 0.15).clamp(0.0, 0.7)).toColor();
+        }
+      }
+    }
 
     // Custom Syntax Theme
     final Map<String, TextStyle> customSyntaxTheme = {
@@ -46,15 +69,15 @@ class _EditorSurfaceState extends State<EditorSurface> {
         fontSize: settings.fontSize,
         fontFamily: settings.fontFamily,
       ),
-      'keyword': TextStyle(color: colors[0], fontWeight: FontWeight.bold),
-      'string': TextStyle(color: colors[1]),
-      'number': TextStyle(color: colors[2]),
+      'keyword': TextStyle(color: syntaxColors[0], fontWeight: FontWeight.bold),
+      'string': TextStyle(color: syntaxColors[1]),
+      'number': TextStyle(color: syntaxColors[2]),
       'comment': TextStyle(color: editorFg.withValues(alpha: 0.5)),
-      'function': TextStyle(color: colors[3]),
+      'function': TextStyle(color: syntaxColors[3]),
       'params': TextStyle(color: editorFg.withValues(alpha: 0.8)),
-      'builtin': TextStyle(color: colors[5].withValues(alpha: 0.9)),
-      'literal': TextStyle(color: colors[4]),
-      'title': TextStyle(color: colors[5], fontWeight: FontWeight.bold),
+      'builtin': TextStyle(color: syntaxColors[5].withValues(alpha: 0.9)),
+      'literal': TextStyle(color: syntaxColors[4]),
+      'title': TextStyle(color: syntaxColors[5], fontWeight: FontWeight.bold),
       'attr': TextStyle(color: editorFg.withValues(alpha: 0.8)),
       'variable': TextStyle(color: editorFg),
       'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
