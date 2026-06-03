@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as p;
 import 'package:xterm/xterm.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/ui_theme.dart';
 import '../state/terminal_providers.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
+import '../../../providers/settings_provider.dart';
 
 class AppTerminalView extends ConsumerStatefulWidget {
   const AppTerminalView({super.key});
@@ -31,6 +35,7 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
     final ui = UiTheme.of(context);
     final sessions = ref.watch(terminalSessionsProvider);
     final activeId = ref.watch(activeTerminalSessionIdProvider);
+    final settings = p.Provider.of<SettingsProvider>(context).settings;
 
     if (sessions.isEmpty) {
       return Center(
@@ -136,39 +141,58 @@ class _AppTerminalViewState extends ConsumerState<AppTerminalView> {
         
         // Terminal Content
         Expanded(
-          child: Container(
-            color: ui.colors.canvas,
-            padding: const EdgeInsets.only(left: 8),
-            child: TerminalViewWidget(
-              activeSession.terminal,
-              textStyle: TerminalStyle(
-                fontFamily: ui.typography.codeBody.fontFamily!,
-                fontSize: 13, // Slightly larger for readability
-              ),
-              theme: TerminalTheme(
-                cursor: ui.colors.accent,
-                selection: ui.colors.selected,
-                foreground: ui.colors.textPrimary,
-                background: ui.colors.canvas,
-                black: const Color(0XFF1E2127),
-                red: ui.colors.danger,
-                green: ui.colors.success,
-                yellow: ui.colors.yellow,
-                blue: ui.colors.accent,
-                magenta: const Color(0XFFC4B5FD),
-                cyan: const Color(0XFF29B8DB),
-                white: const Color(0XFFE5E7EB),
-                brightBlack: const Color(0XFF6B7280),
-                brightRed: ui.colors.danger,
-                brightGreen: ui.colors.success,
-                brightYellow: ui.colors.yellow,
-                brightBlue: const Color(0XFF6BB1FF),
-                brightMagenta: const Color(0XFFD670D6),
-                brightCyan: const Color(0XFF29B8DB),
-                brightWhite: const Color(0XFFFFFFFF),
-                searchHitBackground: const Color(0XFFFFFF2B),
-                searchHitBackgroundCurrent: const Color(0XFF31FF26),
-                searchHitForeground: const Color(0XFF000000),
+          child: Listener(
+            onPointerSignal: (pointerSignal) {
+              if (pointerSignal is PointerScrollEvent) {
+                final isCtrlPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                                      HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
+                                      HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                                      HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+                if (isCtrlPressed) {
+                  final provider = p.Provider.of<SettingsProvider>(context, listen: false);
+                  final currentSize = provider.settings.fontSize;
+                  // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
+                  final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
+                  if (newSize != currentSize) {
+                    provider.updateSettings(provider.settings.copyWith(fontSize: newSize));
+                  }
+                }
+              }
+            },
+            child: Container(
+              color: ui.colors.canvas,
+              padding: const EdgeInsets.only(left: 8),
+              child: TerminalViewWidget(
+                activeSession.terminal,
+                textStyle: TerminalStyle(
+                  fontFamily: settings.fontFamily,
+                  fontSize: settings.fontSize,
+                ),
+                theme: TerminalTheme(
+                  cursor: ui.colors.accent,
+                  selection: ui.colors.selected,
+                  foreground: ui.colors.textPrimary,
+                  background: ui.colors.canvas,
+                  black: const Color(0XFF1E2127),
+                  red: ui.colors.danger,
+                  green: ui.colors.success,
+                  yellow: ui.colors.yellow,
+                  blue: ui.colors.accent,
+                  magenta: const Color(0XFFC4B5FD),
+                  cyan: const Color(0XFF29B8DB),
+                  white: const Color(0XFFE5E7EB),
+                  brightBlack: const Color(0XFF6B7280),
+                  brightRed: ui.colors.danger,
+                  brightGreen: ui.colors.success,
+                  brightYellow: ui.colors.yellow,
+                  brightBlue: const Color(0XFF6BB1FF),
+                  brightMagenta: const Color(0XFFD670D6),
+                  brightCyan: const Color(0XFF29B8DB),
+                  brightWhite: const Color(0XFFFFFFFF),
+                  searchHitBackground: const Color(0XFFFFFF2B),
+                  searchHitBackgroundCurrent: const Color(0XFF31FF26),
+                  searchHitForeground: const Color(0XFF000000),
+                ),
               ),
             ),
           ),

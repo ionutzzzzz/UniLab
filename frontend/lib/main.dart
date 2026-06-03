@@ -54,7 +54,6 @@ void main(List<String> args) async {
                 Brightness.light,
               );
 
-              // FIX: Wrapped SimulationWindowScreen in MaterialApp for proper context
               return MaterialApp(
                 debugShowCheckedModeBanner: false,
                 themeMode: settings.themeMode,
@@ -77,16 +76,7 @@ void main(List<String> args) async {
   // SECONDARY WINDOW (PLOTS)
   // ------------------------------------------------------------------
   if (windowType == 'plots') {
-    await windowManager.ensureInitialized();
-
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(800, 600),
-      titleBarStyle: TitleBarStyle.hidden,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-    });
-
+    // FIX: Removed all windowManager code from here to prevent the GLX crash.
     runApp(
       ProviderScope(
         child: p.MultiProvider(
@@ -128,6 +118,7 @@ void main(List<String> args) async {
       (defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.windows)) {
+    // It is perfectly safe to initialize windowManager here in the main window
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
