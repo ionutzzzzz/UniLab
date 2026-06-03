@@ -294,7 +294,9 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             RibbonButton(
               label: 'Command Only',
               icon: LucideIcons.maximize,
-              onTap: () {},
+              onTap: () {
+                ref.read(shellLayoutProvider.notifier).setCommandOnlyMode();
+              },
             ),
           ],
         ),
@@ -427,7 +429,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
             border: Border(
               bottom: BorderSide(
                 color: Colors.black.withValues(alpha: 0.4),
-                width: 1.0,
+                width: ui.spacing.strokeHair,
               ),
             ),
           ),

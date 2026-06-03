@@ -90,7 +90,7 @@ class _RibbonTabState extends State<_RibbonTab> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
             border: Border.all(
               color: (widget.isActive || _isHovered) ? ui.colors.divider : Colors.transparent,
-              width: 1.0,
+              width: ui.spacing.strokeHair,
             ),
           ),
           child: UiText(

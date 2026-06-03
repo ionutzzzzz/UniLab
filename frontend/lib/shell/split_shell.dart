@@ -69,12 +69,16 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     return areas;
   }
 
-  List<Area> _buildVerticalAreas(bool showBottom) {
-    List<Area> areas = [
-      Area(data: 'main'),
-    ];
-    if (showBottom) {
-      areas.add(Area(data: 'bottom', size: 220, min: 100));
+  List<Area> _buildVerticalAreas(bool showBottom, bool showLeft, bool showRight) {
+    List<Area> areas = [];
+    if (showLeft || showRight) {
+       areas.add(Area(data: 'main'));
+       if (showBottom) {
+          areas.add(Area(data: 'bottom', size: 220, min: 100));
+       }
+    } else {
+       // Command Only mode: show only bottom panel
+       areas.add(Area(data: 'bottom'));
     }
     return areas;
   }
@@ -96,7 +100,6 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   }
 
   void _resetCursor() {
-    // Attempt to reset the stuck resize cursor when the divider is unmounted mid-drag
     SystemChannels.mouseCursor.invokeMethod<void>(
       'activateSystemCursor',
       <String, dynamic>{
@@ -179,17 +182,16 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     final ui = UiTheme.of(context);
     final layoutState = ref.watch(shellLayoutProvider);
 
-    // Update vertical areas based on bottom panel visibility
-    _verticalController?.areas = _buildVerticalAreas(layoutState.showBottomPanel);
+    _verticalController?.areas = _buildVerticalAreas(
+      layoutState.showBottomPanel, 
+      layoutState.showLeftPanel, 
+      layoutState.showRightPanel
+    );
 
-    // Update vertical areas based on bottom panel visibility
-    _verticalController?.areas = _buildVerticalAreas(layoutState.showBottomPanel);
-
-    // Build the center vertical stack (Editor + Console)
     Widget centerContent = MultiSplitViewTheme(
       key: const ValueKey('center_vertical_theme'),
       data: MultiSplitViewThemeData(
-        dividerThickness: 8,
+        dividerThickness: 2,
         dividerPainter: DividerPainters.background(
           color: ui.colors.divider,
           highlightedColor: ui.colors.accent,
@@ -210,7 +212,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     return MultiSplitViewTheme(
       key: const ValueKey('main_horizontal_theme'),
       data: MultiSplitViewThemeData(
-        dividerThickness: 8,
+        dividerThickness: 2,
         dividerPainter: DividerPainters.background(
           color: ui.colors.divider,
           highlightedColor: ui.colors.accent,

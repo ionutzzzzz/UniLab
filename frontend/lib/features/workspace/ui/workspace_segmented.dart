@@ -28,7 +28,7 @@ class WorkspaceSegmented extends StatelessWidget {
       decoration: BoxDecoration(
         color: ui.colors.panelHeader.withValues(alpha: 0.5),
         border: Border(
-          bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3)),
+          bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3), width: ui.spacing.strokeHair),
         ),
       ),
       child: Row(

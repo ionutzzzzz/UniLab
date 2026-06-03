@@ -86,7 +86,7 @@ class _AppStatusBarState extends State<AppStatusBar> {
         border: Border(
           top: BorderSide(
             color: Colors.black.withValues(alpha: 0.4),
-            width: 1.0,
+            width: ui.spacing.strokeHair,
           ),
         ),
         boxShadow: [

@@ -61,7 +61,12 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                 padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
                 decoration: BoxDecoration(
                   color: ui.colors.panelHeader,
-                  border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: ui.colors.divider.withValues(alpha: 0.5),
+                      width: ui.spacing.strokeHair,
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -80,39 +85,40 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                         ),
                       ),
                     ),
-                    Flexible(
-                      flex: 2,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        reverse: true, // Keep the collapse button visible
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            UiIconButton(
-                              icon: LucideIcons.refreshCcw, 
-                              tooltip: 'Refresh Workspace', 
-                              size: 24, 
-                              iconSize: 14, 
-                              onPressed: () async => await appProvider.fetchWorkspaceVariables(),
-                            ),
-                            const SizedBox(width: 4),
-                            UiIconButton(
-                              icon: LucideIcons.trash2, 
-                              tooltip: 'Clear Workspace', 
-                              size: 24, 
-                              iconSize: 14, 
-                              onPressed: () async => await appProvider.clearWorkspace(),
-                            ),
-                            const SizedBox(width: 4),
-                            UiIconButton(
-                              icon: LucideIcons.chevronRight, 
-                              tooltip: 'Collapse', 
-                              size: 24, 
-                              iconSize: 14, 
-                              onPressed: () => ref.read(shellLayoutProvider.notifier).toggleRightPanel(),
-                            ),
-                          ],
-                        ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          UiIconButton(
+                            icon: LucideIcons.refreshCcw,
+                            tooltip: 'Refresh Workspace',
+                            size: 24,
+                            iconSize: 14,
+                            onPressed: () async =>
+                                await appProvider.fetchWorkspaceVariables(),
+                          ),
+                          const SizedBox(width: 4),
+                          UiIconButton(
+                            icon: LucideIcons.trash2,
+                            tooltip: 'Clear Workspace',
+                            size: 24,
+                            iconSize: 14,
+                            onPressed: () async =>
+                                await appProvider.clearWorkspace(),
+                          ),
+                          const SizedBox(width: 4),
+                          UiIconButton(
+                            icon: LucideIcons.chevronRight,
+                            tooltip: 'Collapse',
+                            size: 24,
+                            iconSize: 14,
+                            onPressed: () => ref
+                                .read(shellLayoutProvider.notifier)
+                                .toggleRightPanel(),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -123,7 +129,8 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                 segments: _segments,
                 activeSegment: _activeSegment,
                 showLabels: !isCompact,
-                onSegmentChanged: (segment) => setState(() => _activeSegment = segment),
+                onSegmentChanged: (segment) =>
+                    setState(() => _activeSegment = segment),
               ),
               // Content
               Expanded(
@@ -133,13 +140,13 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                       return const SizedBox.shrink();
                     }
                     return activeView;
-                  }
+                  },
                 ),
               ),
             ],
           ),
         );
-      }
+      },
     );
   }
 }

@@ -430,7 +430,7 @@ dependencies:
   google_fonts: ^6.2.1
   file_picker: ^8.1.7
   path_provider: ^2.1.5
-  http: ^1.2.2
+  http: ^1.3.4
   flutter_highlight: ^0.7.0
   shared_preferences: ^2.5.2
   path: ^1.9.1

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
-import 'package:window_manager/window_manager.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+// import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/editor_models.dart';
@@ -28,7 +28,7 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
     with WidgetsBindingObserver {
   List<PlotData> _plots = [];
   String? _selectedPlotId;
-  late final dmw.WindowMethodChannel _channel;
+  late final WindowMethodChannel _channel;
 
   @override
   void initState() {
@@ -44,7 +44,7 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
     }
 
     // Set up method channel for communication
-    _channel = dmw.WindowMethodChannel('plots_window_channel');
+    _channel = WindowMethodChannel('plots_window_channel');
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'update_plots') {
         final List<dynamic> plotsData = jsonDecode(call.arguments);
@@ -66,6 +66,7 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
 
   @override
   void dispose() {
+    _channel.setMethodCallHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -78,12 +79,11 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
 
   Future<void> _closeWindow() async {
     try {
-      await _channel.invokeMethod('plots_window_closing', {});
+      await _channel.invokeMethod('window_closing', {});
 
-      // Since .close() doesn't exist, we visually remove it from the screen
-      await dmw.WindowController.fromWindowId(widget.windowId).hide();
+      await WindowController.fromWindowId(widget.windowId).hide();
     } catch (e) {
-      debugPrint('Error hiding plots window: $e');
+      debugPrint('Error closing window: $e');
     }
   }
 

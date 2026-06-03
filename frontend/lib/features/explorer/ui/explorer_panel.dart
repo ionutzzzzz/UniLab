@@ -33,7 +33,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   // Flat list to determine order for shift-click
   final List<String> _flatVisiblePaths = [];
 
@@ -47,7 +47,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     });
   }
 
-  void _handleSelect(String path, {bool isCtrlPressed = false, bool isShiftPressed = false}) {
+  void _handleSelect(
+    String path, {
+    bool isCtrlPressed = false,
+    bool isShiftPressed = false,
+  }) {
     setState(() {
       if (isCtrlPressed) {
         if (_selectedPaths.contains(path)) {
@@ -59,11 +63,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       } else if (isShiftPressed && _lastSelectedPath != null) {
         final currentIndex = _flatVisiblePaths.indexOf(path);
         final lastIndex = _flatVisiblePaths.indexOf(_lastSelectedPath!);
-        
+
         if (currentIndex != -1 && lastIndex != -1) {
           final start = currentIndex < lastIndex ? currentIndex : lastIndex;
           final end = currentIndex > lastIndex ? currentIndex : lastIndex;
-          
+
           _selectedPaths.clear();
           for (int i = start; i <= end; i++) {
             _selectedPaths.add(_flatVisiblePaths[i]);
@@ -97,7 +101,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+              border: Border(
+                bottom: BorderSide(
+                  color: ui.colors.divider.withValues(alpha: 0.5),
+                  width: ui.spacing.strokeHair,
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -114,92 +123,113 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                     ),
                   ),
                 ),
-                Flexible(
-                  flex: 2,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    reverse: true,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _HeaderAction(
-                          icon: _showSearch ? LucideIcons.x : LucideIcons.search,
-                          onPressed: () {
-                            setState(() {
-                              _showSearch = !_showSearch;
-                              if (!_showSearch) _searchController.clear();
-                            });
-                          },
-                          tooltip: 'Search',
-                          ui: ui,
-                        ),
-                        _HeaderAction(
-                          icon: LucideIcons.refreshCw,
-                          onPressed: () => appProvider.refreshProjectFiles(),
-                          tooltip: 'Refresh',
-                          ui: ui,
-                        ),
-                        _HeaderAction(
-                          icon: LucideIcons.filePlus,
-                          onPressed: () => appProvider.addNewFile(),
-                          tooltip: 'New File',
-                          ui: ui,
-                        ),
-                        _HeaderAction(
-                          icon: LucideIcons.folderPlus,
-                          onPressed: () {
-                            if (kIsWeb) return;
-                            showDialog(
-                              context: context,
-                              builder: (context) {
-                                final controller = TextEditingController();
-                                return AlertDialog(
-                                  backgroundColor: ui.colors.panel,
-                                  title: Text('New Folder', style: TextStyle(color: ui.colors.textPrimary)),
-                                  content: TextField(
-                                    controller: controller,
-                                    style: TextStyle(color: ui.colors.textPrimary),
-                                    decoration: InputDecoration(
-                                      hintText: 'Folder Name',
-                                      hintStyle: TextStyle(color: ui.colors.textMuted),
-                                    ),
-                                    autofocus: true,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _HeaderAction(
+                        icon: _showSearch ? LucideIcons.x : LucideIcons.search,
+                        onPressed: () {
+                          setState(() {
+                            _showSearch = !_showSearch;
+                            if (!_showSearch) _searchController.clear();
+                          });
+                        },
+                        tooltip: 'Search',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.refreshCw,
+                        onPressed: () => appProvider.refreshProjectFiles(),
+                        tooltip: 'Refresh',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.filePlus,
+                        onPressed: () => appProvider.addNewFile(),
+                        tooltip: 'New File',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.folderPlus,
+                        onPressed: () {
+                          if (kIsWeb) return;
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              final controller = TextEditingController();
+                              return AlertDialog(
+                                backgroundColor: ui.colors.panel,
+                                title: Text(
+                                  'New Folder',
+                                  style: TextStyle(
+                                    color: ui.colors.textPrimary,
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
+                                ),
+                                content: TextField(
+                                  controller: controller,
+                                  style: TextStyle(
+                                    color: ui.colors.textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Folder Name',
+                                    hintStyle: TextStyle(
+                                      color: ui.colors.textMuted,
                                     ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        final name = controller.text;
-                                        if (name.isNotEmpty) {
-                                          final path = path_utils.join(appProvider.projectRoot, name);
-                                          await io.Directory(path).create(recursive: true);
-                                          appProvider.refreshProjectFiles();
-                                        }
-                                        if (context.mounted) {
-                                          Navigator.pop(context);
-                                        }
-                                      },
-                                      child: Text('Create', style: TextStyle(color: ui.colors.accent)),
+                                  ),
+                                  autofocus: true,
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        color: ui.colors.textMuted,
+                                      ),
                                     ),
-                                  ],
-                                );
-                              },
-                            );
-                          },
-                          tooltip: 'New Folder',
-                          ui: ui,
-                        ),
-                        _HeaderAction(
-                          icon: LucideIcons.chevronLeft,
-                          onPressed: () => ref.read(shellLayoutProvider.notifier).toggleLeftPanel(),
-                          tooltip: 'Collapse',
-                          ui: ui,
-                        ),
-                      ],
-                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final name = controller.text;
+                                      if (name.isNotEmpty) {
+                                        final path = path_utils.join(
+                                          appProvider.projectRoot,
+                                          name,
+                                        );
+                                        await io.Directory(
+                                          path,
+                                        ).create(recursive: true);
+                                        appProvider.refreshProjectFiles();
+                                      }
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    child: Text(
+                                      'Create',
+                                      style: TextStyle(color: ui.colors.accent),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                        tooltip: 'New Folder',
+                        ui: ui,
+                      ),
+                      _HeaderAction(
+                        icon: LucideIcons.chevronLeft,
+                        onPressed: () => ref
+                            .read(shellLayoutProvider.notifier)
+                            .toggleLeftPanel(),
+                        tooltip: 'Collapse',
+                        ui: ui,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -219,10 +249,15 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                     if (appProvider.projectFiles.isEmpty)
                       _buildEmptyState(ui)
                     else
-                      ..._buildProjectTree(appProvider.projectFiles, 0, ui, appProvider),
+                      ..._buildProjectTree(
+                        appProvider.projectFiles,
+                        0,
+                        ui,
+                        appProvider,
+                      ),
                   ],
                 );
-              }
+              },
             ),
           ),
         ],
@@ -235,7 +270,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       final isDir = entity is io.Directory;
       final path = entity.path;
       _flatVisiblePaths.add(path);
-      
+
       if (isDir && _expandedPaths.contains(path)) {
         try {
           final children = entity.listSync();
@@ -243,7 +278,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           children.sort((a, b) {
             if (a is io.Directory && b is! io.Directory) return -1;
             if (a is! io.Directory && b is io.Directory) return 1;
-            return path_utils.basename(a.path).compareTo(path_utils.basename(b.path));
+            return path_utils
+                .basename(a.path)
+                .compareTo(path_utils.basename(b.path));
           });
           _buildFlatPaths(children);
         } catch (e) {
@@ -253,54 +290,79 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     }
   }
 
-  List<Widget> _buildProjectTree(List<dynamic> entities, int depth, UiTheme ui, AppProvider appProvider) {
+  List<Widget> _buildProjectTree(
+    List<dynamic> entities,
+    int depth,
+    UiTheme ui,
+    AppProvider appProvider,
+  ) {
     List<Widget> items = [];
-    
+
     for (var entity in entities) {
       final isDir = entity is io.Directory;
       final path = entity.path;
       final name = path_utils.basename(path);
       final isExpanded = _expandedPaths.contains(path);
 
-      items.add(_FileTreeRow(
-        key: ValueKey(path),
-        name: name,
-        path: path,
-        isDir: isDir,
-        depth: depth,
-        isExpanded: isExpanded,
-        isSelected: _selectedPaths.contains(path),
-        onSelect: ({bool isCtrlPressed = false, bool isShiftPressed = false}) => 
-            _handleSelect(path, isCtrlPressed: isCtrlPressed, isShiftPressed: isShiftPressed),
-        onToggle: () {
-          if (!HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) && 
-              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) &&
-              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) && 
-              !HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
-            _handleSelect(path);
-          }
-          if (isDir) {
-            _toggleExpand(path);
-          } else {
-            appProvider.openFile(entity);
-          }
-        },
-        onMove: (sourcePath, targetPath) async {
-          if (sourcePath == targetPath) return;
-          final sourceEntity = io.FileSystemEntity.isDirectorySync(sourcePath) ? io.Directory(sourcePath) : io.File(sourcePath);
-          final newPath = path_utils.join(targetPath, path_utils.basename(sourcePath));
-          
-          if (sourcePath != newPath) {
-            try {
-              await sourceEntity.rename(newPath);
-              appProvider.refreshProjectFiles();
-              appProvider.updateMovedFilePaths(sourcePath, newPath);
-            } catch (e) {
-              // Handle error if necessary
+      items.add(
+        _FileTreeRow(
+          key: ValueKey(path),
+          name: name,
+          path: path,
+          isDir: isDir,
+          depth: depth,
+          isExpanded: isExpanded,
+          isSelected: _selectedPaths.contains(path),
+          onSelect:
+              ({bool isCtrlPressed = false, bool isShiftPressed = false}) =>
+                  _handleSelect(
+                    path,
+                    isCtrlPressed: isCtrlPressed,
+                    isShiftPressed: isShiftPressed,
+                  ),
+          onToggle: () {
+            if (!HardwareKeyboard.instance.logicalKeysPressed.contains(
+                  LogicalKeyboardKey.controlLeft,
+                ) &&
+                !HardwareKeyboard.instance.logicalKeysPressed.contains(
+                  LogicalKeyboardKey.controlRight,
+                ) &&
+                !HardwareKeyboard.instance.logicalKeysPressed.contains(
+                  LogicalKeyboardKey.shiftLeft,
+                ) &&
+                !HardwareKeyboard.instance.logicalKeysPressed.contains(
+                  LogicalKeyboardKey.shiftRight,
+                )) {
+              _handleSelect(path);
             }
-          }
-        },
-      ));
+            if (isDir) {
+              _toggleExpand(path);
+            } else {
+              appProvider.openFile(entity);
+            }
+          },
+          onMove: (sourcePath, targetPath) async {
+            if (sourcePath == targetPath) return;
+            final sourceEntity = io.FileSystemEntity.isDirectorySync(sourcePath)
+                ? io.Directory(sourcePath)
+                : io.File(sourcePath);
+            final newPath = path_utils.join(
+              targetPath,
+              path_utils.basename(sourcePath),
+            );
+
+            if (sourcePath != newPath) {
+              try {
+                await sourceEntity.rename(newPath);
+                appProvider.refreshProjectFiles();
+                appProvider.updateMovedFilePaths(sourcePath, newPath);
+              } catch (e) {
+                // Handle error if necessary
+              }
+            }
+          },
+        ),
+      );
 
       if (isDir && isExpanded) {
         try {
@@ -311,16 +373,24 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         }
       }
     }
-    
+
     return items;
   }
 
   Widget _buildSectionHeader(UiTheme ui, String title) {
     return Padding(
-      padding: EdgeInsets.only(left: ui.spacing.md, top: ui.spacing.sm, bottom: ui.spacing.xxs),
+      padding: EdgeInsets.only(
+        left: ui.spacing.md,
+        top: ui.spacing.sm,
+        bottom: ui.spacing.xxs,
+      ),
       child: Row(
         children: [
-          Icon(LucideIcons.files, size: 10, color: ui.colors.textMuted.withValues(alpha: 0.4)),
+          Icon(
+            LucideIcons.files,
+            size: 10,
+            color: ui.colors.textMuted.withValues(alpha: 0.4),
+          ),
           const SizedBox(width: 8),
           UiText(
             text: title,
@@ -331,7 +401,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             color: ui.colors.textMuted.withValues(alpha: 0.6),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Divider(color: ui.colors.divider.withValues(alpha: 0.2), height: 1)),
+          Expanded(
+            child: Divider(
+              color: ui.colors.divider.withValues(alpha: 0.2),
+              height: 1,
+            ),
+          ),
         ],
       ),
     );
@@ -344,7 +419,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.folderOpen, size: 40, color: ui.colors.textDisabled),
+            Icon(
+              LucideIcons.folderOpen,
+              size: 40,
+              color: ui.colors.textDisabled,
+            ),
             const SizedBox(height: 16),
             UiText(
               text: 'Empty folder',
@@ -426,18 +505,23 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           ContextMenuButtonConfig(
             widget.isDir ? 'Expand/Collapse' : 'Open',
             onPressed: widget.onToggle,
-            icon: Icon(widget.isDir ? LucideIcons.chevronRight : LucideIcons.fileText, size: 16),
+            icon: Icon(
+              widget.isDir ? LucideIcons.chevronRight : LucideIcons.fileText,
+              size: 16,
+            ),
           ),
           if (widget.isDir)
             ContextMenuButtonConfig(
               'New File',
-              onPressed: () => _createNewEntity(context, appProvider, isFile: true),
+              onPressed: () =>
+                  _createNewEntity(context, appProvider, isFile: true),
               icon: const Icon(LucideIcons.filePlus, size: 16),
             ),
           if (widget.isDir)
             ContextMenuButtonConfig(
               'New Folder',
-              onPressed: () => _createNewEntity(context, appProvider, isFile: false),
+              onPressed: () =>
+                  _createNewEntity(context, appProvider, isFile: false),
               icon: const Icon(LucideIcons.folderPlus, size: 16),
             ),
           ContextMenuButtonConfig(
@@ -464,7 +548,9 @@ class _FileTreeRowState extends State<_FileTreeRow> {
             return true;
           },
           onAcceptWithDetails: (details) {
-            final targetPath = widget.isDir ? widget.path : path_utils.dirname(widget.path);
+            final targetPath = widget.isDir
+                ? widget.path
+                : path_utils.dirname(widget.path);
             widget.onMove(details.data, targetPath);
           },
           builder: (context, candidateData, rejectedData) {
@@ -478,16 +564,23 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                 borderRadius: ui.spacing.radiusMd,
                 color: Colors.transparent,
                 child: UiGlassContainer(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   opacity: 0.9,
                   blur: 10,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        widget.isDir ? LucideIcons.folder : _getFileIcon(widget.name),
+                        widget.isDir
+                            ? LucideIcons.folder
+                            : _getFileIcon(widget.name),
                         size: 16,
-                        color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
+                        color: widget.isDir
+                            ? const Color(0xFFB3CDE3)
+                            : _getIconColor(widget.name, ui),
                       ),
                       const SizedBox(width: 10),
                       UiText(
@@ -506,25 +599,53 @@ class _FileTreeRowState extends State<_FileTreeRow> {
               ),
               child: Listener(
                 onPointerDown: (event) {
-                  final isCtrl = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
-                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
-                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
-                  final isShift = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-                                  HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight);
-                  
-                  if (event.buttons == 2) { // Right click
+                  final isCtrl =
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.controlLeft,
+                      ) ||
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.controlRight,
+                      ) ||
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.metaLeft,
+                      ) ||
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.metaRight,
+                      );
+                  final isShift =
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.shiftLeft,
+                      ) ||
+                      HardwareKeyboard.instance.logicalKeysPressed.contains(
+                        LogicalKeyboardKey.shiftRight,
+                      );
+
+                  if (event.buttons == 2) {
+                    // Right click
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
+                      if (mounted)
+                        widget.onSelect(
+                          isCtrlPressed: isCtrl,
+                          isShiftPressed: isShift,
+                        );
                     });
-                  } else if (event.buttons == 1) { // Left click
-                     widget.onSelect(isCtrlPressed: isCtrl, isShiftPressed: isShift);
+                  } else if (event.buttons == 1) {
+                    // Left click
+                    widget.onSelect(
+                      isCtrlPressed: isCtrl,
+                      isShiftPressed: isShift,
+                    );
                   }
                 },
                 child: GestureDetector(
                   onTap: widget.onToggle,
                   behavior: HitTestBehavior.opaque,
-                  child: _buildRowContent(ui, paddingLeft, widget.isSelected, isDragHovering || _isHovered),
+                  child: _buildRowContent(
+                    ui,
+                    paddingLeft,
+                    widget.isSelected,
+                    isDragHovering || _isHovered,
+                  ),
                 ),
               ),
             );
@@ -534,7 +655,12 @@ class _FileTreeRowState extends State<_FileTreeRow> {
     );
   }
 
-  Widget _buildRowContent(UiTheme ui, double paddingLeft, bool isSelected, bool isHighlighted) {
+  Widget _buildRowContent(
+    UiTheme ui,
+    double paddingLeft,
+    bool isSelected,
+    bool isHighlighted,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < paddingLeft + 30) {
@@ -545,15 +671,19 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           height: 24,
           padding: EdgeInsets.only(left: paddingLeft, right: ui.spacing.sm),
           decoration: BoxDecoration(
-            color: isSelected 
-              ? ui.colors.selected
-              : (isHighlighted ? ui.colors.accent.withValues(alpha: 0.15) : Colors.transparent),
+            color: isSelected
+                ? ui.colors.selected
+                : (isHighlighted
+                      ? ui.colors.accent.withValues(alpha: 0.15)
+                      : Colors.transparent),
           ),
           child: Row(
             children: [
               if (widget.isDir)
                 Icon(
-                  widget.isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                  widget.isExpanded
+                      ? LucideIcons.chevronDown
+                      : LucideIcons.chevronRight,
                   size: 12,
                   color: ui.colors.textMuted,
                 )
@@ -561,11 +691,15 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                 const SizedBox(width: 12),
               const SizedBox(width: 6),
               Icon(
-                widget.isDir 
-                  ? (widget.isExpanded ? LucideIcons.folderOpen : LucideIcons.folder) 
-                  : _getFileIcon(widget.name),
+                widget.isDir
+                    ? (widget.isExpanded
+                          ? LucideIcons.folderOpen
+                          : LucideIcons.folder)
+                    : _getFileIcon(widget.name),
                 size: 14,
-                color: widget.isDir ? const Color(0xFFB3CDE3) : _getIconColor(widget.name, ui),
+                color: widget.isDir
+                    ? const Color(0xFFB3CDE3)
+                    : _getIconColor(widget.name, ui),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -573,7 +707,9 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                   text: widget.name,
                   variant: UiTextVariant.body,
                   fontSize: 12,
-                  color: (isSelected || isHighlighted) ? ui.colors.textPrimary : ui.colors.textSecondary,
+                  color: (isSelected || isHighlighted)
+                      ? ui.colors.textPrimary
+                      : ui.colors.textSecondary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -581,19 +717,25 @@ class _FileTreeRowState extends State<_FileTreeRow> {
             ],
           ),
         );
-      }
+      },
     );
   }
 
   IconData _getFileIcon(String name) {
     final lowerName = name.toLowerCase();
     if (lowerName.endsWith('.m')) return LucideIcons.fileCode2;
-    if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return LucideIcons.table2;
+    if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx'))
+      return LucideIcons.table2;
     if (lowerName.endsWith('.md')) return LucideIcons.fileText;
-    if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) return LucideIcons.fileJson;
-    if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return LucideIcons.fileImage;
+    if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml'))
+      return LucideIcons.fileJson;
+    if (lowerName.endsWith('.png') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg'))
+      return LucideIcons.fileImage;
     if (lowerName.endsWith('.pdf')) return LucideIcons.fileText;
-    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav')) return LucideIcons.fileAudio;
+    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav'))
+      return LucideIcons.fileAudio;
     return LucideIcons.file;
   }
 
@@ -612,7 +754,10 @@ class _FileTreeRowState extends State<_FileTreeRow> {
         backgroundColor: ui.colors.panel,
         surfaceTintColor: Colors.transparent,
         title: UiText(text: 'Delete', variant: UiTextVariant.title),
-        content: UiText(text: 'Are you sure you want to delete "${widget.name}"?', color: ui.colors.textSecondary),
+        content: UiText(
+          text: 'Are you sure you want to delete "${widget.name}"?',
+          color: ui.colors.textSecondary,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -620,7 +765,9 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           ),
           TextButton(
             onPressed: () {
-              final entity = widget.isDir ? io.Directory(widget.path) : io.File(widget.path);
+              final entity = widget.isDir
+                  ? io.Directory(widget.path)
+                  : io.File(widget.path);
               appProvider.deleteFile(entity);
               Navigator.pop(context);
             },
@@ -646,7 +793,9 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           decoration: InputDecoration(
             hintText: 'New Name',
             hintStyle: TextStyle(color: ui.colors.textMuted),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ui.colors.accent)),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: ui.colors.accent),
+            ),
           ),
           autofocus: true,
         ),
@@ -659,8 +808,13 @@ class _FileTreeRowState extends State<_FileTreeRow> {
             onPressed: () async {
               final newName = controller.text;
               if (newName.isNotEmpty && newName != widget.name) {
-                final newPath = path_utils.join(path_utils.dirname(widget.path), newName);
-                final entity = widget.isDir ? io.Directory(widget.path) : io.File(widget.path);
+                final newPath = path_utils.join(
+                  path_utils.dirname(widget.path),
+                  newName,
+                );
+                final entity = widget.isDir
+                    ? io.Directory(widget.path)
+                    : io.File(widget.path);
                 await entity.rename(newPath);
                 appProvider.refreshProjectFiles();
               }
@@ -673,7 +827,11 @@ class _FileTreeRowState extends State<_FileTreeRow> {
     );
   }
 
-  void _createNewEntity(BuildContext context, AppProvider appProvider, {required bool isFile}) {
+  void _createNewEntity(
+    BuildContext context,
+    AppProvider appProvider, {
+    required bool isFile,
+  }) {
     final ui = UiTheme.of(context);
     final controller = TextEditingController();
     showDialog(
@@ -681,14 +839,19 @@ class _FileTreeRowState extends State<_FileTreeRow> {
       builder: (context) => AlertDialog(
         backgroundColor: ui.colors.panel,
         surfaceTintColor: Colors.transparent,
-        title: UiText(text: isFile ? 'New File' : 'New Folder', variant: UiTextVariant.title),
+        title: UiText(
+          text: isFile ? 'New File' : 'New Folder',
+          variant: UiTextVariant.title,
+        ),
         content: TextField(
           controller: controller,
           style: TextStyle(color: ui.colors.textPrimary),
           decoration: InputDecoration(
             hintText: 'Name',
             hintStyle: TextStyle(color: ui.colors.textMuted),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ui.colors.accent)),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: ui.colors.accent),
+            ),
           ),
           autofocus: true,
         ),

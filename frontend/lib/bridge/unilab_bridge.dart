@@ -36,6 +36,13 @@ typedef UnilabFreeString = void Function(Pointer<Utf8> ptr);
 typedef WorkspaceCallbackNative = Void Function(Pointer<Utf8> sessionId, Pointer<Utf8> variablesJson);
 typedef UnilabSetWorkspaceCallbackNative = Void Function(Pointer<NativeFunction<WorkspaceCallbackNative>> callback);
 typedef UnilabSetWorkspaceCallback = void Function(Pointer<NativeFunction<WorkspaceCallbackNative>> callback);
+typedef EventCallbackNative = Void Function(Pointer<Utf8> sessionId, Pointer<Utf8> eventType, Pointer<Utf8> dataJson);
+typedef UnilabSetEventCallbackNative = Void Function(Pointer<NativeFunction<EventCallbackNative>> callback);
+typedef UnilabSetEventCallback = void Function(Pointer<NativeFunction<EventCallbackNative>> callback);
+
+typedef UnilabSendSimEventNative = Void Function(Pointer<Utf8> eventJson);
+typedef UnilabSendSimEvent = void Function(Pointer<Utf8> eventJson);
+
 
 class UniLabBridge {
 
@@ -61,7 +68,11 @@ class UniLabBridge {
 
   // Keep callback alive
 
+  
+  // Keep callback alive
   NativeCallable<WorkspaceCallbackNative>? _wsCallback;
+  NativeCallable<EventCallbackNative>? _eventCallback;
+
 
   
 
@@ -240,12 +251,16 @@ class UniLabBridge {
     // Create the workspace callback in the main isolate
 
     _wsCallback = NativeCallable<WorkspaceCallbackNative>.listener(_onWorkspaceChanged);
+    _eventCallback = NativeCallable<EventCallbackNative>.listener(_onSimEvent);
 
     
 
     final unilabSetWorkspaceCallback = _mainLib!.lookupFunction<UnilabSetWorkspaceCallbackNative, UnilabSetWorkspaceCallback>('unilab_set_workspace_callback');
 
     unilabSetWorkspaceCallback(_wsCallback!.nativeFunction);
+
+    final unilabSetEventCallback = _mainLib!.lookupFunction<UnilabSetEventCallbackNative, UnilabSetEventCallback>('unilab_set_event_callback');
+    unilabSetEventCallback(_eventCallback!.nativeFunction);
 
 
 
@@ -266,6 +281,32 @@ class UniLabBridge {
   }
 
 
+
+
+  static void _onSimEvent(Pointer<Utf8> sessionIdPtr, Pointer<Utf8> eventTypePtr, Pointer<Utf8> dataJsonPtr) {
+    if (sessionIdPtr.address == 0 || eventTypePtr.address == 0 || dataJsonPtr.address == 0) return;
+
+    final sessionId = sessionIdPtr.toDartString();
+    final eventType = eventTypePtr.toDartString();
+    final dataJson = dataJsonPtr.toDartString();
+    
+    _unilabFreeString?.call(sessionIdPtr);
+    _unilabFreeString?.call(eventTypePtr);
+    _unilabFreeString?.call(dataJsonPtr);
+    
+    try {
+      final data = jsonDecode(dataJson);
+
+      _eventController.add({
+        'type': 'sim_event',
+        'event': eventType,
+        'session_id': sessionId,
+        'data': data,
+      });
+    } catch (e) {
+      debugPrint('[UniLabBridge] Error parsing sim event: $e');
+    }
+  }
 
   static void _onWorkspaceChanged(Pointer<Utf8> sessionIdPtr, Pointer<Utf8> variablesJsonPtr) {
 
@@ -401,6 +442,12 @@ class UniLabBridge {
 
   /// Create or overwrite a file
 
+
+  /// Send an event to the active simulation
+  Future<void> sendSimEvent(Map<String, dynamic> event) async {
+    await _sendCommand('send_sim_event', {'event': jsonEncode(event)});
+  }
+
   Future<void> createFile(String filename, String content) async {
 
     if (_sessionId == null) return;
@@ -505,7 +552,10 @@ class UniLabBridge {
 
     late UnilabCreateFile unilabCreateFile;
 
+    
+    late UnilabSendSimEvent unilabSendSimEvent;
     late UnilabFreeString unilabFreeString;
+
 
 
 
@@ -551,7 +601,10 @@ class UniLabBridge {
 
             unilabCreateFile = lib.lookupFunction<UnilabCreateFileNative, UnilabCreateFile>('unilab_create_file');
 
+            
+            unilabSendSimEvent = lib.lookupFunction<UnilabSendSimEventNative, UnilabSendSimEvent>('unilab_send_sim_event');
             unilabFreeString = lib.lookupFunction<UnilabFreeStringNative, UnilabFreeString>('unilab_free_string');
+
 
 
 
@@ -666,6 +719,13 @@ class UniLabBridge {
             break;
 
 
+
+          case 'send_sim_event':
+            final evPtr = (params['event'] as String).toNativeUtf8();
+            unilabSendSimEvent(evPtr);
+            malloc.free(evPtr);
+            replyPort?.send({'success': true});
+            break;
 
           case 'create_file':
 

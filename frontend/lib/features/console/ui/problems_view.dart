@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
+import '../../../providers/settings_provider.dart';
 
 class ProblemsView extends StatelessWidget {
   const ProblemsView({super.key});
@@ -9,6 +13,8 @@ class ProblemsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settings = settingsProvider.settings;
     
     // Mock problems for UI development
     final mockProblems = [
@@ -52,37 +58,57 @@ class ProblemsView extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
-        // Toolbar
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 4),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          final isCtrlPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+          if (isCtrlPressed) {
+            final currentSize = settings.fontSize;
+            // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
+            final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
+            if (newSize != currentSize) {
+              settingsProvider.updateSettings(settings.copyWith(fontSize: newSize));
+            }
+          }
+        }
+      },
+      child: Column(
+        children: [
+          // Toolbar
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 4),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
+            ),
+            child: Row(
+              children: [
+                UiText(
+                  text: '${mockProblems.length} Problems',
+                  variant: UiTextVariant.label,
+                  fontWeight: FontWeight.bold,
+                ),
+                const Spacer(),
+                _FilterPill(label: 'Errors', count: 1, color: ui.colors.danger),
+                const SizedBox(width: 8),
+                _FilterPill(label: 'Warnings', count: 1, color: ui.colors.warning),
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              UiText(
-                text: '${mockProblems.length} Problems',
-                variant: UiTextVariant.label,
-                fontWeight: FontWeight.bold,
+          Expanded(
+            child: SelectionArea(
+              child: ListView.builder(
+                itemCount: mockProblems.length,
+                itemBuilder: (context, index) {
+                  return _ProblemRow(problem: mockProblems[index], fontSize: settings.fontSize);
+                },
               ),
-              const Spacer(),
-              _FilterPill(label: 'Errors', count: 1, color: ui.colors.danger),
-              const SizedBox(width: 8),
-              _FilterPill(label: 'Warnings', count: 1, color: ui.colors.warning),
-            ],
+            ),
           ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: mockProblems.length,
-            itemBuilder: (context, index) {
-              return _ProblemRow(problem: mockProblems[index]);
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -106,8 +132,9 @@ class _Problem {
 }
 
 class _ProblemRow extends StatefulWidget {
-  const _ProblemRow({required this.problem});
+  const _ProblemRow({required this.problem, required this.fontSize});
   final _Problem problem;
+  final double fontSize;
 
   @override
   State<_ProblemRow> createState() => _ProblemRowState();
@@ -161,7 +188,7 @@ class _ProblemRowState extends State<_ProblemRow> {
                     UiText(
                       text: widget.problem.message,
                       variant: UiTextVariant.body,
-                      fontSize: 12,
+                      fontSize: widget.fontSize,
                       color: ui.colors.textPrimary,
                     ),
                     const SizedBox(height: 4),
@@ -170,14 +197,14 @@ class _ProblemRowState extends State<_ProblemRow> {
                         UiText(
                           text: widget.problem.file,
                           variant: UiTextVariant.label,
-                          fontSize: 11,
+                          fontSize: widget.fontSize - 1,
                           color: ui.colors.textMuted,
                         ),
                         const SizedBox(width: 8),
                         UiText(
                           text: '${widget.problem.line}:${widget.problem.column}',
                           variant: UiTextVariant.label,
-                          fontSize: 11,
+                          fontSize: widget.fontSize - 1,
                           color: ui.colors.textMuted.withValues(alpha: 0.7),
                           fontFamily: 'JetBrains Mono',
                         ),
@@ -193,6 +220,7 @@ class _ProblemRowState extends State<_ProblemRow> {
     );
   }
 }
+
 
 class _FilterPill extends StatelessWidget {
   const _FilterPill({required this.label, required this.count, required this.color});

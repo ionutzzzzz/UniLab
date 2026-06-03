@@ -60,9 +60,24 @@ UiTheme createUiTheme(UserSettings settings, Brightness brightness) {
     orElse: () => SyntaxHighlightTheme.all.first,
   );
 
+  // Determine background and text colors based on interface theme and syntax theme
+  final Color canvasColor = isDark ? syntaxTheme.backgroundColor : baseColors.canvas;
+  final Color panelColor = isDark ? syntaxTheme.backgroundColor : baseColors.panel;
+  final Color headerColor = isDark ? syntaxTheme.backgroundColor : baseColors.panelHeader;
+  
+  // Use syntax theme foreground for text in dark mode for better integration
+  final Color textPrimary = isDark ? syntaxTheme.foregroundColor : baseColors.textPrimary;
+  final Color textSecondary = isDark ? syntaxTheme.foregroundColor.withValues(alpha: 0.7) : baseColors.textSecondary;
+  final Color textMuted = isDark ? syntaxTheme.foregroundColor.withValues(alpha: 0.5) : baseColors.textMuted;
+
   final colors = baseColors.copyWith(
-    canvas: syntaxTheme.backgroundColor,
-    panel: syntaxTheme.backgroundColor,
+    canvas: canvasColor,
+    panel: panelColor,
+    panelHeader: headerColor,
+    ribbonTabs: headerColor,
+    textPrimary: textPrimary,
+    textSecondary: textSecondary,
+    textMuted: textMuted,
     accent: settings.accentColor,
     accentHover: settings.accentColor.withValues(alpha: 0.8),
   );

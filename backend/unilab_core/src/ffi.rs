@@ -9,7 +9,9 @@ static SESSIONS: OnceLock<Mutex<HashMap<String, Py<PyAny>>>> = OnceLock::new();
 static BACKEND_PATH: OnceLock<String> = OnceLock::new();
 
 type WorkspaceCallback = unsafe extern "C" fn(session_id: *const c_char, variables_json: *const c_char);
+type EventCallback = unsafe extern "C" fn(session_id: *const c_char, event_type: *const c_char, data_json: *const c_char);
 static WORKSPACE_CALLBACK: Mutex<Option<WorkspaceCallback>> = Mutex::new(None);
+static EVENT_CALLBACK: Mutex<Option<EventCallback>> = Mutex::new(None);
 
 fn get_sessions_map() -> &'static Mutex<HashMap<String, Py<PyAny>>> {
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -17,7 +19,13 @@ fn get_sessions_map() -> &'static Mutex<HashMap<String, Py<PyAny>>> {
 
 /// Set a callback to be invoked when the workspace variables change.
 #[unsafe(no_mangle)]
-pub extern "C" fn unilab_set_workspace_callback(callback: WorkspaceCallback) {
+
+#[unsafe(no_mangle)]
+pub extern "C" fn unilab_set_event_callback(callback: EventCallback) {
+    let mut cb = EVENT_CALLBACK.lock().unwrap();
+    *cb = Some(callback);
+}
+#[unsafe(no_mangle)]pub extern "C" fn unilab_set_workspace_callback(callback: WorkspaceCallback) {
     let mut cb = WORKSPACE_CALLBACK.lock().unwrap();
     *cb = Some(callback);
 }
@@ -58,6 +66,7 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
 
         unsafe {
             std::env::set_var("UNILAB_WEB_MODE", "1");
+            std::env::set_var("UNILAB_BRIDGE_MODE", "1");
         }
 
         Python::with_gil(|py| {
@@ -148,6 +157,7 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
             // Set up real-time workspace update callback for FFI
             let py_session_id = session_id.clone();
             let on_changed = pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _kwargs| {
+                let py = args.py();
                 let variables = args.get_item(0).unwrap();
                 let py = variables.py();
                 
@@ -171,6 +181,28 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
                 }
                 Ok::<PyObject, PyErr>(py.None())
             }).map_err(|e| format!("Failed to create closure: {}", e))?;
+
+            
+            // Set up real-time event callback for FFI
+            let py_session_id_event = session_id.clone();
+            let on_event = pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _kwargs| {
+                let py = args.py();
+                let event_type: String = args.get_item(0).unwrap().extract().unwrap();
+                let data_json: String = args.get_item(1).unwrap().extract().unwrap();
+                
+                if let Some(cb) = *EVENT_CALLBACK.lock().unwrap() {
+                    let c_sid = CString::new(py_session_id_event.clone()).unwrap();
+                    let c_type = CString::new(event_type).unwrap();
+                    let c_json = CString::new(data_json).unwrap();
+                    unsafe {
+                        cb(c_sid.into_raw(), c_type.into_raw(), c_json.into_raw());
+                    }
+                }
+                Ok::<PyObject, PyErr>(py.None())
+            }).map_err(|e| format!("Failed to create event closure: {}", e))?;
+
+            engine.setattr("on_event", on_event)
+                .map_err(|e| format!("Failed to set on_event: {}", e))?;
 
             engine.setattr("on_workspace_changed", on_changed)
                 .map_err(|e| format!("Failed to set on_workspace_changed: {}", e))?;
@@ -483,4 +515,24 @@ pub extern "C" fn unilab_free_string(ptr: *mut c_char) {
             drop(CString::from_raw(ptr));
         }
     }
+}
+
+/// Send a simulation event (e.g. slider change) to the active Python simulation.
+#[unsafe(no_mangle)]
+pub extern "C" fn unilab_send_sim_event(event_json: *const c_char) {
+    if event_json.is_null() {
+        return;
+    }
+
+    let event_str = unsafe { CStr::from_ptr(event_json) }
+        .to_string_lossy()
+        .to_string();
+
+    Python::with_gil(|py| {
+        if let Ok(sim_mod) = py.import("backend.core.simulation.engine") {
+            if let Ok(push_func) = sim_mod.getattr("push_sim_event") {
+                let _ = push_func.call1((event_str,));
+            }
+        }
+    });
 }

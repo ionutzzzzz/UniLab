@@ -55,12 +55,13 @@ class TitleStrip extends StatelessWidget {
                 variant: UiTextVariant.label,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
+                color: null, // Uses default textPrimary from theme
               ),
               const SizedBox(width: 8),
               Container(width: 1, height: 10, color: ui.colors.divider),
               const SizedBox(width: 8),
               UiText(
-                text: 'v1.2.2',
+                text: 'v1.3.4',
                 variant: UiTextVariant.label,
                 color: ui.colors.accent,
                 fontWeight: FontWeight.w800,
@@ -74,12 +75,12 @@ class TitleStrip extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.terminal, size: 12, color: ui.colors.textMuted),
+            Icon(LucideIcons.terminal, size: 12, color: ui.colors.textSecondary),
             const SizedBox(width: 8),
             UiText(
               text: 'unilab_workspaces/default',
               variant: UiTextVariant.label,
-              color: ui.colors.textMuted.withValues(alpha: 0.8),
+              color: ui.colors.textSecondary,
               letterSpacing: 0.1,
             ),
           ],
@@ -94,7 +95,7 @@ class TitleStrip extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: Colors.black.withValues(alpha: 0.4),
-            width: 1.0,
+            width: ui.spacing.strokeHair,
           ),
         ),
         boxShadow: [

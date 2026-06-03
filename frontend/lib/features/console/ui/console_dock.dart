@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
@@ -8,6 +9,7 @@ import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_badge.dart';
 import '../../../models/editor_models.dart';
 import '../../../providers/app_provider.dart';
+import '../../../providers/settings_provider.dart';
 import 'terminal_view.dart';
 import 'problems_view.dart';
 
@@ -49,7 +51,7 @@ class _ConsoleDockState extends State<ConsoleDock> {
             height: 34,
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
-              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5), width: ui.spacing.strokeHair)),
             ),
             child: Row(
               children: [
@@ -150,9 +152,11 @@ class _ConsoleViewState extends State<_ConsoleView> {
   }
 
   void _submitCommand() {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    if (appProvider.isExecuting) return; // Prevent submission while busy
+    
     final value = _controller.text.trim();
     if (value.isNotEmpty) {
-      final appProvider = Provider.of<AppProvider>(context, listen: false);
       appProvider.runConsoleCommand(value);
       _controller.clear();
 
@@ -213,6 +217,8 @@ class _ConsoleViewState extends State<_ConsoleView> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = Provider.of<AppProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settings = settingsProvider.settings;
     final messages = appProvider.consoleMessages;
 
     // Auto-scroll to bottom after each build
@@ -222,88 +228,111 @@ class _ConsoleViewState extends State<_ConsoleView> {
       }
     });
 
-    return Column(
-      children: [
-        // Console History
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: EdgeInsets.all(ui.spacing.md),
-            itemCount: messages.length,
-            itemBuilder: (context, index) {
-              final msg = messages[index];
-              final isError = msg.type == ConsoleMessageType.error;
-              final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isCommand)
-                      UiText(
-                        text: ' ',
-                        variant: UiTextVariant.consoleBody,
-                        fontWeight: FontWeight.bold,
-                        color: ui.colors.accent,
-                      ),
-                    Expanded(
-                      child: UiText(
-                        text: msg.text,
-                        variant: UiTextVariant.consoleBody,
-                        color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          final isCtrlPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+          if (isCtrlPressed) {
+            final currentSize = settings.fontSize;
+            // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
+            final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
+            if (newSize != currentSize) {
+              settingsProvider.updateSettings(settings.copyWith(fontSize: newSize));
+            }
+          }
+        }
+      },
+      child: Column(
+        children: [
+                  // Console History
+                  Expanded(
+                    child: SelectionArea(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: EdgeInsets.all(ui.spacing.md),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isError = msg.type == ConsoleMessageType.error;
+                          final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
+          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isCommand)
+                                  UiText(
+                                    text: ' ',
+                                    variant: UiTextVariant.consoleBody,
+                                    fontWeight: FontWeight.bold,
+                                    color: ui.colors.accent,
+                                    fontSize: settings.fontSize,
+                                  ),
+                                Expanded(
+                                  child: UiText(
+                                    text: msg.text,
+                                    variant: UiTextVariant.consoleBody,
+                                    color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
+                                    fontSize: settings.fontSize,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
-                  ],
+                  ),          // Input Line
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
+            decoration: BoxDecoration(
+              color: ui.colors.panelHeader.withValues(alpha: 0.5),
+              border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3), width: ui.spacing.strokeHair)),
+            ),
+            child: Row(
+              children: [
+                UiText(
+                  text: '>> ',
+                  variant: UiTextVariant.consoleBody,
+                  fontWeight: FontWeight.bold,
+                  color: ui.colors.accent,
+                  fontSize: settings.fontSize,
                 ),
-              );
-            },
-          ),
-        ),
-        // Input Line
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
-          decoration: BoxDecoration(
-            color: ui.colors.panelHeader.withValues(alpha: 0.5),
-            border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
-          ),
-          child: Row(
-            children: [
-              UiText(
-                text: '>> ',
-                variant: UiTextVariant.consoleBody,
-                fontWeight: FontWeight.bold,
-                color: ui.colors.accent,
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  autofocus: true,
-                  enabled: !appProvider.isExecuting,
-                  maxLines: null,
-                  minLines: 1,
-                  style: ui.typography.consoleBody.copyWith(
-                    color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.textPrimary,
-                    fontSize: 12,
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    enabled: true, // Always enabled to maintain focus
+                    maxLines: null,
+                    minLines: 1,
+                    style: ui.typography.consoleBody.copyWith(
+                      color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.textPrimary,
+                      fontSize: settings.fontSize,
+                      fontFamily: settings.fontFamily,
+                    ),
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      hintText: appProvider.isExecuting ? 'Waiting for execution to finish...' : null,
+                      hintStyle: TextStyle(color: ui.colors.textDisabled),
+                    ),
+                    onChanged: (value) {
+                      // Force rebuild for disabled state logic if needed
+                      setState(() {});
+                    },
                   ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                    hintText: appProvider.isExecuting ? 'Waiting for execution to finish...' : null,
-                    hintStyle: TextStyle(color: ui.colors.textDisabled),
-                  ),
-                  onChanged: (value) {
-                    // Force rebuild for disabled state logic if needed
-                    setState(() {});
-                  },
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
