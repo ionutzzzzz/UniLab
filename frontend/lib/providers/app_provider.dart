@@ -165,39 +165,50 @@ class AppProvider with ChangeNotifier {
 
   /// Add a message to the console.
   void _addConsoleMessage(String text, ConsoleMessageType type, {String? source}) {
-    if (text.contains('::CLEAR_TERMINAL::')) {
-      clearConsole();
-      return;
-    }
+    if (text.isEmpty) return;
 
-    if (text.contains('::CLEAR_WORKSPACE::')) {
-      clearWorkspace();
-      return;
-    }
+    // Split multiline text into individual messages for better UI rendering and command processing
+    final lines = text.split('\n');
+    
+    for (var line in lines) {
+      String trimmedLine = line.trim();
+      if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last) continue;
 
-    if (text.contains('::CLEAR_VAR::')) {
-      final parts = text.split('::CLEAR_VAR::');
-      if (parts.length > 1) {
-        final varName = parts[1].trim();
-        _removeVariable(varName);
+      if (trimmedLine.contains('::CLEAR_TERMINAL::')) {
+        clearConsole();
+        continue;
       }
-      return;
-    }
 
-    if (text.contains('::OPEN_FILE::')) {
-      final parts = text.split('::OPEN_FILE::');
-      if (parts.length > 1) {
-        final filename = parts[1].trim();
-        _handleOpenFileCommand(filename);
+      if (trimmedLine.contains('::CLEAR_WORKSPACE::')) {
+        clearWorkspace();
+        continue;
       }
-      return;
+
+      if (trimmedLine.contains('::CLEAR_VAR::')) {
+        final parts = trimmedLine.split('::CLEAR_VAR::');
+        if (parts.length > 1) {
+          final varName = parts[1].trim();
+          _removeVariable(varName);
+        }
+        continue;
+      }
+
+      if (trimmedLine.contains('::OPEN_FILE::')) {
+        final parts = trimmedLine.split('::OPEN_FILE::');
+        if (parts.length > 1) {
+          final filename = parts[1].trim();
+          _handleOpenFileCommand(filename);
+        }
+        continue;
+      }
+      
+      _consoleMessages.add(ConsoleMessage(
+        text: line,
+        type: type,
+        source: source ?? 'System',
+      ));
     }
     
-    _consoleMessages.add(ConsoleMessage(
-      text: text,
-      type: type,
-      source: source ?? 'System',
-    ));
     notifyListeners();
   }
 

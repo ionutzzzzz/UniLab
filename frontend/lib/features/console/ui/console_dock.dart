@@ -210,21 +210,17 @@ class _ConsoleViewState extends State<_ConsoleView> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Auto-scroll when new messages arrive
+  Widget build(BuildContext context) {
+    final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context);
+    final messages = appProvider.consoleMessages;
+
+    // Auto-scroll to bottom after each build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = UiTheme.of(context);
-    final appProvider = Provider.of<AppProvider>(context);
-    final messages = appProvider.consoleMessages;
 
     return Column(
       children: [
