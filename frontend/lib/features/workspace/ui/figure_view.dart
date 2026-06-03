@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import 'dart:io' as io;
 import '../../../models/editor_models.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon_button.dart';
 import '../../../widgets/plot_viewer/plot_widget.dart';
+import '../../../providers/app_provider.dart';
 
 class FigureView extends StatelessWidget {
   const FigureView({
@@ -58,6 +61,19 @@ class FigureView extends StatelessWidget {
               const SizedBox(width: 8),
               Container(width: 1, height: 20, color: ui.colors.divider),
               const SizedBox(width: 8),
+              UiIconButton(
+                icon: LucideIcons.externalLink, 
+                tooltip: 'Detach to Window', 
+                size: 28, 
+                iconSize: 16,
+                onPressed: () {
+                 try {
+                   Provider.of<AppProvider>(context, listen: false).openDetachedPlotsWindow();
+                 } catch (e) {
+                   // AppProvider not available in this context (e.g., plots window)
+                 }
+               },
+              ),
               UiIconButton(icon: LucideIcons.save, tooltip: 'Export Figure', size: 28, iconSize: 16),
             ],
           ),

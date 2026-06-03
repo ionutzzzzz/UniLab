@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as p;
@@ -92,6 +93,14 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
                 ),
               ),
               UiIconButton(icon: LucideIcons.layoutGrid, tooltip: 'Grid View', size: 24, iconSize: 14),
+              SizedBox(width: ui.spacing.xs),
+              UiIconButton(
+                icon: LucideIcons.externalLink, 
+                tooltip: 'Detach Window', 
+                size: 24, 
+                iconSize: 14,
+                onPressed: () => p.Provider.of<AppProvider>(context, listen: false).openDetachedPlotsWindow(),
+              ),
               SizedBox(width: ui.spacing.xs),
               UiIconButton(
                 icon: LucideIcons.trash2, 

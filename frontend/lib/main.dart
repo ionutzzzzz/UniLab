@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart' as p;
 import 'package:window_manager/window_manager.dart';
 import 'package:context_menus/context_menus.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
+import 'dart:convert';
+import 'dart:io';
 import 'theme/app_theme.dart';
 import 'providers/app_provider.dart';
 import 'providers/settings_provider.dart';
@@ -10,11 +13,67 @@ import 'features/workspace/state/workspace_providers.dart' as workspace_prov;
 import 'providers/riverpod_providers.dart' as rp;
 import 'shell/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'screens/plots_window_screen.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.windows)) {
+  final windowController = await dmw.WindowController.fromCurrentEngine();
+  final argumentsStr = windowController.arguments;
+
+  Map<String, dynamic> argument = {};
+  String windowType = 'main';
+
+  if (argumentsStr.isNotEmpty) {
+    try {
+      final parsed = jsonDecode(argumentsStr) as Map<String, dynamic>;
+      argument = parsed;
+      windowType = parsed['type'] as String? ?? 'main';
+    } catch (e) {
+      windowType = 'main';
+    }
+  }
+
+  if (windowType == 'plots') {
+    runApp(
+      ProviderScope(
+        child: p.MultiProvider(
+          providers: [
+            p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+          ],
+          child: Consumer(
+            builder: (context, ref, child) {
+              final settingsProvider = p.Provider.of<SettingsProvider>(context);
+              final settings = settingsProvider.settings;
+              final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
+              final lightTheme = AppTheme.createTheme(
+                settings,
+                Brightness.light,
+              );
+
+              return MaterialApp(
+                debugShowCheckedModeBanner: false,
+                themeMode: settings.themeMode,
+                theme: lightTheme,
+                darkTheme: darkTheme,
+                home: PlotsWindowScreen(
+                  windowId: windowController.windowId
+                      .toString(), // Ensure string
+                  args: argument,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    return; // Exit main() early so the rest doesn't run
+  }
+
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.windows)) {
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
@@ -39,7 +98,11 @@ void main() async {
               p.ChangeNotifierProvider(
                 create: (_) => AppProvider(
                   onVariablesUpdated: (vars) {
-                    ref.read(workspace_prov.workspaceVariablesProvider.notifier).replaceAll(vars);
+                    ref
+                        .read(
+                          workspace_prov.workspaceVariablesProvider.notifier,
+                        )
+                        .replaceAll(vars);
                   },
                   onPlotsUpdated: (plots) {
                     ref.read(rp.plotGalleryProvider.notifier).replaceAll(plots);

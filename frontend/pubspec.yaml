@@ -42,6 +42,7 @@ dependencies:
   pdfrx: ^1.0.86
   xterm: ^4.0.0
   flutter_pty: ^0.4.2
+  desktop_multi_window: ^0.3.0
 
 dev_dependencies:
   flutter_test:

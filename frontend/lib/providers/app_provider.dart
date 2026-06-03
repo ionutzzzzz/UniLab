@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -5,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:watcher/watcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
 import '../models/models.dart';
 import '../models/editor_models.dart';
 import '../features/workspace/domain/workspace_variable.dart' as domain;
@@ -33,10 +35,13 @@ class AppProvider with ChangeNotifier {
   Map<String, dynamic> _serverInfo = {};
   String _selectedConsoleTab = 'output';
 
+  String? _plotsWindowId;
+
   BackendStatus _backendStatus = BackendStatus.connecting;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
   StreamSubscription? _bridgeEventSubscription;
+  StreamSubscription<void>? _windowsChangedSubscription;
 
   // Callbacks to push state into Riverpod (using domain WorkspaceVariable)
   final void Function(List<domain.WorkspaceVariable>)? onVariablesUpdated;
@@ -72,6 +77,7 @@ class AppProvider with ChangeNotifier {
     refreshProjectFiles();
     _initWatcher();
     _initBridge();
+    _initWindowsListener();
   }
 
   String _discoverProjectRoot() {
@@ -104,6 +110,7 @@ class AppProvider with ChangeNotifier {
   void dispose() {
     _watcherSubscription?.cancel();
     _bridgeEventSubscription?.cancel();
+    _windowsChangedSubscription?.cancel();
     super.dispose();
   }
 
@@ -252,6 +259,44 @@ class AppProvider with ChangeNotifier {
       });
     } catch (e) {
       debugPrint('Watcher error: $e');
+    }
+  }
+
+  void _initWindowsListener() {
+    if (kIsWeb) return; // Skip on web
+
+    _windowsChangedSubscription?.cancel();
+    try {
+      _windowsChangedSubscription = dmw.onWindowsChanged.listen((_) {
+        // Check if the plots window still exists
+        if (_plotsWindowId != null) {
+          _checkPlotsWindowExists();
+        }
+      }, onError: (error) {
+        debugPrint('Windows listener error: $error');
+        // Don't crash the app if the listener fails
+      });
+    } catch (e) {
+      debugPrint('Windows listener init error: $e');
+    }
+  }
+
+  Future<void> _checkPlotsWindowExists() async {
+    try {
+      if (_plotsWindowId == null) return;
+      
+      final allWindows = await dmw.WindowController.getAll();
+      final plotsWindowExists = allWindows.any((w) => w.windowId == _plotsWindowId);
+      
+      if (!plotsWindowExists) {
+        // Plots window was closed, reset the ID
+        _plotsWindowId = null;
+        notifyListeners();
+      }
+    } catch (e) {
+      // If we can't check the windows, just clear the ID to be safe
+      debugPrint('Error checking plots window existence: $e');
+      _plotsWindowId = null;
     }
   }
 
@@ -590,6 +635,7 @@ class AppProvider with ChangeNotifier {
 
   /// Parse plots from result.extra and create PlotData objects.
   void _updatePlotsFromResult(ExecutionResult result) {
+    final wasEmpty = _generatedPlots.isEmpty;
     _generatedPlots.clear();
 
     final b64List = result.extra['plot_data_b64'] as List<dynamic>? ?? [];
@@ -626,10 +672,65 @@ class AppProvider with ChangeNotifier {
 
     onPlotsUpdated?.call(_generatedPlots);
     
+    // Sync to detached window if open
+    if (_plotsWindowId != null) {
+      try {
+        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod(
+          'update_plots',
+          jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()),
+        );
+      } catch (e) {
+        debugPrint('Error syncing plots to window: $e');
+        // If window is gone, clear the ID
+        _plotsWindowId = null;
+      }
+    }
+
     // Auto-switch to plots tab if any were generated
     if (_generatedPlots.isNotEmpty) {
       _selectedConsoleTab = 'plots';
       notifyListeners();
+      
+      // Auto-open plots window if it was closed and plots were just generated
+      // (disabled on web due to multi-window limitations)
+      if (wasEmpty && _plotsWindowId == null && !kIsWeb) {
+        openDetachedPlotsWindow();
+      }
+    }
+  }
+
+  Future<void> openDetachedPlotsWindow() async {
+    if (_plotsWindowId != null) {
+      // Already open, just bring to front if possible (WindowManager doesn't easily do this for multi-window yet)
+      return;
+    }
+
+    // Skip multi-window on web
+    if (kIsWeb) {
+      debugPrint('Multi-window not available on this platform. Show plots in main window instead.');
+      return;
+    }
+
+    try {
+      final window = await dmw.WindowController.create(
+        dmw.WindowConfiguration(
+          arguments: jsonEncode({
+            'type': 'plots',
+            'plots': _generatedPlots.map((p) => p.toJson()).toList(),
+          }),
+          hiddenAtLaunch: false,
+        ),
+      );
+      
+      _plotsWindowId = window.windowId;
+      await window.show();
+
+      // Reset ID when window is closed
+      // Note: desktop_multi_window doesn't have a direct close listener yet in this version,
+      // we might need to handle it via method channel from the sub-window later.
+    } catch (e) {
+      debugPrint('Error creating plots window: $e');
+      _plotsWindowId = null;
     }
   }
 

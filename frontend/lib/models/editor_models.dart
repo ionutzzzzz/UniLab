@@ -149,6 +149,18 @@ class PlotData {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'type': type,
+      'xData': xData,
+      'yData': yData,
+      'imageDataUri': imageDataUri,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
 }
 
 /// Represents editor state

@@ -11,6 +11,7 @@
 ---
 
 ## 📑 Table of Contents
+
 1. [About The Project](#-about-the-project)
 2. [Key Features](#-key-features)
 3. [Technology Stack](#-technology-stack)
@@ -46,11 +47,13 @@ Whether you are designing a control system, training a machine learning model, o
 UniLab is transitioning to a memory-safe, high-performance stack:
 
 ### **Engine & Computation**
+
 * **Rust**: The core execution engine, providing safety and native performance.
 * **WebAssembly (Wasm)**: Enables the Rust engine to run at near-native speeds in web browsers.
 * **FFI**: Bridges the core engine to mobile and desktop platforms.
 
 ### **Frontend & UI**
+
 * **Flutter**: Powers the pixel-perfect, interactive GUI across all platforms.
 * **Dart**: The language behind Flutter's responsive and smooth user experience.
 
@@ -59,6 +62,7 @@ UniLab is transitioning to a memory-safe, high-performance stack:
 ## 🔄 Architecture Pivot
 
 We are currently in the process of migrating from a Python/React/Docker architecture to a **Native Flutter/Rust** stack. This change is driven by the need for:
+
 1. **Offline Capability**: Removing the dependency on a backend server.
 2. **Performance**: Leveraging Rust's zero-cost abstractions for heavy math.
 3. **Consistency**: Ensuring a single codebase provides a premium experience on every device.
@@ -70,25 +74,27 @@ We are currently in the process of migrating from a Python/React/Docker architec
 *Note: The project is currently in the middle of the architectural migration. Local Python execution is still supported via the CLI.*
 
 ### CLI Usage (Legacy Python)
+
 ```bash
 cd backend
 python3 UniLab.py console
 ```
 
 ### Building the New GUI (Coming Soon)
+
 Stay tuned as we initialize the Flutter and Rust workspaces.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Core computation engine (Python Transpiler)
-- [x] 65+ Scientific Library toolboxes
-- [x] Architectural Design for Cross-Platform GUI
-- [ ] Initialize Flutter + Rust (FFI/Wasm) bridge
+- [X] Core computation engine (Python Transpiler)
+- [X] 65+ Scientific Library toolboxes
+- [X] Architectural Design for Cross-Platform GUI
+- [X] Initialize Flutter + Rust (FFI/Wasm) bridge
 - [ ] Port Parser/Transpiler to Rust
 - [ ] Native high-performance plotting in Flutter
-- [ ] Local File/Workspace Manager
+- [X] Local File/Workspace Manager
 - [ ] Custom UniLab Compiler/Interpreter in Rust
 
 ---

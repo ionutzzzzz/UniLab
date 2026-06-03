@@ -383,7 +383,11 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
           title: 'Window',
           children: [
             RibbonButton(label: 'Split Editor', icon: LucideIcons.columns),
-            RibbonButton(label: 'New Window', icon: LucideIcons.externalLink),
+            RibbonButton(
+              label: 'New Window', 
+              icon: LucideIcons.externalLink,
+              onTap: () => appProvider.openDetachedPlotsWindow(),
+            ),
           ],
         ),
       ];
