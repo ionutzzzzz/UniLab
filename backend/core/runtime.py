@@ -1114,7 +1114,7 @@ def unilab_range(start, stop, step=1):
         return slice(start, stop, step)
     # Standard numerical range
     # Use a small epsilon to handle floating point precision and match MATLAB's inclusive-if-within-step behavior
-    eps = abs(step) * 1e-10
+    eps = step * 1e-10
     return np.atleast_2d(np.arange(start, stop + eps, step))
 
 
@@ -1347,6 +1347,15 @@ def unilab_call(obj, *args, **kwargs):
     if isinstance(res, np.ndarray) and res.size == 1:
         return res.item()
     return res
+
+def unilab_transpose(x):
+    if isinstance(x, (list, tuple)):
+        x = np.asarray(x)
+    if isinstance(x, np.ndarray):
+        if x.ndim == 1:
+            return x.reshape(-1, 1).conj()
+        return x.T.conj()
+    return x
 
 def unilab_mul(a, b):
     # Ensure we are not dealing with Python lists/tuples in a way that causes "multiply sequence"

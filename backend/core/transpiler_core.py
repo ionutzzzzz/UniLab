@@ -271,7 +271,7 @@ class UniLabToPython(Transformer):
         target = items[0]
         if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
              target = target[12:-1]
-        return f"{target}.T"
+        return f"unilab_transpose({target})"
 
     def unary(self, items):
         if len(items) == 2:
@@ -585,12 +585,12 @@ class UniLabToPython(Transformer):
                 for r in ret:
                     if r == "varargout":
                         inner.append("varargout = []")
-                    else:
+                    elif r not in raw_params:
                         inner.append(f"{r} = None")
             else:
                 if ret == "varargout":
                     inner.append("varargout = []")
-                else:
+                elif ret not in raw_params:
                     inner.append(f"{ret} = None")
 
         if has_varargin:

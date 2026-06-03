@@ -1,23 +1,25 @@
-% 07_deep_learning_theory.m
-% UniLab Deep Learning: Function Approximation and Theory
+% 66_deep_learning_sinc.m
+% UniLab Deep Learning: Function Approximation for sin(x)/x
 
 clear all;
 close all;
 clc;
 
-disp('🧠 UniLab Deep Learning: Function Approximation');
-disp('==============================================');
+disp('🧠 UniLab Deep Learning: Sinc Function Approximation');
+disp('==================================================');
 
 %% 1. Function Approximation with Neural Network
-disp('--- 1. Fitting f(x) = sin(x) + 0.5*sin(2x) + 1/3*sin(3x) ---');
+disp('--- 1. Fitting f(x) = sin(x) / x ---');
 
 % Data Generation
-X = linspace(0, 2*pi, 200)';
-
-y = sin(X) + 0.5*sin(2*X) + (1/3)*sin(3*X);
+X = linspace(-10, 10, 200)';
+% Use a small epsilon to avoid division by zero at x = 0
+epsilon = 1e-10;
+y = sin(X + epsilon) ./ (X + epsilon);
 
 % Normalization for Sigmoid activation
-X_norm = X / (2*pi);
+X_min = min(X); X_max = max(X);
+X_norm = (X - X_min) / (X_max - X_min);
 y_min = min(y); y_max = max(y);
 y_norm = (y - y_min) / (y_max - y_min);
 
@@ -40,7 +42,7 @@ W3 = randn(64, 1) * sqrt(1/64); b3 = zeros(1, 1);
 % RMSprop parameters
 lr = 0.002;
 beta = 0.9;
-eps = 1e-8;
+eps_opt = 1e-8;
 mW1 = zeros(size(W1)); mb1 = zeros(size(b1));
 mW2 = zeros(size(W2)); mb2 = zeros(size(b2));
 mW3 = zeros(size(W3)); mb3 = zeros(size(b3));
@@ -88,29 +90,23 @@ for epoch = 1:epochs
     % Update (RMSprop)
     mW3 = beta * mW3 + (1-beta) * d_W3.^2;
     mb3 = beta * mb3 + (1-beta) * d_b3.^2;
-    W3 = W3 - lr * d_W3 ./ (sqrt(mW3) + eps);
-    b3 = b3 - lr * d_b3 ./ (sqrt(mb3) + eps);
+    W3 = W3 - lr * d_W3 ./ (sqrt(mW3) + eps_opt);
+    b3 = b3 - lr * d_b3 ./ (sqrt(mb3) + eps_opt);
     
     mW2 = beta * mW2 + (1-beta) * d_W2.^2;
     mb2 = beta * mb2 + (1-beta) * d_b2.^2;
-    W2 = W2 - lr * d_W2 ./ (sqrt(mW2) + eps);
-    b2 = b2 - lr * d_b2 ./ (sqrt(mb2) + eps);
+    W2 = W2 - lr * d_W2 ./ (sqrt(mW2) + eps_opt);
+    b2 = b2 - lr * d_b2 ./ (sqrt(mb2) + eps_opt);
     
     mW1 = beta * mW1 + (1-beta) * d_W1.^2;
     mb1 = beta * mb1 + (1-beta) * d_b1.^2;
-    W1 = W1 - lr * d_W1 ./ (sqrt(mW1) + eps);
-    b1 = b1 - lr * d_b1 ./ (sqrt(mb1) + eps);
+    W1 = W1 - lr * d_W1 ./ (sqrt(mW1) + eps_opt);
+    b1 = b1 - lr * d_b1 ./ (sqrt(mb1) + eps_opt);
     
-    if mod(epoch, 5000) == 0
+    if mod(epoch, 100) == 0
         disp(['Epoch ', num2str(epoch), ': Train Loss = ', num2str(train_loss), ', Val Loss = ', num2str(val_loss)]);
     end
 end
-
-% Final Prediction
-z1_f = X_norm * W1 + b1; a1_f = tanh(z1_f);
-z2_f = a1_f * W2 + b2; a2_f = tanh(z2_f);
-y_pred_norm = a2_f * W3 + b3;
-y_pred = y_pred_norm * (y_max - y_min) + y_min;
 
 % Final Prediction
 z1_f = X_norm * W1 + b1; a1_f = tanh(z1_f);
@@ -125,7 +121,7 @@ figure;
 subplot(2, 1, 1);
 plot(X, y, 'b', 'LineWidth', 2); hold on;
 plot(X, y_pred, 'r--', 'LineWidth', 2);
-title('Neural Network Function Fit: sin(x) + 0.5*sin(2x) + 1/3*sin(3x)');
+title('Neural Network Function Fit: sin(x) / x');
 legend('Actual Data', 'NN Prediction');
 grid on;
 
@@ -137,4 +133,4 @@ xlabel('Epochs'); ylabel('MSE Loss');
 legend('Train Loss', 'Val Loss');
 grid on;
 
-disp('Deep Learning Theory Session Complete.');
+disp('Deep Learning Sinc Session Complete.');

@@ -221,6 +221,13 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
                 print(f"  {name:14} : {info['dtype']:10}{shape_str:12} = {info['preview']}")
         
         print(f"\n{'='*60}\n")
+        
+        try:
+            import matplotlib.pyplot as plt
+            if plt.get_fignums():
+                plt.show()
+        except Exception:
+            pass
                 
     except Exception as e:
         print_error(f"An unexpected error occurred during execution: {e}")
@@ -366,6 +373,13 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                     print(result.stdout.rstrip())
                                 if result.stderr:
                                     print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
+                                    
+                                try:
+                                    import matplotlib.pyplot as plt
+                                    if plt.get_fignums():
+                                        plt.show()
+                                except Exception:
+                                    pass
                             except UnicodeDecodeError:
                                 print_error(f"Script '{script_path.name}' contains invalid characters.")
                             except OSError as e:
@@ -443,6 +457,13 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                 dtype = info['dtype']
                                 print(f"{name:14} {shape_str:15} {dtype}")
                             print("")
+                            
+                    try:
+                        import matplotlib.pyplot as plt
+                        if plt.get_fignums():
+                            plt.show()
+                    except Exception:
+                        pass
                 except asyncio.TimeoutError:
                     print_error("Command timed out after 30s.")
                 except Exception as e:
