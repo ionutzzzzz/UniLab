@@ -2215,34 +2215,71 @@ def fprintf(*args):
     if not args: return
     fmt = args[0]
     import sys
+    import numpy as np
     
-    # Process arguments to convert 1x1 numpy arrays to scalars for formatting
-    def process_arg(a):
-        if isinstance(a, np.ndarray) and a.size == 1:
-            return a.item()
-        return a
-
+    handle = 1
     if isinstance(fmt, (int, float)):
         handle = int(fmt)
         if len(args) < 2: return
         fmt = args[1]
-        args_to_format = tuple(process_arg(a) for a in args[2:])
-        try:
-            output = fmt % args_to_format if args_to_format else str(fmt)
-        except:
-            output = str(fmt)
-        if handle == 2:
-            sys.stderr.write(output)
-            sys.stderr.flush()
-        else:
-            sys.stdout.write(output)
-            sys.stdout.flush()
+        data_args = args[2:]
     else:
-        args_to_format = tuple(process_arg(a) for a in args[1:])
-        try:
-            output = fmt % args_to_format if args_to_format else str(fmt)
-        except:
+        data_args = args[1:]
+        
+    try:
+        if not data_args:
             output = str(fmt)
+        else:
+            # Flatten arrays to format them element by element
+            flat_args = []
+            for a in data_args:
+                if isinstance(a, np.ndarray):
+                    # Matlab flattens in Fortran order (column-major)
+                    flat_args.extend(a.flatten('F').tolist())
+                elif isinstance(a, list):
+                    flat_args.extend(a)
+                else:
+                    flat_args.append(a)
+                    
+            if not flat_args:
+                output = str(fmt)
+            else:
+                # Count format specifiers
+                import re
+                specifiers = re.findall(r'%[-+ 0#]*\d*(?:\.\d*)?[hlL]?[diuoxXfFeEgGaAcsp]', str(fmt))
+                num_specs = len(specifiers)
+                
+                if num_specs == 0:
+                    output = str(fmt)
+                else:
+                    # Repeat formatting until all elements are consumed
+                    outputs = []
+                    i = 0
+                    while i < len(flat_args):
+                        chunk = tuple(flat_args[i:i+num_specs])
+                        if len(chunk) < num_specs:
+                            # Pad with necessary values or just format what's left
+                            # Usually Matlab stops or pads, we'll try to format the remaining
+                            # by constructing a new format string, but for simplicity we'll just format
+                            # and let python throw if it's missing args. To avoid throwing, we pad with 0.
+                            chunk = chunk + (0,) * (num_specs - len(chunk))
+                        
+                        # Replace Matlab specific format specifiers (e.g. \n needs to be handled properly if escaped)
+                        fmt_str = str(fmt).replace('\\n', '\n').replace('\\t', '\t')
+                        try:
+                            outputs.append(fmt_str % chunk)
+                        except Exception:
+                            outputs.append(fmt_str)
+                        i += num_specs
+                    
+                    output = "".join(outputs)
+    except Exception as e:
+        output = str(fmt).replace('\\n', '\n').replace('\\t', '\t')
+        
+    if handle == 2:
+        sys.stderr.write(output)
+        sys.stderr.flush()
+    else:
         sys.stdout.write(output)
         sys.stdout.flush()
 
@@ -2693,9 +2730,44 @@ def mat2str(x):
 
 def sprintf(fmt, *args):
     try:
-        return fmt % args
-    except:
-        return str(fmt)
+        if not args:
+            return str(fmt)
+            
+        import numpy as np
+        flat_args = []
+        for a in args:
+            if isinstance(a, np.ndarray):
+                flat_args.extend(a.flatten('F').tolist())
+            elif isinstance(a, list):
+                flat_args.extend(a)
+            else:
+                flat_args.append(a)
+                
+        if not flat_args:
+            return str(fmt)
+            
+        import re
+        specifiers = re.findall(r'%[-+ 0#]*\d*(?:\.\d*)?[hlL]?[diuoxXfFeEgGaAcsp]', str(fmt))
+        num_specs = len(specifiers)
+        
+        if num_specs == 0:
+            return str(fmt)
+            
+        outputs = []
+        i = 0
+        fmt_str = str(fmt).replace('\\n', '\n').replace('\\t', '\t')
+        while i < len(flat_args):
+            chunk = tuple(flat_args[i:i+num_specs])
+            if len(chunk) < num_specs:
+                chunk = chunk + (0,) * (num_specs - len(chunk))
+            try:
+                outputs.append(fmt_str % chunk)
+            except Exception:
+                outputs.append(fmt_str)
+            i += num_specs
+        return "".join(outputs)
+    except Exception:
+        return str(fmt).replace('\\n', '\n').replace('\\t', '\t')
 
 plt.rcParams.update({
     'axes.prop_cycle': plt.cycler(color=['#4fc3f7', '#81c784', '#ffb74d', '#f06292', '#ba68c8', '#a1887f']),
