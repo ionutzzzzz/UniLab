@@ -153,14 +153,13 @@ class _ConsoleViewState extends State<_ConsoleView> {
 
   void _submitCommand() {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
-    if (appProvider.isExecuting) return; // Prevent submission while busy
+    if (appProvider.isExecuting) return; 
     
     final value = _controller.text.trim();
     if (value.isNotEmpty) {
       appProvider.runConsoleCommand(value);
       _controller.clear();
 
-      // Auto-scroll to bottom
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -182,33 +181,42 @@ class _ConsoleViewState extends State<_ConsoleView> {
     final text = _controller.text;
     final selection = _controller.selection;
 
-    if (!selection.isValid || selection.baseOffset == 0) return;
+    if (!selection.isValid) return;
 
-    final beforeCursor = text.substring(0, selection.baseOffset);
-    final lastSpace = beforeCursor.lastIndexOf(' ');
-    final lastWord = beforeCursor.substring(lastSpace + 1);
+    final offset = selection.baseOffset;
+    if (offset == 0) return;
 
+    int start = offset - 1;
+    while (start >= 0) {
+      final char = text[start];
+      if (RegExp(r'''[a-zA-Z0-9_
+\'"]''').hasMatch(char)) {
+        if (char == ' ') break;
+        start--;
+      } else {
+        break;
+      }
+    }
+    start++; 
+
+    final lastWord = text.substring(start, offset);
     if (lastWord.isEmpty) return;
 
-    // Call backend for autocomplete suggestions
     final appProvider = Provider.of<AppProvider>(context, listen: false);
-    final suggestions = await appProvider.getAutocomplete(lastWord);
+    final suggestions = await appProvider.getAutocomplete(lastWord, fullLine: text);
 
-    if (suggestions.isNotEmpty) {
-      _applyCompletion(suggestions.first, lastWord);
+    if (suggestions.isNotEmpty && mounted) {
+      _applyCompletion(suggestions.first, lastWord, start, offset);
     }
   }
 
-  void _applyCompletion(String completion, String lastWord) {
+  void _applyCompletion(String completion, String lastWord, int start, int end) {
     final text = _controller.text;
-    final selection = _controller.selection;
-    final offset = selection.baseOffset;
-
-    final newText = text.replaceRange(offset - lastWord.length, offset, completion);
+    final newText = text.replaceRange(start, end, completion);
     _controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
-        offset: offset - lastWord.length + completion.length,
+        offset: start + completion.length,
       ),
     );
   }
@@ -221,7 +229,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
     final settings = settingsProvider.settings;
     final messages = appProvider.consoleMessages;
 
-    // Auto-scroll to bottom after each build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -237,7 +244,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
           if (isCtrlPressed) {
             final currentSize = settings.fontSize;
-            // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
             final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
             if (newSize != currentSize) {
               settingsProvider.updateSettings(settings.copyWith(fontSize: newSize));
@@ -247,46 +253,45 @@ class _ConsoleViewState extends State<_ConsoleView> {
       },
       child: Column(
         children: [
-                  // Console History
-                  Expanded(
-                    child: SelectionArea(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: EdgeInsets.all(ui.spacing.md),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = messages[index];
-                          final isError = msg.type == ConsoleMessageType.error;
-                          final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
-          
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (isCommand)
-                                  UiText(
-                                    text: ' ',
-                                    variant: UiTextVariant.consoleBody,
-                                    fontWeight: FontWeight.bold,
-                                    color: ui.colors.accent,
-                                    fontSize: settings.fontSize,
-                                  ),
-                                Expanded(
-                                  child: UiText(
-                                    text: msg.text,
-                                    variant: UiTextVariant.consoleBody,
-                                    color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
-                                    fontSize: settings.fontSize,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+          Expanded(
+            child: SelectionArea(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: EdgeInsets.all(ui.spacing.md),
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  final msg = messages[index];
+                  final isError = msg.type == ConsoleMessageType.error;
+                  final isCommand = msg.source == 'System' && msg.type == ConsoleMessageType.output;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isCommand)
+                          UiText(
+                            text: ' ',
+                            variant: UiTextVariant.consoleBody,
+                            fontWeight: FontWeight.bold,
+                            color: ui.colors.accent,
+                            fontSize: settings.fontSize,
+                          ),
+                        Expanded(
+                          child: UiText(
+                            text: msg.text,
+                            variant: UiTextVariant.consoleBody,
+                            color: isError ? ui.colors.danger : (isCommand ? ui.colors.textPrimary : ui.colors.textSecondary),
+                            fontSize: settings.fontSize,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),          // Input Line
+                  );
+                },
+              ),
+            ),
+          ),
           Container(
             padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
             decoration: BoxDecoration(
@@ -307,7 +312,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
                     controller: _controller,
                     focusNode: _focusNode,
                     autofocus: true,
-                    enabled: true, // Always enabled to maintain focus
+                    enabled: true,
                     maxLines: null,
                     minLines: 1,
                     style: ui.typography.consoleBody.copyWith(
@@ -323,7 +328,6 @@ class _ConsoleViewState extends State<_ConsoleView> {
                       hintStyle: TextStyle(color: ui.colors.textDisabled),
                     ),
                     onChanged: (value) {
-                      // Force rebuild for disabled state logic if needed
                       setState(() {});
                     },
                   ),

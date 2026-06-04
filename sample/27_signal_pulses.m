@@ -28,7 +28,7 @@ plot(t, y_rect, 'r-', 'LineWidth', 2);
 title('Rectangular Pulse (Width = 2)'); grid on;
 
 subplot(3, 1, 3);
-plot(t, y_step, 'k-', 'LineWidth', 2);
+plot(t, y_step, 'g-', 'LineWidth', 2);
 title('Delayed Unit Step Function u(t-1)'); grid on;
 
 disp('Signal visualizations generated successfully.');

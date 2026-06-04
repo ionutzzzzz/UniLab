@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../theme/syntax_themes.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
+import '../../../providers/riverpod_providers.dart';
 import 'package:context_menus/context_menus.dart';
 
-class EditorSurface extends StatefulWidget {
+class EditorSurface extends ConsumerStatefulWidget {
   const EditorSurface({
     super.key,
     required this.controller,
@@ -20,14 +22,57 @@ class EditorSurface extends StatefulWidget {
   final FocusNode focusNode;
 
   @override
-  State<EditorSurface> createState() => _EditorSurfaceState();
+  ConsumerState<EditorSurface> createState() => _EditorSurfaceState();
 }
 
-class _EditorSurfaceState extends State<EditorSurface> {
+class _EditorSurfaceState extends ConsumerState<EditorSurface> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_updateCursorPosition);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_updateCursorPosition);
+    super.dispose();
+  }
+
+  void _updateCursorPosition() {
+    final selection = widget.controller.selection;
+    if (selection.isValid) {
+      final text = widget.controller.text;
+      final offset = selection.baseOffset;
+      
+      int line = 1;
+      int column = 1;
+      
+      for (int i = 0; i < offset; i++) {
+        if (text[i] == '\n') {
+          line++;
+          column = 1;
+        } else {
+          column++;
+        }
+      }
+      
+      // Update provider
+      Future.microtask(() {
+        if (mounted) {
+          ref.read(cursorPositionProvider.notifier).state = {
+            'line': line,
+            'column': column,
+          };
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final settings = context.watch<SettingsProvider>().settings;
+    final settings = p.Provider.of<SettingsProvider>(context).settings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Get selected syntax theme colors
     final highlightTheme = SyntaxHighlightTheme.all.firstWhere(
@@ -36,7 +81,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
     );
     final colors = highlightTheme.colors;
     
-    final isInterfaceLight = Theme.of(context).brightness == Brightness.light;
+    final isInterfaceLight = !isDark;
     final editorBg = isInterfaceLight ? Colors.white : highlightTheme.backgroundColor;
     
     Color editorFg = highlightTheme.foregroundColor;
@@ -83,7 +128,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
       'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
     };
 
-    final appProvider = context.watch<AppProvider>();
+    final appProvider = p.Provider.of<AppProvider>(context);
 
     return Listener(
       onPointerSignal: (pointerSignal) {
@@ -93,7 +138,7 @@ class _EditorSurfaceState extends State<EditorSurface> {
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
           if (isCtrlPressed) {
-            final provider = context.read<SettingsProvider>();
+            final provider = p.Provider.of<SettingsProvider>(context, listen: false);
             final currentSize = provider.settings.fontSize;
             // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
             final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);

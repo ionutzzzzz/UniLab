@@ -562,11 +562,34 @@ class TranspilerEngine(BaseEngine):
         
         # Keywords and Builtins from UniLab.py logic
         KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
-        BUILTINS = ['disp', 'fprintf', 'error', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 'fill', 'xlim', 'ylim']
+        
+        # Comprehensive list of UniLab Builtins and Toolbox functions
+        BUILTINS = [
+            # Base Builtins
+            'disp', 'fprintf', 'error', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'syms', 'factorial', 'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 'fill', 'xlim', 'ylim',
+            # Astronomy
+            'absolute_magnitude_calc', 'aerospacelib', 'apparent_magnitude_calc', 'chandrasekhar_limit_approx', 'distance_modulus', 'ecef2eci', 'ecef2lla', 'eci2ecef', 'eddington_luminosity', 'ephemeris', 'gravitational_lensing_angle', 'gravitywgs84', 'hohmann_transfer', 'hubble_law', 'juliandate', 'keplers_third_law', 'lla2ecef', 'luminosity_star', 'orbital_period_calc', 'parallax_distance', 'redshift', 'roche_limit', 'schwarzschild_radius', 'siderealtime', 'star_temperature_wien', 'vis_viva_equation', 'wrldmagm',
+            # Chemistry
+            'addreaction', 'addspecies', 'arrhenius_equation', 'atomicmass', 'boiling_point_elevation', 'equilibrium_constant_kp_kc', 'freezing_point_depression', 'half_life_first_order', 'half_life_second_order', 'henry_law_constant', 'limiting_reactant', 'molality', 'molarity', 'molviewer', 'percent_yield', 'ph_calc', 'rate_constant_calc', 'sbiofit', 'sbiomodel', 'sbiosimulate', 'theoretical_yield', 'van_t_hoff_equation',
+            # Codegen & Control
+            'codegen', 'acker', 'allmargin', 'append', 'bandwidth', 'blkdiag', 'bode', 'c2d', 'canon', 'care', 'ctrb', 'd2c', 'damp', 'damping_ratio_calc', 'dare', 'dcgain', 'feedback', 'frd', 'freqresp', 'gain_margin_calc', 'gram', 'impulse', 'initial', 'kalman', 'lag_compensator', 'lead_compensator', 'lqg', 'lqr', 'lsim', 'lyap', 'margin', 'markov', 'modes', 'nichols', 'nyquist', 'obsv', 'parallel', 'peak_overshoot_calc', 'phase_margin_calc', 'pid', 'pid_controller', 'pidstd', 'place', 'pole', 'ponder', 'pzmap', 'rise_time_calc', 'rlocus', 'routh_table', 'series', 'settling_time_calc', 'sigma', 'ss', 'ss2tf', 'ss2zp', 'ssdata', 'state_space_stability', 'steady_state_error_calc', 'step', 'stepinfo', 'sys2hnn', 'tf', 'tf2ss', 'tfdata', 'zero', 'zp2ss', 'zpk', 'zpkdata',
+            # Electrical
+            'abc2alphaBeta', 'abc2dq', 'alphaBeta2abc', 'alphaBeta2dq', 'capacitor', 'capacitors_in_parallel', 'capacitors_in_series', 'current_source', 'dq2abc', 'dq2alphaBeta', 'economic_dispatch', 'ee_motor_efficiency_map', 'ee_pwm_generation', 'electrical_power', 'electrical_power_res', 'fluxlinkage', 'impedance_freq', 'inductor', 'instfreq', 'interleaved_pwm', 'power_analyze', 'power_lineparam', 'power_loadflow', 'rc_time_constant', 'resistor', 'resistors_in_parallel', 'resistors_in_series', 'svpwm', 'thd', 'transformer_efficiency', 'voltage_source', 'wye_delta_transform',
+            # Finance
+            'IRFunctionCurve', 'Portfolio', 'PortfolioCVaR', 'PortfolioMAD', 'annuity_fv', 'annuity_pv', 'asset_turnover', 'beta_calc', 'black_scholes_call', 'black_scholes_delta', 'black_scholes_gamma', 'black_scholes_put', 'black_scholes_rho', 'black_scholes_theta', 'black_scholes_vega', 'bndcon', 'bnddurp', 'bndprice', 'bndyield', 'bond_price_calc', 'bond_yield_to_maturity', 'cagr', 'compound_interest', 'convexity', 'creditMigrationCopula', 'creditscorecard', 'current_ratio', 'days_sales_outstanding', 'debt_to_equity', 'ebitda', 'eps_calc', 'sharpe_ratio', 'simple_interest', 'sortino_ratio', 'treynor_ratio', 'wacc',
+            # Geometry
+            'cartesian_to_cylindrical', 'cartesian_to_spherical', 'circle_area', 'circle_circumference', 'circumcircle_radius', 'cone_surface_area', 'cone_volume', 'cylinder_surface_area', 'cylinder_volume', 'cylindrical_to_cartesian', 'distance_2d', 'distance_3d', 'ellipse_area', 'ellipsoid_volume', 'herons_formula', 'inpolygon', 'intersect', 'polyarea', 'polyshape', 'sphere_surface_area', 'sphere_volume', 'spherical_to_cartesian', 'triangle_area', 'union', 'voronoi',
+            # Image & Signal
+            'adapthisteq', 'im2bw', 'imbinarize', 'imclose', 'imdilate', 'imerode', 'imfilter', 'imhist', 'imopen', 'imread', 'imresize', 'imrotate', 'imshow', 'imwarp', 'imwrite', 'rgb2gray', 'awgn', 'butter', 'cheby1', 'cheby2', 'cwt', 'designfilt', 'fft', 'fftshift', 'filter', 'filtfilt', 'findpeaks', 'freqz', 'ifft', 'ifftshift', 'pwelch', 'resample', 'spectrogram', 'xcorr',
+            # Stats & ML
+            'anova1', 'anovan', 'fitdist', 'logistic_regression', 'normal_pdf', 'pdf', 'cdf', 'ttest', 'ttest2', 'z_score', 'accuracy', 'confusion_matrix', 'fitcknn', 'fitclinear', 'fitcnb', 'fitcsvm', 'fitctree', 'fitglm', 'fitlm', 'kmeans', 'pca', 'predict', 'trainNetwork', 'trainingOptions',
+            # System & Files
+            'copyfile', 'delete', 'mkdir', 'movefile', 'rmdir', 'system', 'unix', 'webread', 'webwrite', 'fclose', 'fopen', 'fread', 'fseek', 'ftell', 'fwrite', 'jsondecode', 'jsonencode', 'h5read', 'h5write'
+        ]
         
         # Context-aware triggers for path completion
-        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ', 'cat ')
-        is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
+        path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ', 'import ', 'pwd ', 'cat ', 'imread(', 'imwrite(', 'fopen(')
+        is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.') or (text.startswith("'") and '/' in text) or (text.startswith('"') and '/' in text)
         
         if is_path_context:
             # Strip leading/trailing quotes for path search
@@ -574,23 +597,21 @@ class TranspilerEngine(BaseEngine):
             
             # Handle path completion relative to session CWD
             search_path = self.cwd
+            text_prefix = clean_text
+            
             if '/' in clean_text or '\\' in clean_text:
                 dirname = os.path.dirname(clean_text)
-                if dirname:
+                if dirname or clean_text.startswith('/') or clean_text.startswith('\\'):
                     try:
                         # Handle both relative and absolute paths
                         potential_path = pathlib.Path(dirname)
                         if potential_path.is_absolute():
-                            search_path = potential_path.resolve()
+                            search_path = potential_path
                         else:
-                            search_path = (self.cwd / dirname).resolve()
+                            search_path = (self.cwd / dirname)
                         text_prefix = os.path.basename(clean_text)
                     except Exception:
                         return []
-                else:
-                    text_prefix = clean_text
-            else:
-                text_prefix = clean_text
 
             if not search_path.exists() or not search_path.is_dir():
                 return []
@@ -606,8 +627,11 @@ class TranspilerEngine(BaseEngine):
                         # Reconstruct the completion string
                         if '/' in clean_text or '\\' in clean_text:
                             dirname = os.path.dirname(clean_text)
-                            sep = '/' if '/' in clean_text else '\\'
-                            completion = dirname + sep + rel_name
+                            sep = '/' if '/' in clean_text or clean_text.startswith('/') else '\\'
+                            if dirname:
+                                completion = dirname + sep + rel_name
+                            else:
+                                completion = sep + rel_name
                         else:
                             completion = rel_name
                             
@@ -629,12 +653,12 @@ class TranspilerEngine(BaseEngine):
             
             # M-file completions from search paths
             m_files = set()
-            for path in self.engine.search_paths:
+            for path in self.search_paths:
                 if path.exists():
-                    for p in path.glob('*.m'):
-                        m_files.add(p.stem)
+                    for p_item in path.glob('*.m'):
+                        m_files.add(p_item.stem)
             
-            all_symbols = KEYWORDS + BUILTINS + workspace_vars + list(m_files)
+            all_symbols = list(set(KEYWORDS + BUILTINS + workspace_vars + list(m_files)))
             return sorted([w for w in all_symbols if w.startswith(text)])
 
     def _get_variables(self):

@@ -46,6 +46,9 @@ final commandPaletteHistoryProvider = StateNotifierProvider<CommandHistoryNotifi
   return CommandHistoryNotifier();
 });
 
+/// Provider for current cursor position (line, column)
+final cursorPositionProvider = StateProvider<Map<String, int>>((ref) => {'line': 1, 'column': 1});
+
 // ==================== Notifiers ====================
 
 class OpenFilesNotifier extends StateNotifier<List<OpenFile>> {

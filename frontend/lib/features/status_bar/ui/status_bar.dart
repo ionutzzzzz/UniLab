@@ -7,6 +7,7 @@ import 'package:provider/provider.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/app_provider.dart';
+import '../../../providers/riverpod_providers.dart';
 import '../domain/status_bar_slot.dart';
 
 // Use a unique name for the provider to avoid hot-reload type conflicts
@@ -45,23 +46,23 @@ final statusBarSlotsProvider = Provider<List<StatusBarSlot>>((ref) {
   ];
 });
 
-class AppStatusBar extends StatefulWidget {
+class AppStatusBar extends ConsumerStatefulWidget {
   const AppStatusBar({super.key});
 
   @override
-  State<AppStatusBar> createState() => _AppStatusBarState();
+  ConsumerState<AppStatusBar> createState() => _AppStatusBarState();
 }
 
-class _AppStatusBarState extends State<AppStatusBar> {
+class _AppStatusBarState extends ConsumerState<AppStatusBar> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = p.Provider.of<AppProvider>(context);
+    final cursorPosition = ref.watch(cursorPositionProvider);
 
     // Build the status label based on execution state
     final statusLabel = appProvider.isExecuting ? 'Running script...' : 'Ready';
-    final statusColor = appProvider.isExecuting ? ui.colors.warning : ui.colors.success;
-
+    
     final slots = [
       StatusBarSlot(
         id: 'status',
@@ -70,7 +71,12 @@ class _AppStatusBarState extends State<AppStatusBar> {
         priority: 100,
       ),
       const StatusBarSlot(id: 'branch', label: 'main', icon: LucideIcons.gitBranch, alignment: StatusBarSlotAlignment.left, priority: 90),
-      const StatusBarSlot(id: 'cursor', label: 'Ln 1, Col 1', alignment: StatusBarSlotAlignment.right, priority: 100),
+      StatusBarSlot(
+        id: 'cursor', 
+        label: 'Ln ${cursorPosition['line']}, Col ${cursorPosition['column']}', 
+        alignment: StatusBarSlotAlignment.right, 
+        priority: 100
+      ),
       const StatusBarSlot(id: 'encoding', label: 'UTF-8', alignment: StatusBarSlotAlignment.right, priority: 90),
     ];
 

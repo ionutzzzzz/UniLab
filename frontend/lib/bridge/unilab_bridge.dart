@@ -21,8 +21,8 @@ typedef UnilabExecute = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<
 typedef UnilabGetWorkspaceNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 typedef UnilabGetWorkspace = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 
-typedef UnilabGetAutocompleteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text);
-typedef UnilabGetAutocomplete = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text);
+typedef UnilabGetAutocompleteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text, Pointer<Utf8> line);
+typedef UnilabGetAutocomplete = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> text, Pointer<Utf8> line);
 
 typedef UnilabListFilesNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 typedef UnilabListFiles = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
@@ -408,7 +408,7 @@ class UniLabBridge {
 
   /// Get autocomplete suggestions
 
-  Future<List<String>> getAutocomplete(String text) async {
+  Future<List<String>> getAutocomplete(String text, {String? fullLine}) async {
 
     if (_sessionId == null) return [];
 
@@ -417,6 +417,8 @@ class UniLabBridge {
       'sessionId': _sessionId,
 
       'text': text,
+      
+      'line': fullLine ?? text,
 
     });
 
@@ -685,12 +687,16 @@ class UniLabBridge {
             final sidPtr = (params['sessionId'] as String).toNativeUtf8();
 
             final textPtr = (params['text'] as String).toNativeUtf8();
+            
+            final linePtr = (params['line'] as String? ?? params['text'] as String).toNativeUtf8();
 
-            final resPtr = unilabGetAutocomplete(sidPtr, textPtr);
+            final resPtr = unilabGetAutocomplete(sidPtr, textPtr, linePtr);
 
             malloc.free(sidPtr);
 
             malloc.free(textPtr);
+            
+            malloc.free(linePtr);
 
             final res = jsonDecode(resPtr.toDartString());
 

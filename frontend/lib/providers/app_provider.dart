@@ -26,7 +26,7 @@ class AppProvider with ChangeNotifier {
   final List<ConsoleMessage> _consoleMessages = [];
   Map<String, dynamic> _workspaceVariables = {};
   final List<PlotData> _generatedPlots = [];
-  
+
   // Simulation State
   bool _isSimulationActive = false;
   String? _simulationModel;
@@ -41,6 +41,8 @@ class AppProvider with ChangeNotifier {
   String _selectedWorkspaceSegment = 'Variables';
 
   String? _plotsWindowId;
+  String? _simulationWindowId;
+
   BackendStatus _backendStatus = BackendStatus.connecting;
 
   StreamSubscription<WatchEvent>? _watcherSubscription;
@@ -52,14 +54,17 @@ class AppProvider with ChangeNotifier {
 
   List<UniLabFile> get openFiles => _openFiles;
   int get activeFileIndex => _activeFileIndex;
-  UniLabFile? get activeFile => _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
-  List<ConsoleMessage> get consoleMessages => List.unmodifiable(_consoleMessages);
+  UniLabFile? get activeFile =>
+      _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
+  List<ConsoleMessage> get consoleMessages =>
+      List.unmodifiable(_consoleMessages);
   String get consoleOutput => _consoleMessages.map((m) => m.text).join('\n');
   Map<String, dynamic> get workspaceVariables => _workspaceVariables;
-  
+
   bool get isSimulationActive => _isSimulationActive;
   String? get simulationModel => _simulationModel;
-  List<Map<String, dynamic>> get simulationControls => List.unmodifiable(_simulationControls);
+  List<Map<String, dynamic>> get simulationControls =>
+      List.unmodifiable(_simulationControls);
   List<PlotData> get simulationPlots => List.unmodifiable(_simulationPlots);
 
   List<PlotData> get generatedPlots => List.unmodifiable(_generatedPlots);
@@ -82,10 +87,7 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  AppProvider({
-    this.onVariablesUpdated,
-    this.onPlotsUpdated,
-  }) {
+  AppProvider({this.onVariablesUpdated, this.onPlotsUpdated}) {
     _projectRoot = _discoverProjectRoot();
     _loadAvailableSamples();
     refreshProjectFiles();
@@ -94,7 +96,9 @@ class AppProvider with ChangeNotifier {
     _initWindowsListener();
 
     // Listen for control updates from simulation window
-    dmw.WindowMethodChannel('simulation_channel').setMethodCallHandler((call) async {
+    dmw.WindowMethodChannel('simulation_channel').setMethodCallHandler((
+      call,
+    ) async {
       if (call.method == 'on_sim_control') {
         final data = jsonDecode(call.arguments);
         await sendSimControlUpdate(data['id'], data['value']);
@@ -111,7 +115,8 @@ class AppProvider with ChangeNotifier {
         final samplePath = p.join(current.path, 'sample');
         if (io.Directory(samplePath).existsSync()) return samplePath;
         final parentSamplePath = p.join(current.parent.path, 'sample');
-        if (io.Directory(parentSamplePath).existsSync()) return parentSamplePath;
+        if (io.Directory(parentSamplePath).existsSync())
+          return parentSamplePath;
         current = current.parent;
       }
       return p.join(io.Directory.current.path, 'sample');
@@ -130,7 +135,8 @@ class AppProvider with ChangeNotifier {
 
   Future<void> _initBridge() async {
     try {
-      if (UniLabBridge.instance.initialized && UniLabBridge.instance.sessionId == null) {
+      if (UniLabBridge.instance.initialized &&
+          UniLabBridge.instance.sessionId == null) {
         UniLabBridge.resetInstance();
       }
       final backendPath = await UniLabBridge.findBackendPath();
@@ -138,7 +144,7 @@ class AppProvider with ChangeNotifier {
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
       _serverInfo = await UniLabBridge.instance.getInfo();
-      
+
       _bridgeEventSubscription?.cancel();
       _bridgeEventSubscription = UniLabBridge.instance.events.listen((event) {
         if (event['event'] == 'workspace_updated') {
@@ -155,10 +161,30 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _preWarmWindows() async {
+    await Future.delayed(const Duration(seconds: 1));
+
+    try {
+      final plotsWin = await dmw.WindowController.create(
+        dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots'})),
+      );
+      _plotsWindowId = plotsWin.windowId.toString();
+      await plotsWin.hide();
+
+      final simWin = await dmw.WindowController.create(
+        dmw.WindowConfiguration(arguments: jsonEncode({'type': 'simulation'})),
+      );
+      _simulationWindowId = simWin.windowId.toString();
+      await simWin.hide();
+    } catch (e) {
+      debugPrint('Error pre-warming windows: $e');
+    }
+  }
+
   void _handleSimEvent(Map<String, dynamic> event) {
     final type = event['event'];
     final data = event['data'];
-    
+
     if (type == 'SIM_START') {
       _isSimulationActive = true;
       _simulationModel = data['model'];
@@ -186,7 +212,9 @@ class AppProvider with ChangeNotifier {
       yData: [],
       imageDataUri: data['data'],
     );
-    final index = _simulationPlots.indexWhere((p) => p.title == 'Figure $figNum');
+    final index = _simulationPlots.indexWhere(
+      (p) => p.title == 'Figure $figNum',
+    );
     if (index != -1) {
       _simulationPlots[index] = plotData;
     } else {
@@ -195,10 +223,7 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> sendSimControlUpdate(String id, dynamic value) async {
-    await UniLabBridge.instance.sendSimEvent({
-      'id': id,
-      'value': value,
-    });
+    await UniLabBridge.instance.sendSimEvent({'id': id, 'value': value});
   }
 
   Future<void> openDetachedSimWindow() async {
@@ -262,12 +287,17 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _addConsoleMessage(String text, ConsoleMessageType type, {String? source}) {
+  void _addConsoleMessage(
+    String text,
+    ConsoleMessageType type, {
+    String? source,
+  }) {
     if (text.isEmpty) return;
     final lines = text.split('\n');
     for (var line in lines) {
       String trimmedLine = line.trim();
-      if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last) continue;
+      if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last)
+        continue;
       if (trimmedLine.contains('::CLEAR_TERMINAL::')) {
         clearConsole();
         continue;
@@ -286,7 +316,9 @@ class AppProvider with ChangeNotifier {
         if (parts.length > 1) _handleOpenFileCommand(parts[1].trim());
         continue;
       }
-      _consoleMessages.add(ConsoleMessage(text: line, type: type, source: source ?? 'System'));
+      _consoleMessages.add(
+        ConsoleMessage(text: line, type: type, source: source ?? 'System'),
+      );
     }
     notifyListeners();
   }
@@ -307,7 +339,9 @@ class AppProvider with ChangeNotifier {
     _watcherSubscription?.cancel();
     try {
       final watcher = DirectoryWatcher(_projectRoot);
-      _watcherSubscription = watcher.events.listen((event) => refreshProjectFiles());
+      _watcherSubscription = watcher.events.listen(
+        (event) => refreshProjectFiles(),
+      );
     } catch (e) {
       debugPrint('Watcher error: $e');
     }
@@ -384,7 +418,12 @@ class AppProvider with ChangeNotifier {
   }
 
   void addNewFile() {
-    final newFile = UniLabFile(id: const Uuid().v4(), name: 'Untitled${_openFiles.length + 1}.m', path: '', content: '');
+    final newFile = UniLabFile(
+      id: const Uuid().v4(),
+      name: 'Untitled${_openFiles.length + 1}.m',
+      path: '',
+      content: '',
+    );
     _openFiles.add(newFile);
     _activeFileIndex = _openFiles.length - 1;
     notifyListeners();
@@ -392,7 +431,12 @@ class AppProvider with ChangeNotifier {
 
   Future<void> createProjectFile(String fileName, String content) async {
     if (kIsWeb) {
-      final newFile = UniLabFile(id: const Uuid().v4(), name: fileName, path: 'web/$fileName', content: content);
+      final newFile = UniLabFile(
+        id: const Uuid().v4(),
+        name: fileName,
+        path: 'web/$fileName',
+        content: content,
+      );
       _openFiles.add(newFile);
       _activeFileIndex = _openFiles.length - 1;
       notifyListeners();
@@ -411,22 +455,40 @@ class AppProvider with ChangeNotifier {
   }
 
   void openImportDataTab() {
-    final existingIndex = _openFiles.indexWhere((f) => f.path == 'unilab://import-data');
+    final existingIndex = _openFiles.indexWhere(
+      (f) => f.path == 'unilab://import-data',
+    );
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
-      _openFiles.add(UniLabFile(id: 'import-data', name: 'Import Data', path: 'unilab://import-data', content: ''));
+      _openFiles.add(
+        UniLabFile(
+          id: 'import-data',
+          name: 'Import Data',
+          path: 'unilab://import-data',
+          content: '',
+        ),
+      );
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
   }
 
   void loadSample(String name, String content) {
-    final existingIndex = _openFiles.indexWhere((f) => f.name == name && f.path == 'sample/$name');
+    final existingIndex = _openFiles.indexWhere(
+      (f) => f.name == name && f.path == 'sample/$name',
+    );
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
     } else {
-      _openFiles.add(UniLabFile(id: const Uuid().v4(), name: name, path: 'sample/$name', content: content));
+      _openFiles.add(
+        UniLabFile(
+          id: const Uuid().v4(),
+          name: name,
+          path: 'sample/$name',
+          content: content,
+        ),
+      );
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
@@ -444,7 +506,14 @@ class AppProvider with ChangeNotifier {
       _activeFileIndex = existingIndex;
     } else {
       final content = await UniLabFileManager.readFile(file);
-      _openFiles.add(UniLabFile(id: const Uuid().v4(), name: p.basename(path), path: path, content: content));
+      _openFiles.add(
+        UniLabFile(
+          id: const Uuid().v4(),
+          name: p.basename(path),
+          path: path,
+          content: content,
+        ),
+      );
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
@@ -452,7 +521,8 @@ class AppProvider with ChangeNotifier {
 
   void closeFile(int index) {
     _openFiles.removeAt(index);
-    if (_activeFileIndex >= _openFiles.length) _activeFileIndex = _openFiles.length - 1;
+    if (_activeFileIndex >= _openFiles.length)
+      _activeFileIndex = _openFiles.length - 1;
     notifyListeners();
   }
 
@@ -465,16 +535,22 @@ class AppProvider with ChangeNotifier {
     if (oldIndex < newIndex) newIndex -= 1;
     final UniLabFile file = _openFiles.removeAt(oldIndex);
     _openFiles.insert(newIndex, file);
-    if (_activeFileIndex == oldIndex) _activeFileIndex = newIndex;
-    else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex) _activeFileIndex -= 1;
-    else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex) _activeFileIndex += 1;
+    if (_activeFileIndex == oldIndex)
+      _activeFileIndex = newIndex;
+    else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex)
+      _activeFileIndex -= 1;
+    else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex)
+      _activeFileIndex += 1;
     notifyListeners();
   }
 
   void updateFileContent(String id, String content) {
     final index = _openFiles.indexWhere((f) => f.id == id);
     if (index != -1 && _openFiles[index].content != content) {
-      _openFiles[index] = _openFiles[index].copyWith(content: content, isModified: true);
+      _openFiles[index] = _openFiles[index].copyWith(
+        content: content,
+        isModified: true,
+      );
       notifyListeners();
     }
   }
@@ -489,12 +565,21 @@ class AppProvider with ChangeNotifier {
     if (_savingFileIds.contains(fileToSave.id)) return;
     _savingFileIds.add(fileToSave.id);
     try {
-      String savePath = fileToSave.path.isEmpty ? p.join(_projectRoot, fileToSave.name) : fileToSave.path;
+      String savePath = fileToSave.path.isEmpty
+          ? p.join(_projectRoot, fileToSave.name)
+          : fileToSave.path;
       final file = io.File(savePath);
       await file.writeAsString(fileToSave.content);
-      await UniLabBridge.instance.createFile(fileToSave.name, fileToSave.content);
+      await UniLabBridge.instance.createFile(
+        fileToSave.name,
+        fileToSave.content,
+      );
       final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
-      if (idx != -1) _openFiles[idx] = _openFiles[idx].copyWith(path: savePath, isModified: false);
+      if (idx != -1)
+        _openFiles[idx] = _openFiles[idx].copyWith(
+          path: savePath,
+          isModified: false,
+        );
       await refreshProjectFiles();
     } catch (e) {
       _addConsoleMessage('Error saving file: $e', ConsoleMessageType.error);
@@ -532,15 +617,33 @@ class AppProvider with ChangeNotifier {
   Future<void> runActiveFile() async {
     if (activeFile == null) return;
     _isExecuting = true;
-    _addConsoleMessage('>> Running ${activeFile!.name}...', ConsoleMessageType.output, source: 'System');
+    _addConsoleMessage(
+      '>> Running ${activeFile!.name}...',
+      ConsoleMessageType.output,
+      source: 'System',
+    );
     try {
       final result = await UniLabBridge.instance.execute(activeFile!.content);
-      if (result.stdout.isNotEmpty) _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
-      if (result.stderr.isNotEmpty) _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
+      if (result.stdout.isNotEmpty)
+        _addConsoleMessage(
+          result.stdout,
+          ConsoleMessageType.output,
+          source: 'Script',
+        );
+      if (result.stderr.isNotEmpty)
+        _addConsoleMessage(
+          result.stderr,
+          ConsoleMessageType.error,
+          source: 'Error',
+        );
       _updateVariablesFromResult(result);
       _updatePlotsFromResult(result);
     } catch (e) {
-      _addConsoleMessage('Execution Error: $e', ConsoleMessageType.error, source: 'Error');
+      _addConsoleMessage(
+        'Execution Error: $e',
+        ConsoleMessageType.error,
+        source: 'Error',
+      );
     } finally {
       _isExecuting = false;
       await fetchWorkspaceVariables();
@@ -548,19 +651,33 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  void _updateVariablesFromResult(ExecutionResult result) => _updateVariablesFromMap(result.variables);
+  void _updateVariablesFromResult(ExecutionResult result) =>
+      _updateVariablesFromMap(result.variables);
 
   void _updatePlotsFromResult(ExecutionResult result) {
     _generatedPlots.clear();
     final b64List = result.extra['plot_data_b64'] as List? ?? [];
     for (int i = 0; i < b64List.length; i++) {
-      _generatedPlots.add(PlotData(title: 'Figure ${i + 1}', type: 'image', xData: [], yData: [], imageDataUri: b64List[i]));
+      _generatedPlots.add(
+        PlotData(
+          title: 'Figure ${i + 1}',
+          type: 'image',
+          xData: [],
+          yData: [],
+          imageDataUri: b64List[i],
+        ),
+      );
     }
     onPlotsUpdated?.call(_generatedPlots);
     if (_plotsWindowId != null) {
       try {
-        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod('update_plots', jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()));
-      } catch (e) { _plotsWindowId = null; }
+        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod(
+          'update_plots',
+          jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()),
+        );
+      } catch (e) {
+        _plotsWindowId = null;
+      }
     }
     if (_generatedPlots.isNotEmpty) {
       _selectedConsoleTab = 'plots';
@@ -569,50 +686,135 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Future<void> openDetachedPlotsWindow() async {
+  //   if (_plotsWindowId != null) {
+  //     final controller = dmw.WindowController.fromWindowId(_plotsWindowId!);
+  //     await controller.show();
+  //   } else {
+  //     final window = await dmw.WindowController.create(
+  //       dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots'})),
+  //     );
+
+  //     _plotsWindowId = window.windowId.toString();
+
+  //     await window.show();
+  //   }
+  // }
+
   Future<void> openDetachedPlotsWindow() async {
-    if (_plotsWindowId != null || kIsWeb) return;
-    try {
-      final window = await dmw.WindowController.create(dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots', 'plots': _generatedPlots.map((p) => p.toJson()).toList()}), hiddenAtLaunch: false));
-      _plotsWindowId = window.windowId.toString();
-      await window.show();
-    } catch (e) { _plotsWindowId = null; }
+    if (_plotsWindowId != null) {
+      final controller = dmw.WindowController.fromWindowId(_plotsWindowId!);
+      await controller.show();
+    }
   }
 
-  void clearConsole() { _consoleMessages.clear(); notifyListeners(); }
-  void clearPlots() { _generatedPlots.clear(); onPlotsUpdated?.call([]); notifyListeners(); }
+  Future<void> openDetachedSimulationWindow() async {
+    if (_simulationWindowId != null) {
+      final controller = dmw.WindowController.fromWindowId(
+        _simulationWindowId!,
+      );
+      await controller.show();
+    }
+  }
+
+  void clearConsole() {
+    _consoleMessages.clear();
+    notifyListeners();
+  }
+
+  void clearPlots() {
+    _generatedPlots.clear();
+    onPlotsUpdated?.call([]);
+    notifyListeners();
+  }
 
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
     _isExecuting = true;
-    _addConsoleMessage('>> $command', ConsoleMessageType.output, source: 'System');
+    _addConsoleMessage(
+      '>> $command',
+      ConsoleMessageType.output,
+      source: 'System',
+    );
     try {
       final result = await UniLabBridge.instance.execute(command);
-      if (result.stdout.isNotEmpty) _addConsoleMessage(result.stdout, ConsoleMessageType.output, source: 'Script');
-      if (result.stderr.isNotEmpty) _addConsoleMessage(result.stderr, ConsoleMessageType.error, source: 'Error');
+      if (result.stdout.isNotEmpty)
+        _addConsoleMessage(
+          result.stdout,
+          ConsoleMessageType.output,
+          source: 'Script',
+        );
+      if (result.stderr.isNotEmpty)
+        _addConsoleMessage(
+          result.stderr,
+          ConsoleMessageType.error,
+          source: 'Error',
+        );
       _updateVariablesFromResult(result);
       _updatePlotsFromResult(result);
-    } catch (e) { _addConsoleMessage('Error: $e', ConsoleMessageType.error, source: 'Error'); }
-    finally { _isExecuting = false; await fetchWorkspaceVariables(); notifyListeners(); }
+    } catch (e) {
+      _addConsoleMessage(
+        'Error: $e',
+        ConsoleMessageType.error,
+        source: 'Error',
+      );
+    } finally {
+      _isExecuting = false;
+      await fetchWorkspaceVariables();
+      notifyListeners();
+    }
   }
 
-  Future<List<String>> getAutocomplete(String prefix) async {
-    try { return await UniLabBridge.instance.getAutocomplete(prefix); }
-    catch (e) { return []; }
-  }
+    Future<List<String>> getAutocomplete(String prefix, {String? fullLine}) async {
+
+      try { return await UniLabBridge.instance.getAutocomplete(prefix, fullLine: fullLine); }
+
+      catch (e) { return []; }
+
+    }
 
   Future<void> fetchWorkspaceVariables() async {
-    try { _updateVariablesFromMap(await UniLabBridge.instance.getWorkspace()); }
-    catch (e) {}
+    try {
+      _updateVariablesFromMap(await UniLabBridge.instance.getWorkspace());
+    } catch (e) {}
   }
 
   Future<void> openFilePicker() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['m', 'txt', 'csv', 'json', 'md', 'py', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp3', 'wav', 'm4a', 'ogg']);
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [
+        'm',
+        'txt',
+        'csv',
+        'json',
+        'md',
+        'py',
+        'pdf',
+        'png',
+        'jpg',
+        'jpeg',
+        'gif',
+        'webp',
+        'mp3',
+        'wav',
+        'm4a',
+        'ogg',
+      ],
+    );
     if (result != null) {
       if (kIsWeb) {
         final fileData = result.files.single;
-        _openFiles.add(UniLabFile(id: const Uuid().v4(), name: fileData.name, path: 'web/${fileData.name}', content: String.fromCharCodes(fileData.bytes!)));
+        _openFiles.add(
+          UniLabFile(
+            id: const Uuid().v4(),
+            name: fileData.name,
+            path: 'web/${fileData.name}',
+            content: String.fromCharCodes(fileData.bytes!),
+          ),
+        );
         _activeFileIndex = _openFiles.length - 1;
-      } else if (result.files.single.path != null) await openFile(io.File(result.files.single.path!));
+      } else if (result.files.single.path != null)
+        await openFile(io.File(result.files.single.path!));
       notifyListeners();
     }
   }
@@ -623,13 +825,27 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> clearWorkspace() async {
-    try { await UniLabBridge.instance.execute('clear all'); _workspaceVariables.clear(); onVariablesUpdated?.call([]); notifyListeners(); }
-    catch (e) {}
+    try {
+      await UniLabBridge.instance.execute('clear all');
+      _workspaceVariables.clear();
+      onVariablesUpdated?.call([]);
+      notifyListeners();
+    } catch (e) {}
   }
 
-  void stopExecution() { _isExecuting = false; UniLabBridge.instance.sendSimEvent({'type': 'STOP'}); _addConsoleMessage('>> Execution stopped by user.', ConsoleMessageType.warning, source: 'System'); }
+  void stopExecution() {
+    _isExecuting = false;
+    UniLabBridge.instance.sendSimEvent({'type': 'STOP'});
+    _addConsoleMessage(
+      '>> Execution stopped by user.',
+      ConsoleMessageType.warning,
+      source: 'System',
+    );
+  }
 
-  final StreamController<String> _editorActionController = StreamController<String>.broadcast();
+  final StreamController<String> _editorActionController =
+      StreamController<String>.broadcast();
   Stream<String> get editorActions => _editorActionController.stream;
-  void triggerEditorAction(String action) => _editorActionController.add(action);
+  void triggerEditorAction(String action) =>
+      _editorActionController.add(action);
 }

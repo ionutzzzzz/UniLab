@@ -361,8 +361,9 @@ pub extern "C" fn unilab_get_workspace(session_id: *const c_char) -> *mut c_char
 pub extern "C" fn unilab_get_autocomplete(
     session_id: *const c_char,
     text: *const c_char,
+    line: *const c_char,
 ) -> *mut c_char {
-    if session_id.is_null() || text.is_null() {
+    if session_id.is_null() || text.is_null() || line.is_null() {
         let err = json!({"suggestions": []}).to_string();
         return CString::new(err).unwrap().into_raw();
     }
@@ -374,24 +375,20 @@ pub extern "C" fn unilab_get_autocomplete(
         let text_str = unsafe { CStr::from_ptr(text) }
             .to_string_lossy()
             .to_string();
+        let line_str = unsafe { CStr::from_ptr(line) }
+            .to_string_lossy()
+            .to_string();
 
         Python::with_gil(|py| {
             let sessions = get_sessions_map().lock().unwrap();
             let engine = sessions.get(&session_id_str)?.bind(py);
 
-            let globals_dict = engine.getattr("globals").ok()?;
-
-            // Get dir() of globals and filter
-            let builtins = py.import("builtins").ok()?;
-            let dir_fn = builtins.getattr("dir").ok()?;
-            let all_items = dir_fn.call1((globals_dict,)).ok()?;
-            let all_items: Vec<String> = all_items.extract().ok()?;
-
-            let suggestions: Vec<String> = all_items
-                .iter()
-                .filter(|s| s.starts_with(&text_str))
-                .cloned()
-                .collect();
+            // Call engine.complete(text, line)
+            let suggestions: Vec<String> = engine
+                .call_method1("complete", (text_str.clone(), line_str.clone()))
+                .ok()?
+                .extract()
+                .ok()?;
 
             let result = json!({
                 "suggestions": suggestions
