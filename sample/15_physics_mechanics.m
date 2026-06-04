@@ -25,12 +25,12 @@ x_t = kinematic_eq2(v0_x, 0, t);
 y_t = kinematic_eq2(v0_y, a_y, t);
 
 figure; plot(x_t, y_t, 'r-', 'LineWidth', 2);
-title('Baseball Projectile Motion'); xlabel('Distance (m)'); ylabel('Height (m)'); grid on;
+title('Baseball Projectile Motion'); 
+xlabel('Distance (m)'); 
+ylabel('Height (m)'); grid on;
 
 disp('--- 2. Energy and Momentum ---');
 K = energy_kinetic(m, v0);
 p = momentum(m, v0);
-fprintf('Initial Kinetic Energy of the baseball: %.2f Joules
-', K);
-fprintf('Initial Momentum of the baseball: %.2f kg*m/s
-', p);
+fprintf('Initial Kinetic Energy of the baseball: %.2f Joules', K);
+fprintf('Initial Momentum of the baseball: %.2f kg*m/s', p);

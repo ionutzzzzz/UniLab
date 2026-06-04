@@ -1,9 +1,11 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import '../../models/editor_models.dart';
 
-class PlotWidget extends StatelessWidget {
+class PlotWidget extends StatefulWidget {
   final PlotData? plot;
   final String? title;
   final List<Map<String, double>>? data;
@@ -16,79 +18,159 @@ class PlotWidget extends StatelessWidget {
   });
 
   @override
+  State<PlotWidget> createState() => _PlotWidgetState();
+}
+
+class _PlotWidgetState extends State<PlotWidget> {
+  double _zoom = 1.0;
+  Uint8List? _decodedImage;
+  final ScrollController _horizontalScroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _decodeImage();
+  }
+
+  @override
+  void didUpdateWidget(PlotWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plot?.imageDataUri != widget.plot?.imageDataUri) {
+      _decodeImage();
+    }
+  }
+
+  @override
+  void dispose() {
+    _horizontalScroll.dispose();
+    super.dispose();
+  }
+
+  void _decodeImage() {
+    if (widget.plot?.imageDataUri != null) {
+      try {
+        final uri = widget.plot!.imageDataUri!;
+        final base64Data = uri.contains(',') ? uri.split(',')[1] : uri;
+        _decodedImage = base64Decode(base64Data);
+      } catch (e) {
+        _decodedImage = null;
+      }
+    } else {
+      _decodedImage = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final displayTitle = plot?.title ?? title ?? 'Figure';
-    
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                displayTitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+    final displayTitle = widget.plot?.title ?? widget.title ?? 'Figure';
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        onHorizontalDragUpdate: (details) {
+          if (_horizontalScroll.hasClients) {
+            _horizontalScroll.jumpTo(
+              (_horizontalScroll.offset - details.delta.dx)
+                  .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
+            );
+          }
+        },
+        child: SingleChildScrollView(
+          controller: _horizontalScroll,
+          scrollDirection: Axis.horizontal,
+          child: Listener(
+            onPointerSignal: (pointerSignal) {
+            if (pointerSignal is PointerScrollEvent) {
+              final newZoom =
+                  (_zoom - pointerSignal.scrollDelta.dy / 1000.0).clamp(0.2, 5.0);
+              if (newZoom != _zoom) {
+                setState(() {
+                  _zoom = newZoom;
+                });
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              border: Border.all(color: Theme.of(context).dividerColor),
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 36.0),
+                  child: _buildPlotContent(context),
                 ),
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.zoom_in, size: 14),
-                    onPressed: () {
-                      _showZoomedPlot(context);
-                    },
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                    padding: const EdgeInsets.all(4),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          displayTitle,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          icon: const Icon(Icons.zoom_in, size: 14),
+                          onPressed: () {
+                            _showZoomedPlot(context);
+                          },
+                          constraints:
+                              const BoxConstraints(minWidth: 24, minHeight: 24),
+                          padding: const EdgeInsets.all(4),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.save, size: 14),
+                          onPressed: () {},
+                          constraints:
+                              const BoxConstraints(minWidth: 24, minHeight: 24),
+                          padding: const EdgeInsets.all(4),
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.save, size: 14),
-                    onPressed: () {},
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                    padding: const EdgeInsets.all(4),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 250,
-            child: _buildPlotContent(context),
-          ),
-        ],
+        ),
+      ),
       ),
     );
   }
 
   Widget _buildPlotContent(BuildContext context) {
-    if (plot?.type == 'image' && plot?.imageDataUri != null) {
-      try {
-        final uri = plot!.imageDataUri!;
-        final String base64Data = uri.contains(',') ? uri.split(',')[1] : uri;
-        return Center(
-          child: Image.memory(
-            base64Decode(base64Data),
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Center(
-              child: Text('Error decoding image'),
-            ),
-          ),
-        );
-      } catch (e) {
-        return const Center(child: Text('Invalid image data'));
+    if (widget.plot?.type == 'image' && widget.plot?.imageDataUri != null) {
+      if (_decodedImage == null) {
+        return const Center(child: Text('Error decoding image data'));
       }
+      return RepaintBoundary(
+        child: Image.memory(
+          _decodedImage!,
+          scale: 1.0 / _zoom,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.low,
+          errorBuilder: (context, error, stackTrace) => const Center(
+            child: Text('Error rendering image'),
+          ),
+        ),
+      );
     }
 
     // Default to line chart for structured data
-    return LineChart(
+    return SizedBox(
+      height: 250.0 * _zoom,
+      width: 400.0 * _zoom,
+      child: LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
@@ -129,12 +211,13 @@ class PlotWidget extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
   List<FlSpot> _getSpots() {
-    if (plot != null) {
-      if (plot!.xData.isEmpty || plot!.yData.isEmpty) {
+    if (widget.plot != null) {
+      if (widget.plot!.xData.isEmpty || widget.plot!.yData.isEmpty) {
         return const [
           FlSpot(0, 3),
           FlSpot(2.6, 2),
@@ -147,18 +230,18 @@ class PlotWidget extends StatelessWidget {
       }
 
       final List<FlSpot> spots = [];
-      final int len = plot!.xData.length < plot!.yData.length 
-          ? plot!.xData.length 
-          : plot!.yData.length;
-      
+      final int len = widget.plot!.xData.length < widget.plot!.yData.length
+          ? widget.plot!.xData.length
+          : widget.plot!.yData.length;
+
       for (int i = 0; i < len; i++) {
-        spots.add(FlSpot(plot!.xData[i], plot!.yData[i]));
+        spots.add(FlSpot(widget.plot!.xData[i], widget.plot!.yData[i]));
       }
       return spots;
     }
 
-    if (data != null && data!.isNotEmpty) {
-      return data!.map((e) => FlSpot(e['x']!, e['y']!)).toList();
+    if (widget.data != null && widget.data!.isNotEmpty) {
+      return widget.data!.map((e) => FlSpot(e['x']!, e['y']!)).toList();
     }
 
     return const [
@@ -173,7 +256,7 @@ class PlotWidget extends StatelessWidget {
   }
 
   void _showZoomedPlot(BuildContext context) {
-    final displayTitle = plot?.title ?? title ?? 'Figure';
+    final displayTitle = widget.plot?.title ?? widget.title ?? 'Figure';
     showDialog(
       context: context,
       builder: (context) => Dialog(

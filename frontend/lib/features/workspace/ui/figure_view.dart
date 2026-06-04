@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
-import 'dart:io' as io;
 import '../../../models/editor_models.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
@@ -10,7 +11,7 @@ import '../../../widgets/ui_icon_button.dart';
 import '../../../widgets/plot_viewer/plot_widget.dart';
 import '../../../providers/app_provider.dart';
 
-class FigureView extends StatelessWidget {
+class FigureView extends StatefulWidget {
   const FigureView({
     super.key,
     required this.plotData,
@@ -19,6 +20,50 @@ class FigureView extends StatelessWidget {
 
   final PlotData plotData;
   final VoidCallback onBack;
+
+  @override
+  State<FigureView> createState() => _FigureViewState();
+}
+
+class _FigureViewState extends State<FigureView> {
+  double _zoom = 1.0;
+  Uint8List? _decodedImage;
+  final ScrollController _verticalScroll = ScrollController();
+  final ScrollController _horizontalScroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _decodeImage();
+  }
+
+  @override
+  void didUpdateWidget(FigureView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plotData.imageDataUri != widget.plotData.imageDataUri) {
+      _decodeImage();
+    }
+  }
+
+  @override
+  void dispose() {
+    _verticalScroll.dispose();
+    _horizontalScroll.dispose();
+    super.dispose();
+  }
+
+  void _decodeImage() {
+    if (widget.plotData.imageDataUri != null) {
+      try {
+        final base64Data = widget.plotData.imageDataUri!.split(',').last;
+        _decodedImage = base64Decode(base64Data);
+      } catch (e) {
+        _decodedImage = null;
+      }
+    } else {
+      _decodedImage = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,12 +85,12 @@ class FigureView extends StatelessWidget {
                 tooltip: 'Back to Gallery',
                 size: 28,
                 iconSize: 16,
-                onPressed: onBack,
+                onPressed: widget.onBack,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: UiText(
-                  text: plotData.title,
+                  text: widget.plotData.title,
                   variant: UiTextVariant.label,
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
@@ -103,14 +148,41 @@ class FigureView extends StatelessWidget {
 
         // Figure Content
         Expanded(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: ui.spacing.radiusLg,
-              border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              if (_verticalScroll.hasClients) {
+                _verticalScroll.jumpTo(
+                  (_verticalScroll.offset - details.delta.dy)
+                      .clamp(0.0, _verticalScroll.position.maxScrollExtent),
+                );
+              }
+              if (_horizontalScroll.hasClients) {
+                _horizontalScroll.jumpTo(
+                  (_horizontalScroll.offset - details.delta.dx)
+                      .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
+                );
+              }
+            },
+            child: SingleChildScrollView(
+              controller: _verticalScroll,
+              scrollDirection: Axis.vertical,
+              child: SingleChildScrollView(
+                controller: _horizontalScroll,
+                scrollDirection: Axis.horizontal,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Container(
+                    margin: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.03),
+                      borderRadius: ui.spacing.radiusLg,
+                      border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
+                    ),
+                    child: _buildPlotContent(context, ui),
+                  ),
+                ),
+              ),
             ),
-            child: _buildPlotContent(context, ui),
           ),
         ),
       ],
@@ -119,35 +191,55 @@ class FigureView extends StatelessWidget {
 
   Widget _buildPlotContent(BuildContext context, UiTheme ui) {
     // Case 1: Base64 PNG image
-    if (plotData.imageDataUri != null) {
-      return InteractiveViewer(
-        child: Image.memory(
-          base64Decode(plotData.imageDataUri!.split(',').last),
-          fit: BoxFit.contain,
-          errorBuilder: (_, e, __) => Center(
-            child: UiText(text: 'Image error: $e', color: ui.colors.danger),
+    if (widget.plotData.imageDataUri != null) {
+      if (_decodedImage == null) {
+        return Center(
+          child: UiText(text: 'Error decoding image data', color: ui.colors.danger),
+        );
+      }
+      return Listener(
+        onPointerSignal: (pointerSignal) {
+          if (pointerSignal is PointerScrollEvent) {
+            final newZoom =
+                (_zoom - pointerSignal.scrollDelta.dy / 1000.0).clamp(0.2, 5.0);
+            if (newZoom != _zoom) {
+              setState(() {
+                _zoom = newZoom;
+              });
+            }
+          }
+        },
+        child: RepaintBoundary(
+          child: Image.memory(
+            _decodedImage!,
+            scale: 1.0 / _zoom,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.low,
+            errorBuilder: (_, e, __) => Center(
+              child: UiText(text: 'Image error: $e', color: ui.colors.danger),
+            ),
           ),
         ),
       );
     }
 
     // Case 2: Structured line/scatter data
-    if (plotData.xData.isNotEmpty &&
-        (plotData.type == 'line' || plotData.type == 'scatter' || plotData.type == 'plot')) {
+    if (widget.plotData.xData.isNotEmpty &&
+        (widget.plotData.type == 'line' || widget.plotData.type == 'scatter' || widget.plotData.type == 'plot')) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: PlotWidget(
-          title: plotData.title,
+          title: widget.plotData.title,
           data: List.generate(
-            plotData.xData.length,
-            (i) => {'x': plotData.xData[i], 'y': plotData.yData[i]},
+            widget.plotData.xData.length,
+            (i) => {'x': widget.plotData.xData[i], 'y': widget.plotData.yData[i]},
           ),
         ),
       );
     }
 
     // Case 3: 3D plots (not yet supported)
-    if (plotData.type == 'surf' || plotData.type == 'mesh') {
+    if (widget.plotData.type == 'surf' || widget.plotData.type == 'mesh') {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -173,7 +265,7 @@ class FigureView extends StatelessWidget {
           Icon(LucideIcons.lineChart, size: 64, color: ui.colors.accent.withValues(alpha: 0.4)),
           const SizedBox(height: 24),
           UiText(
-            text: plotData.title,
+            text: widget.plotData.title,
             variant: UiTextVariant.body,
             color: ui.colors.textMuted,
           ),
