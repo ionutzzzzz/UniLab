@@ -41,7 +41,9 @@ class _FigureViewState extends State<FigureView> {
   void didUpdateWidget(FigureView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.plotData.imageDataUri != widget.plotData.imageDataUri) {
-      _decodeImage();
+      setState(() {
+        _decodeImage();
+      });
     }
   }
 
@@ -148,48 +150,52 @@ class _FigureViewState extends State<FigureView> {
 
         // Figure Content
         Expanded(
-          child: GestureDetector(
-            onPanUpdate: (details) {
-              if (_verticalScroll.hasClients) {
-                _verticalScroll.jumpTo(
-                  (_verticalScroll.offset - details.delta.dy)
-                      .clamp(0.0, _verticalScroll.position.maxScrollExtent),
-                );
-              }
-              if (_horizontalScroll.hasClients) {
-                _horizontalScroll.jumpTo(
-                  (_horizontalScroll.offset - details.delta.dx)
-                      .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
-                );
-              }
-            },
-            child: SingleChildScrollView(
-              controller: _verticalScroll,
-              scrollDirection: Axis.vertical,
-              child: SingleChildScrollView(
-                controller: _horizontalScroll,
-                scrollDirection: Axis.horizontal,
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.03),
-                      borderRadius: ui.spacing.radiusLg,
-                      border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return GestureDetector(
+                onPanUpdate: (details) {
+                  if (_verticalScroll.hasClients) {
+                    _verticalScroll.jumpTo(
+                      (_verticalScroll.offset - details.delta.dy)
+                          .clamp(0.0, _verticalScroll.position.maxScrollExtent),
+                    );
+                  }
+                  if (_horizontalScroll.hasClients) {
+                    _horizontalScroll.jumpTo(
+                      (_horizontalScroll.offset - details.delta.dx)
+                          .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
+                    );
+                  }
+                },
+                child: SingleChildScrollView(
+                  controller: _verticalScroll,
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    controller: _horizontalScroll,
+                    scrollDirection: Axis.horizontal,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        margin: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.03),
+                          borderRadius: ui.spacing.radiusLg,
+                          border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
+                        ),
+                        child: _buildPlotContent(context, ui, constraints.maxWidth - 32),
+                      ),
                     ),
-                    child: _buildPlotContent(context, ui),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPlotContent(BuildContext context, UiTheme ui) {
+  Widget _buildPlotContent(BuildContext context, UiTheme ui, double availableWidth) {
     // Case 1: Base64 PNG image
     if (widget.plotData.imageDataUri != null) {
       if (_decodedImage == null) {
@@ -212,7 +218,8 @@ class _FigureViewState extends State<FigureView> {
         child: RepaintBoundary(
           child: Image.memory(
             _decodedImage!,
-            scale: 1.0 / _zoom,
+            width: availableWidth * _zoom,
+            fit: BoxFit.contain,
             gaplessPlayback: true,
             filterQuality: FilterQuality.low,
             errorBuilder: (_, e, __) => Center(
@@ -228,11 +235,15 @@ class _FigureViewState extends State<FigureView> {
         (widget.plotData.type == 'line' || widget.plotData.type == 'scatter' || widget.plotData.type == 'plot')) {
       return Padding(
         padding: const EdgeInsets.all(16),
-        child: PlotWidget(
-          title: widget.plotData.title,
-          data: List.generate(
-            widget.plotData.xData.length,
-            (i) => {'x': widget.plotData.xData[i], 'y': widget.plotData.yData[i]},
+        child: SizedBox(
+          width: availableWidth * _zoom,
+          height: (availableWidth * 0.6) * _zoom,
+          child: PlotWidget(
+            title: widget.plotData.title,
+            data: List.generate(
+              widget.plotData.xData.length,
+              (i) => {'x': widget.plotData.xData[i], 'y': widget.plotData.yData[i]},
+            ),
           ),
         ),
       );

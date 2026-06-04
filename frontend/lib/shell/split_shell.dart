@@ -34,7 +34,9 @@ class SplitShell extends ConsumerStatefulWidget {
 class _SplitShellState extends ConsumerState<SplitShell> {
   MultiSplitViewController? _horizontalController;
   MultiSplitViewController? _verticalController;
-  final GlobalKey _horizontalKey = GlobalKey(debugLabel: 'main_horizontal_split');
+  final GlobalKey _horizontalKey = GlobalKey(
+    debugLabel: 'main_horizontal_split',
+  );
   final GlobalKey _verticalKey = GlobalKey(debugLabel: 'center_vertical_split');
 
   @override
@@ -44,41 +46,49 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   }
 
   void _initControllers() {
-    _horizontalController = MultiSplitViewController(areas: _buildHorizontalAreas());
-    _verticalController = MultiSplitViewController(areas: [
-      Area(data: 'main', min: 100),
-      Area(data: 'bottom', size: 220, min: 100),
-    ]);
+    _horizontalController = MultiSplitViewController(
+      areas: _buildHorizontalAreas(),
+    );
+    _verticalController = MultiSplitViewController(
+      areas: [
+        Area(data: 'main', min: 100),
+        Area(data: 'bottom', size: 220, min: 100),
+      ],
+    );
   }
 
   List<Area> _buildHorizontalAreas() {
     List<Area> areas = [];
     if (widget.showLeftPanel) {
-      areas.add(Area(size: 240, min: 50, data: 'left'));
+      areas.add(Area(size: 300, min: 50, data: 'left'));
     } else {
       areas.add(Area(size: 48, min: 48, data: 'left_rail'));
     }
-    
+
     areas.add(Area(data: 'center'));
-    
+
     if (widget.showRightPanel) {
-      areas.add(Area(size: 280, min: 50, data: 'right'));
+      areas.add(Area(size: 500, min: 50, data: 'right'));
     } else {
       areas.add(Area(size: 48, min: 48, data: 'right_rail'));
     }
     return areas;
   }
 
-  List<Area> _buildVerticalAreas(bool showBottom, bool showLeft, bool showRight) {
+  List<Area> _buildVerticalAreas(
+    bool showBottom,
+    bool showLeft,
+    bool showRight,
+  ) {
     List<Area> areas = [];
     if (showLeft || showRight) {
-       areas.add(Area(data: 'main'));
-       if (showBottom) {
-          areas.add(Area(data: 'bottom', size: 220, min: 100));
-       }
+      areas.add(Area(data: 'main'));
+      if (showBottom) {
+        areas.add(Area(data: 'bottom', size: 220, min: 100));
+      }
     } else {
-       // Command Only mode: show only bottom panel
-       areas.add(Area(data: 'bottom'));
+      // Command Only mode: show only bottom panel
+      areas.add(Area(data: 'bottom'));
     }
     return areas;
   }
@@ -86,7 +96,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   @override
   void didUpdateWidget(SplitShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.showLeftPanel != widget.showLeftPanel || 
+    if (oldWidget.showLeftPanel != widget.showLeftPanel ||
         oldWidget.showRightPanel != widget.showRightPanel) {
       _horizontalController?.areas = _buildHorizontalAreas();
     }
@@ -100,13 +110,12 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   }
 
   void _resetCursor() {
-    SystemChannels.mouseCursor.invokeMethod<void>(
-      'activateSystemCursor',
-      <String, dynamic>{
-        'kind': 'basic',
-        'device': 1,
-      },
-    ).catchError((_) {});
+    SystemChannels.mouseCursor
+        .invokeMethod<void>('activateSystemCursor', <String, dynamic>{
+          'kind': 'basic',
+          'device': 1,
+        })
+        .catchError((_) {});
   }
 
   Widget _buildLeftPanelWrapper() {
@@ -183,9 +192,9 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     final layoutState = ref.watch(shellLayoutProvider);
 
     _verticalController?.areas = _buildVerticalAreas(
-      layoutState.showBottomPanel, 
-      layoutState.showLeftPanel, 
-      layoutState.showRightPanel
+      layoutState.showBottomPanel,
+      layoutState.showLeftPanel,
+      layoutState.showRightPanel,
     );
 
     Widget centerContent = MultiSplitViewTheme(

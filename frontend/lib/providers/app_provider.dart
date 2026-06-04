@@ -668,7 +668,7 @@ class AppProvider with ChangeNotifier {
         ),
       );
     }
-    onPlotsUpdated?.call(_generatedPlots);
+    onPlotsUpdated?.call(List.from(_generatedPlots));
     if (_plotsWindowId != null) {
       try {
         dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod(

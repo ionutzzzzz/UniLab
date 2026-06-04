@@ -193,16 +193,20 @@ class _EditorStackState extends State<EditorStack> {
              stack.add(Change(
                oldText,
                () {
-                  _isUndoingOrRedoing = true;
-                  controller.text = newText;
-                  appProvider.updateFileContent(fileId, newText);
-                  _isUndoingOrRedoing = false;
+                  if (controller.text != newText) {
+                    _isUndoingOrRedoing = true;
+                    controller.text = newText;
+                    appProvider.updateFileContent(fileId, newText);
+                    _isUndoingOrRedoing = false;
+                  }
                },
                (old) {
-                  _isUndoingOrRedoing = true;
-                  controller.text = old as String;
-                  appProvider.updateFileContent(fileId, old);
-                  _isUndoingOrRedoing = false;
+                  if (controller.text != old) {
+                    _isUndoingOrRedoing = true;
+                    controller.text = old;
+                    appProvider.updateFileContent(fileId, old);
+                    _isUndoingOrRedoing = false;
+                  }
                },
              ));
           });
@@ -234,7 +238,11 @@ class _EditorStackState extends State<EditorStack> {
       
       // Sync from provider if not modified by editor
       if (controller.text != activeFile.content && !activeFile.isModified) {
+         final currentSelection = controller.selection;
          controller.text = activeFile.content;
+         if (currentSelection.isValid && currentSelection.baseOffset <= controller.text.length) {
+            controller.selection = currentSelection;
+         }
       }
       
       if (_lastFileId != activeFile.id) {

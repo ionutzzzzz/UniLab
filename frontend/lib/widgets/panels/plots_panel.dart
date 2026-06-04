@@ -86,6 +86,7 @@ class PlotsPanel extends StatelessWidget {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: PlotWidget(
+                        key: ValueKey(plotData.id),
                         plot: plotData,
                       ),
                     );

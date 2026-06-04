@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as p;
@@ -26,6 +25,41 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    
+    // Automatically update the view to the new plot if the list is refreshed
+    ref.listen(plotGalleryProvider, (previous, next) {
+      if (previous != next && next.isNotEmpty) {
+        // Check if our current selection still exists
+        final exists = _selectedPlotId != null && next.any((p) => p.id == _selectedPlotId);
+        
+        if (!exists) {
+          // If it doesn't exist, maybe we can find a plot with the same title in the new list
+          String? oldTitle;
+          if (_selectedPlotId != null && previous != null) {
+             try {
+               oldTitle = previous.firstWhere((p) => p.id == _selectedPlotId).title;
+             } catch (_) {}
+          }
+
+          setState(() {
+            if (oldTitle != null) {
+              final newPlotWithSameTitle = next.where((p) => p.title == oldTitle).firstOrNull;
+              if (newPlotWithSameTitle != null) {
+                _selectedPlotId = newPlotWithSameTitle.id;
+                return;
+              }
+            }
+            // Fallback to the first plot if title search fails
+            _selectedPlotId = next.first.id;
+          });
+        }
+      } else if (next.isEmpty && _selectedPlotId != null) {
+        setState(() {
+          _selectedPlotId = null;
+        });
+      }
+    });
+
     final plots = ref.watch(plotGalleryProvider);
 
     if (_selectedPlotId != null) {
@@ -34,6 +68,7 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
         orElse: () => plots.isNotEmpty ? plots.first : PlotData(title: '', type: '', xData: [], yData: []),
       );
       return FigureView(
+        key: ValueKey(plot.id),
         plotData: plot,
         onBack: () => setState(() => _selectedPlotId = null),
       );
@@ -92,6 +127,16 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              UiIconButton(
+                icon: LucideIcons.refreshCcw, 
+                tooltip: 'Refresh', 
+                size: 24, 
+                iconSize: 14,
+                onPressed: () {
+                  setState(() {});
+                },
+              ),
+              SizedBox(width: ui.spacing.xs),
               UiIconButton(icon: LucideIcons.layoutGrid, tooltip: 'Grid View', size: 24, iconSize: 14),
               SizedBox(width: ui.spacing.xs),
               UiIconButton(

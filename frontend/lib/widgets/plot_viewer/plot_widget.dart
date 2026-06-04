@@ -36,7 +36,9 @@ class _PlotWidgetState extends State<PlotWidget> {
   void didUpdateWidget(PlotWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.plot?.imageDataUri != widget.plot?.imageDataUri) {
-      _decodeImage();
+      setState(() {
+        _decodeImage();
+      });
     }
   }
 
@@ -64,91 +66,96 @@ class _PlotWidgetState extends State<PlotWidget> {
   Widget build(BuildContext context) {
     final displayTitle = widget.plot?.title ?? widget.title ?? 'Figure';
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: GestureDetector(
-        onHorizontalDragUpdate: (details) {
-          if (_horizontalScroll.hasClients) {
-            _horizontalScroll.jumpTo(
-              (_horizontalScroll.offset - details.delta.dx)
-                  .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
-            );
-          }
-        },
-        child: SingleChildScrollView(
-          controller: _horizontalScroll,
-          scrollDirection: Axis.horizontal,
-          child: Listener(
-            onPointerSignal: (pointerSignal) {
-            if (pointerSignal is PointerScrollEvent) {
-              final newZoom =
-                  (_zoom - pointerSignal.scrollDelta.dy / 1000.0).clamp(0.2, 5.0);
-              if (newZoom != _zoom) {
-                setState(() {
-                  _zoom = newZoom;
-                });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth - 24; // account for padding
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onHorizontalDragUpdate: (details) {
+              if (_horizontalScroll.hasClients) {
+                _horizontalScroll.jumpTo(
+                  (_horizontalScroll.offset - details.delta.dx)
+                      .clamp(0.0, _horizontalScroll.position.maxScrollExtent),
+                );
               }
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.zero,
-            ),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 36.0),
-                  child: _buildPlotContent(context),
+            },
+            child: SingleChildScrollView(
+              controller: _horizontalScroll,
+              scrollDirection: Axis.horizontal,
+              child: Listener(
+                onPointerSignal: (pointerSignal) {
+                if (pointerSignal is PointerScrollEvent) {
+                  final newZoom =
+                      (_zoom - pointerSignal.scrollDelta.dy / 1000.0).clamp(0.2, 5.0);
+                  if (newZoom != _zoom) {
+                    setState(() {
+                      _zoom = newZoom;
+                    });
+                  }
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.zero,
                 ),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          displayTitle,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          icon: const Icon(Icons.zoom_in, size: 14),
-                          onPressed: () {
-                            _showZoomedPlot(context);
-                          },
-                          constraints:
-                              const BoxConstraints(minWidth: 24, minHeight: 24),
-                          padding: const EdgeInsets.all(4),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.save, size: 14),
-                          onPressed: () {},
-                          constraints:
-                              const BoxConstraints(minWidth: 24, minHeight: 24),
-                          padding: const EdgeInsets.all(4),
-                        ),
-                      ],
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 36.0),
+                      child: _buildPlotContent(context, availableWidth),
                     ),
-                  ),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayTitle,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: const Icon(Icons.zoom_in, size: 14),
+                              onPressed: () {
+                                _showZoomedPlot(context);
+                              },
+                              constraints:
+                                  const BoxConstraints(minWidth: 24, minHeight: 24),
+                              padding: const EdgeInsets.all(4),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.save, size: 14),
+                              onPressed: () {},
+                              constraints:
+                                  const BoxConstraints(minWidth: 24, minHeight: 24),
+                              padding: const EdgeInsets.all(4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildPlotContent(BuildContext context) {
+  Widget _buildPlotContent(BuildContext context, double availableWidth) {
     if (widget.plot?.type == 'image' && widget.plot?.imageDataUri != null) {
       if (_decodedImage == null) {
         return const Center(child: Text('Error decoding image data'));
@@ -156,7 +163,8 @@ class _PlotWidgetState extends State<PlotWidget> {
       return RepaintBoundary(
         child: Image.memory(
           _decodedImage!,
-          scale: 1.0 / _zoom,
+          width: availableWidth * _zoom,
+          fit: BoxFit.contain,
           gaplessPlayback: true,
           filterQuality: FilterQuality.low,
           errorBuilder: (context, error, stackTrace) => const Center(
@@ -168,8 +176,8 @@ class _PlotWidgetState extends State<PlotWidget> {
 
     // Default to line chart for structured data
     return SizedBox(
-      height: 250.0 * _zoom,
-      width: 400.0 * _zoom,
+      height: (availableWidth * 0.6) * _zoom,
+      width: availableWidth * _zoom,
       child: LineChart(
       LineChartData(
         gridData: FlGridData(
@@ -282,7 +290,10 @@ class _PlotWidgetState extends State<PlotWidget> {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _buildPlotContent(context),
+                child: _buildPlotContent(
+                  context,
+                  MediaQuery.of(context).size.width * 0.8 - 48,
+                ),
               ),
             ],
           ),

@@ -12,7 +12,7 @@ disp('==================================================');
 disp('--- 1. Fitting f(x) = sin(x) / x ---');
 
 % Data Generation
-X = linspace(-10, 10, 200)';
+X = linspace(-30, 30, 200)';
 % Use a small epsilon to avoid division by zero at x = 0
 epsilon = 1e-10;
 y = sin(X + epsilon) ./ (X + epsilon);
@@ -47,7 +47,7 @@ mW1 = zeros(size(W1)); mb1 = zeros(size(b1));
 mW2 = zeros(size(W2)); mb2 = zeros(size(b2));
 mW3 = zeros(size(W3)); mb3 = zeros(size(b3));
 
-epochs = 200;
+epochs = 2500;
 train_loss_hist = zeros(epochs, 1);
 val_loss_hist = zeros(epochs, 1);
 

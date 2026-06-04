@@ -50,9 +50,38 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
         final List<dynamic> plotsData = jsonDecode(call.arguments);
         if (mounted) {
           setState(() {
+            final oldPlots = List<PlotData>.from(_plots);
+            final String? oldId = _selectedPlotId;
+            
             _plots = plotsData
                 .map((data) => _parsePlotData(data as Map<String, dynamic>))
                 .toList();
+                
+            // Auto-update selected plot if the current one is gone
+            if (_plots.isNotEmpty) {
+              final exists = _plots.any((p) => p.id == _selectedPlotId);
+              if (!exists) {
+                // Try matching by title
+                String? oldTitle;
+                if (oldId != null) {
+                  try {
+                    oldTitle = oldPlots.firstWhere((p) => p.id == oldId).title;
+                  } catch (_) {}
+                }
+
+                if (oldTitle != null) {
+                  final newPlot = _plots.where((p) => p.title == oldTitle).firstOrNull;
+                  if (newPlot != null) {
+                    _selectedPlotId = newPlot.id;
+                    return;
+                  }
+                }
+                
+                _selectedPlotId = _plots.first.id;
+              }
+            } else {
+              _selectedPlotId = null;
+            }
           });
         }
         return 'success';
@@ -124,6 +153,7 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
                 ? _buildEmptyState(ui)
                 : _selectedPlotId != null
                 ? FigureView(
+                    key: ValueKey(_selectedPlotId),
                     plotData: _plots.firstWhere((p) => p.id == _selectedPlotId),
                     onBack: () => setState(() => _selectedPlotId = null),
                   )
