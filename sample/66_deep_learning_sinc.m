@@ -12,7 +12,7 @@ disp('==================================================');
 disp('--- 1. Fitting f(x) = sin(x) / x ---');
 
 % Data Generation
-X = linspace(-30, 30, 200)';
+X = linspace(-25, 25, 200)';
 % Use a small epsilon to avoid division by zero at x = 0
 epsilon = 1e-10;
 y = sin(X + epsilon) ./ (X + epsilon);

@@ -1,9 +1,7 @@
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
-import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_badge.dart';
@@ -126,6 +124,14 @@ class _ConsoleViewState extends State<_ConsoleView> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  int _historyIndex = -1;
+  String _currentInput = '';
+  
+  List<String> _suggestions = [];
+  int _suggestionIndex = -1;
+  int _lastAutocompleteOffset = -1;
+  String _originalWord = '';
+  int _originalStart = -1;
 
   @override
   void initState() {
@@ -134,6 +140,16 @@ class _ConsoleViewState extends State<_ConsoleView> {
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.tab) {
           _handleTabKey();
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _handleHistoryNavigation(true);
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _handleHistoryNavigation(false);
           return KeyEventResult.handled;
         }
         
@@ -151,6 +167,34 @@ class _ConsoleViewState extends State<_ConsoleView> {
     };
   }
 
+  void _handleHistoryNavigation(bool up) {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final history = appProvider.commandHistory;
+    if (history.isEmpty) return;
+
+    if (_historyIndex == -1) {
+      _currentInput = _controller.text;
+    }
+
+    if (up) {
+      if (_historyIndex < history.length - 1) {
+        _historyIndex++;
+        _controller.text = history[_historyIndex];
+        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+      }
+    } else {
+      if (_historyIndex > -1) {
+        _historyIndex--;
+        if (_historyIndex == -1) {
+          _controller.text = _currentInput;
+        } else {
+          _controller.text = history[_historyIndex];
+        }
+        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+      }
+    }
+  }
+
   void _submitCommand() {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     if (appProvider.isExecuting) return; 
@@ -159,6 +203,9 @@ class _ConsoleViewState extends State<_ConsoleView> {
     if (value.isNotEmpty) {
       appProvider.runConsoleCommand(value);
       _controller.clear();
+      _historyIndex = -1;
+      _currentInput = '';
+      _resetAutocomplete();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
@@ -167,6 +214,14 @@ class _ConsoleViewState extends State<_ConsoleView> {
       });
     }
     _focusNode.requestFocus();
+  }
+
+  void _resetAutocomplete() {
+    _suggestions = [];
+    _suggestionIndex = -1;
+    _lastAutocompleteOffset = -1;
+    _originalWord = '';
+    _originalStart = -1;
   }
 
   @override
@@ -184,29 +239,40 @@ class _ConsoleViewState extends State<_ConsoleView> {
     if (!selection.isValid) return;
 
     final offset = selection.baseOffset;
-    if (offset == 0) return;
-
-    int start = offset - 1;
-    while (start >= 0) {
-      final char = text[start];
-      if (RegExp(r'''[a-zA-Z0-9_
-\'"]''').hasMatch(char)) {
-        if (char == ' ') break;
-        start--;
-      } else {
-        break;
-      }
+    
+    // Cycle through suggestions if we are still at the same position
+    if (_lastAutocompleteOffset != -1 && offset == _lastAutocompleteOffset && _suggestions.length > 1) {
+      _suggestionIndex = (_suggestionIndex + 1) % _suggestions.length;
+      _applyCompletion(_suggestions[_suggestionIndex], _originalWord, _originalStart, offset);
+      return;
     }
-    start++; 
 
-    final lastWord = text.substring(start, offset);
-    if (lastWord.isEmpty) return;
+    // Find the start of the current "word" (from last separator or start of line)
+    // We don't include / or \ as separators to allow path completion
+    final separators = [' ', '(', ',', '[', '{', '=', '+', '-', '*', ';', ':', '<', '>', '&', '|', '!'];
+    int start = offset;
+    while (start > 0 && !separators.contains(text[start - 1])) {
+      start--;
+    }
 
+    final currentWord = text.substring(start, offset);
     final appProvider = Provider.of<AppProvider>(context, listen: false);
-    final suggestions = await appProvider.getAutocomplete(lastWord, fullLine: text);
+    
+    // Show loading state or similar if needed, but here we just fetch
+    final suggestions = await appProvider.getAutocomplete(currentWord, fullLine: text);
 
-    if (suggestions.isNotEmpty && mounted) {
-      _applyCompletion(suggestions.first, lastWord, start, offset);
+    if (mounted) {
+      setState(() {
+        _suggestions = suggestions;
+        if (suggestions.isNotEmpty) {
+          _suggestionIndex = 0;
+          _originalWord = currentWord;
+          _originalStart = start;
+          _applyCompletion(_suggestions[_suggestionIndex], currentWord, start, offset);
+        } else {
+          _resetAutocomplete();
+        }
+      });
     }
   }
 
@@ -219,6 +285,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
         offset: start + completion.length,
       ),
     );
+    _lastAutocompleteOffset = start + completion.length;
   }
 
   @override
@@ -292,6 +359,48 @@ class _ConsoleViewState extends State<_ConsoleView> {
               ),
             ),
           ),
+          if (_suggestions.length > 1)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 4),
+              decoration: BoxDecoration(
+                color: ui.colors.panel,
+                border: Border(top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.2))),
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _suggestions.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final suggestion = entry.value;
+                  final isSelected = idx == _suggestionIndex;
+                  return MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _suggestionIndex = idx;
+                          _applyCompletion(suggestion, _originalWord, _originalStart, _lastAutocompleteOffset);
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isSelected ? ui.colors.accent.withValues(alpha: 0.2) : Colors.transparent,
+                          border: Border.all(color: isSelected ? ui.colors.accent : ui.colors.divider.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: UiText(
+                          text: suggestion,
+                          variant: UiTextVariant.label,
+                          fontSize: 9,
+                          color: isSelected ? ui.colors.accent : ui.colors.textMuted,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           Container(
             padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
             decoration: BoxDecoration(
@@ -328,6 +437,7 @@ class _ConsoleViewState extends State<_ConsoleView> {
                       hintStyle: TextStyle(color: ui.colors.textDisabled),
                     ),
                     onChanged: (value) {
+                      _resetAutocomplete();
                       setState(() {});
                     },
                   ),

@@ -24,6 +24,7 @@ class AppProvider with ChangeNotifier {
   late String _projectRoot;
 
   final List<ConsoleMessage> _consoleMessages = [];
+  final List<String> _commandHistory = [];
   Map<String, dynamic> _workspaceVariables = {};
   final List<PlotData> _generatedPlots = [];
 
@@ -58,6 +59,7 @@ class AppProvider with ChangeNotifier {
       _activeFileIndex >= 0 ? _openFiles[_activeFileIndex] : null;
   List<ConsoleMessage> get consoleMessages =>
       List.unmodifiable(_consoleMessages);
+  List<String> get commandHistory => List.unmodifiable(_commandHistory);
   String get consoleOutput => _consoleMessages.map((m) => m.text).join('\n');
   Map<String, dynamic> get workspaceVariables => _workspaceVariables;
 
@@ -730,6 +732,12 @@ class AppProvider with ChangeNotifier {
 
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
+    
+    // Add to history
+    _commandHistory.remove(command);
+    _commandHistory.insert(0, command);
+    if (_commandHistory.length > 100) _commandHistory.removeLast();
+
     _isExecuting = true;
     _addConsoleMessage(
       '>> $command',

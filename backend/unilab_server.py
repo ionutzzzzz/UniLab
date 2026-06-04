@@ -66,7 +66,7 @@ class UniLabServer:
         """Process a JSON-RPC request."""
         method = request.get('method')
         params = request.get('params', {})
-        session_id = params.get('session_id')
+        session_id = params.get('session_id') or params.get('sessionId')
 
         # Register writer for session if it exists
         if session_id and session_id in self.sessions:
@@ -78,15 +78,19 @@ class UniLabServer:
         if method == 'create_session':
             return self.create_session(params.get('username', 'default_user'), writer)
         elif method == 'execute':
-            return await self.execute(params.get('session_id'), params.get('code'))
+            return await self.execute(session_id, params.get('code'))
         elif method == 'get_workspace':
-            return self.get_workspace(params.get('session_id'))
+            return self.get_workspace(session_id)
         elif method == 'get_autocomplete':
-            return self.get_autocomplete(params.get('session_id'), params.get('text', ''))
+            return self.get_autocomplete(
+                session_id, 
+                params.get('text', ''),
+                params.get('line', params.get('text', ''))
+            )
         elif method == 'list_files':
-            return self.list_files(params.get('session_id'))
+            return self.list_files(session_id)
         elif method == 'create_file':
-            return self.create_file(params.get('session_id'), params.get('filename'), params.get('content', ''))
+            return self.create_file(session_id, params.get('filename'), params.get('content', ''))
         elif method == 'get_info':
             return self.get_info()
         elif method == 'list_sessions':
@@ -203,14 +207,14 @@ class UniLabServer:
             print(f'Error getting workspace: {e}', file=sys.stderr)
             return {'variables': {}}
 
-    def get_autocomplete(self, session_id, text):
+    def get_autocomplete(self, session_id, text, line=None):
         """Get autocomplete suggestions."""
         try:
             if session_id not in self.sessions:
                 return {'suggestions': []}
 
             engine = self.sessions[session_id]
-            suggestions = engine.complete(text, text)
+            suggestions = engine.complete(text, line or text)
             return {'suggestions': suggestions}
         except Exception as e:
             return {'suggestions': []}
