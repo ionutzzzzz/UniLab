@@ -116,6 +116,18 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
       },
     )).toList();
 
+    // If stateManager is initialized, update rows directly
+    if (stateManager != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (stateManager != null) {
+          // Avoid unnecessary updates if row count is same (basic check)
+          // To be perfectly accurate we can just clear and append
+          stateManager!.removeAllRows();
+          stateManager!.appendRows(rows);
+        }
+      });
+    }
+
     return Container(
       color: ui.colors.canvas,
       child: PlutoGrid(

@@ -305,7 +305,9 @@ class AppProvider with ChangeNotifier {
         continue;
       }
       if (trimmedLine.contains('::CLEAR_WORKSPACE::')) {
-        clearWorkspace();
+        _workspaceVariables.clear();
+        onVariablesUpdated?.call([]);
+        notifyListeners();
         continue;
       }
       if (trimmedLine.contains('::CLEAR_VAR::')) {
@@ -732,7 +734,7 @@ class AppProvider with ChangeNotifier {
 
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
-    
+
     // Add to history
     _commandHistory.remove(command);
     _commandHistory.insert(0, command);
@@ -773,13 +775,19 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-    Future<List<String>> getAutocomplete(String prefix, {String? fullLine}) async {
-
-      try { return await UniLabBridge.instance.getAutocomplete(prefix, fullLine: fullLine); }
-
-      catch (e) { return []; }
-
+  Future<List<String>> getAutocomplete(
+    String prefix, {
+    String? fullLine,
+  }) async {
+    try {
+      return await UniLabBridge.instance.getAutocomplete(
+        prefix,
+        fullLine: fullLine,
+      );
+    } catch (e) {
+      return [];
     }
+  }
 
   Future<void> fetchWorkspaceVariables() async {
     try {
