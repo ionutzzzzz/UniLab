@@ -82,7 +82,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
   ) {
     List<Area> areas = [];
     if (showLeft || showRight) {
-      areas.add(Area(data: 'main'));
+      areas.add(Area(data: 'main', min: 100));
       if (showBottom) {
         areas.add(Area(data: 'bottom', size: 220, min: 100));
       }

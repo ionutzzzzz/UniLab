@@ -314,67 +314,81 @@ class _EditorStackState extends State<EditorStack> {
 
     return Container(
       color: ui.colors.canvas,
-      child: Column(
-        children: [
-          EditorTabBar(
-            tabs: tabs,
-            onTabTap: (id) {
-              final index = appProvider.openFiles.indexWhere((f) => f.id == id);
-              appProvider.setActiveFile(index);
-            },
-            onTabClose: (id) {
-              final index = appProvider.openFiles.indexWhere((f) => f.id == id);
-              appProvider.closeFile(index);
-            },
-            onNewTab: () => appProvider.addNewFile(),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showTabs = constraints.maxHeight > 30;
+          return Column(
+            children: [
+              if (showTabs)
+                EditorTabBar(
+                  tabs: tabs,
+                  onTabTap: (id) {
+                    final index = appProvider.openFiles.indexWhere((f) => f.id == id);
+                    appProvider.setActiveFile(index);
+                  },
+                  onTabClose: (id) {
+                    final index = appProvider.openFiles.indexWhere((f) => f.id == id);
+                    appProvider.closeFile(index);
+                  },
+                  onNewTab: () => appProvider.addNewFile(),
+                ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Stack(
                         children: [
-                          EditorBreadcrumbs(
-                            pathSegments: activeFile.path.isNotEmpty 
-                                ? path_utils.split(activeFile.path)
-                                : [activeFile.name],
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final showBreadcrumbs = constraints.maxHeight > 50;
+                              return Column(
+                                children: [
+                                  if (showBreadcrumbs)
+                                    EditorBreadcrumbs(
+                                      pathSegments: activeFile.path.isNotEmpty 
+                                          ? path_utils.split(activeFile.path)
+                                          : [activeFile.name],
+                                    ),
+                                  Expanded(child: content),
+                                ],
+                              );
+                            },
                           ),
-                          Expanded(child: content),
+                          if (_showFindReplace) 
+                            Positioned(
+                              top: 0,
+                              right: 20,
+                              child: FindReplaceBar(
+                                onClose: _toggleFindReplace,
+                                controller: controller,
+                              ),
+                            ),
                         ],
                       ),
-                      if (_showFindReplace) 
-                        Positioned(
-                          top: 0,
-                          right: 20,
-                          child: FindReplaceBar(
-                            onClose: _toggleFindReplace,
-                            controller: controller,
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                    if (showMinimap)
+                      _EditorMinimap(controller: controller),
+                  ],
                 ),
-                if (showMinimap)
-                  _EditorMinimap(controller: controller),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildEmptyState(UiTheme ui) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.code, size: 48, color: ui.colors.textDisabled),
-          const SizedBox(height: 16),
-          const UiText(text: 'No file open', variant: UiTextVariant.body),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.code, size: 48, color: ui.colors.textDisabled),
+            const SizedBox(height: 16),
+            const UiText(text: 'No file open', variant: UiTextVariant.body),
+          ],
+        ),
       ),
     );
   }
