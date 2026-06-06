@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union, Callable
 
 from .models import BackendConfig, SessionInfo, ExecutionResult, EngineType
 from .engines.transpiler import TranspilerEngine
+from .engines.rust_engine import RustEngine
 from .engines.base import BaseEngine
 
 logger = logging.getLogger("UniLabCore")
@@ -76,7 +77,10 @@ class UniLabCore:
         self._locks[session_id] = asyncio.Lock()
         
         # Factory for engines
-        engine_instance = TranspilerEngine(s)
+        if engine == "rust":
+            engine_instance = RustEngine(s)
+        else:
+            engine_instance = TranspilerEngine(s)
         
         # Set up real-time workspace update callback
         async def on_workspace_changed(variables):
@@ -106,7 +110,7 @@ class UniLabCore:
     async def list_sessions(self) -> List[SessionInfo]:
         return list(self.sessions.values())
 
-    async def run_code(self, session_id: str, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+    async def run_code(self, session_id: str, code: str, timeout: Optional[float] = 300.0, filename: Optional[str] = None) -> ExecutionResult:
         engine = self.engines.get(session_id)
         if not engine: raise KeyError(f"No engine for session {session_id}")
         
@@ -114,7 +118,13 @@ class UniLabCore:
         # which is process-wide. This ensures session isolation for paths.
         async with self._execution_lock:
             async with self._locks[session_id]:
-                res = await engine.run_code(code, timeout=timeout)
+                # Check if engine supports filename in run_code
+                import inspect
+                sig = inspect.signature(engine.run_code)
+                if 'filename' in sig.parameters:
+                    res = await engine.run_code(code, timeout=timeout, filename=filename)
+                else:
+                    res = await engine.run_code(code, timeout=timeout)
                 self._metrics["runs"] += 1
                 return res
 

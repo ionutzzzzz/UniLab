@@ -65,6 +65,11 @@ pub enum Stmt {
         iter: Expr,
         body: Vec<Stmt>,
     },
+    ParFor {
+        var: String,
+        iter: Expr,
+        body: Vec<Stmt>,
+    },
     While {
         condition: Expr,
         body: Vec<Stmt>,

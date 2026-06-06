@@ -237,6 +237,7 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
 pub extern "C" fn unilab_execute(
     session_id: *const c_char,
     code: *const c_char,
+    timeout: f64,
 ) -> *mut c_char {
     if session_id.is_null() || code.is_null() {
         let err = json!({"success": false, "error": "null pointer"}).to_string();
@@ -258,7 +259,7 @@ pub extern "C" fn unilab_execute(
             let engine = engine.bind(py);
 
             // Call synchronous wrapper instead of async run_code
-            let py_result = engine.call_method1("run_code_sync", (&code_str,))
+            let py_result = engine.call_method1("run_code_sync", (&code_str, timeout))
                 .map_err(|e| format!("Failed to call run_code_sync: {}", e))?;
 
             let dataclasses = py.import("dataclasses")
@@ -278,6 +279,80 @@ pub extern "C" fn unilab_execute(
         })
         .or_else(|e: String| -> Result<String, String> {
             eprintln!("Python error in unilab_execute: {}", e);
+            Ok(json!({
+                "success": false, 
+                "error": e,
+                "stderr": format!("Python Error: {}", e),
+                "stdout": "",
+                "duration_s": 0.0,
+                "variables_snapshot": {},
+                "plots": []
+            }).to_string())
+        })
+    });
+
+    let json_result = match result {
+        Ok(Ok(json)) => json,
+        Ok(Err(e)) => json!({"success": false, "error": e}).to_string(),
+        Err(_) => json!({"success": false, "error": "Execution failed (panic)"}).to_string(),
+    };
+
+    CString::new(json_result).unwrap().into_raw()
+}
+
+/// Execute code in a session with a filename. Returns JSON ExecutionResult.
+#[unsafe(no_mangle)]
+pub extern "C" fn unilab_execute_with_filename(
+    session_id: *const c_char,
+    code: *const c_char,
+    filename: *const c_char,
+    timeout: f64,
+) -> *mut c_char {
+    if session_id.is_null() || code.is_null() {
+        let err = json!({"success": false, "error": "null pointer"}).to_string();
+        return CString::new(err).unwrap().into_raw();
+    }
+
+    let result = std::panic::catch_unwind(|| {
+        let session_id_str = unsafe { CStr::from_ptr(session_id) }
+            .to_string_lossy()
+            .to_string();
+        let code_str = unsafe { CStr::from_ptr(code) }
+            .to_string_lossy()
+            .to_string();
+        let filename_str = if filename.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(filename) }.to_string_lossy().to_string())
+        };
+
+        Python::with_gil(|py| -> Result<String, String> {
+            let sessions = get_sessions_map().lock().unwrap();
+            let engine = sessions.get(&session_id_str)
+                .ok_or_else(|| "Session not found".to_string())?;
+            let engine = engine.bind(py);
+
+            // Call synchronous wrapper instead of async run_code
+            let py_result = engine.call_method1("run_code_sync", (&code_str, timeout, filename_str))
+                .map_err(|e| format!("Failed to call run_code_sync: {}", e))?;
+
+            let dataclasses = py.import("dataclasses")
+                .map_err(|e| format!("Failed to import dataclasses: {}", e))?;
+            let result_dict = dataclasses.call_method1("asdict", (py_result,))
+                .map_err(|e| format!("Failed to convert to dict: {}", e))?;
+
+            let json_mod = py.import("json")
+                .map_err(|e| format!("Failed to import json: {}", e))?;
+            let json_str = json_mod
+                .call_method1("dumps", (result_dict,))
+                .map_err(|e| format!("Failed to serialize to JSON: {}", e))?
+                .extract::<String>()
+                .map_err(|e| format!("Failed to extract JSON string: {}", e))?;
+
+            Ok(json_str)
+        })
+        .or_else(|e: String| -> Result<String, String> {
+            eprintln!("Python error in unilab_execute_with_filename: {}", e);
             Ok(json!({
                 "success": false, 
                 "error": e,

@@ -13,6 +13,7 @@ statement = {
     function_def
     | if_stmt
     | for_stmt
+    | parfor_stmt
     | while_stmt
     | switch_stmt
     | try_stmt
@@ -40,6 +41,7 @@ elseif_clause = { "elseif" ~ expression ~ separator+ ~ block }
 else_clause = { "else" ~ separator* ~ block }
 
 for_stmt = { "for" ~ identifier ~ "=" ~ expression ~ separator+ ~ block ~ "end" }
+parfor_stmt = { "parfor" ~ identifier ~ "=" ~ expression ~ separator+ ~ block ~ "end" }
 while_stmt = { "while" ~ expression ~ separator+ ~ block ~ "end" }
 
 switch_stmt = { "switch" ~ expression ~ separator+ ~ case_clause* ~ otherwise_clause? ~ "end" }
@@ -129,7 +131,7 @@ command_call = { identifier ~ (identifier | string | number)+ }
 
 identifier = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 keyword = @{
-    ("function" | "end" | "if" | "elseif" | "else" | "for" | "while" | "switch" | "case" | "otherwise" | "try" | "catch" | "global" | "clear" | "return" | "break" | "continue" | "import" | "export") ~ !(ASCII_ALPHANUMERIC | "_")
+    ("function" | "end" | "if" | "elseif" | "else" | "for" | "parfor" | "while" | "switch" | "case" | "otherwise" | "try" | "catch" | "global" | "clear" | "return" | "break" | "continue" | "import" | "export") ~ !(ASCII_ALPHANUMERIC | "_")
 }
 
 number = @{

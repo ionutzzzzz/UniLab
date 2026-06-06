@@ -15,8 +15,11 @@ typedef UnilabInit = int Function(Pointer<Utf8> backendPath);
 typedef UnilabCreateSessionNative = Pointer<Utf8> Function(Pointer<Utf8> username);
 typedef UnilabCreateSession = Pointer<Utf8> Function(Pointer<Utf8> username);
 
-typedef UnilabExecuteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code);
-typedef UnilabExecute = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code);
+typedef UnilabExecuteNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code, Double timeout);
+typedef UnilabExecute = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code, double timeout);
+
+typedef UnilabExecuteWithFilenameNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code, Pointer<Utf8> filename, Double timeout);
+typedef UnilabExecuteWithFilename = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> code, Pointer<Utf8> filename, double timeout);
 
 typedef UnilabGetWorkspaceNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 typedef UnilabGetWorkspace = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
@@ -206,11 +209,15 @@ class UniLabBridge {
 
     
 
-    try {
+        try {
 
-      final result = await responsePort.first.timeout(const Duration(seconds: 15));
+    
 
-      if (result is Map && result['error'] != null) {
+          final result = await responsePort.first.timeout(const Duration(seconds: 300));
+
+    
+
+          if (result is Map && result['error'] != null) {
 
         throw Exception(result['error']);
 
@@ -374,7 +381,7 @@ class UniLabBridge {
 
   /// Execute code in the current session
 
-  Future<ExecutionResult> execute(String code) async {
+  Future<ExecutionResult> execute(String code, {String? filename, double timeout = 300.0}) async {
 
     if (_sessionId == null) throw StateError('Session not created');
 
@@ -383,6 +390,10 @@ class UniLabBridge {
       'sessionId': _sessionId,
 
       'code': code,
+      
+      'filename': filename,
+      
+      'timeout': timeout,
 
     });
 
@@ -542,11 +553,17 @@ class UniLabBridge {
 
     late UnilabInit unilabInit;
 
-    late UnilabCreateSession unilabCreateSession;
+        late UnilabCreateSession unilabCreateSession;
 
-    late UnilabExecute unilabExecute;
+    
 
-    late UnilabGetWorkspace unilabGetWorkspace;
+        late UnilabExecute unilabExecute;
+
+        late UnilabExecuteWithFilename unilabExecuteWithFilename;
+
+    
+
+        late UnilabGetWorkspace unilabGetWorkspace;
 
     late UnilabGetAutocomplete unilabGetAutocomplete;
 
@@ -591,11 +608,17 @@ class UniLabBridge {
 
             unilabInit = lib.lookupFunction<UnilabInitNative, UnilabInit>('unilab_init');
 
-            unilabCreateSession = lib.lookupFunction<UnilabCreateSessionNative, UnilabCreateSession>('unilab_create_session');
+                        unilabCreateSession = lib.lookupFunction<UnilabCreateSessionNative, UnilabCreateSession>('unilab_create_session');
 
-            unilabExecute = lib.lookupFunction<UnilabExecuteNative, UnilabExecute>('unilab_execute');
+            
 
-            unilabGetWorkspace = lib.lookupFunction<UnilabGetWorkspaceNative, UnilabGetWorkspace>('unilab_get_workspace');
+                        unilabExecute = lib.lookupFunction<UnilabExecuteNative, UnilabExecute>('unilab_execute');
+
+                        unilabExecuteWithFilename = lib.lookupFunction<UnilabExecuteWithFilenameNative, UnilabExecuteWithFilename>('unilab_execute_with_filename');
+
+            
+
+                        unilabGetWorkspace = lib.lookupFunction<UnilabGetWorkspaceNative, UnilabGetWorkspace>('unilab_get_workspace');
 
             unilabGetAutocomplete = lib.lookupFunction<UnilabGetAutocompleteNative, UnilabGetAutocomplete>('unilab_get_autocomplete');
 
@@ -647,8 +670,18 @@ class UniLabBridge {
             final sidPtr = (params['sessionId'] as String).toNativeUtf8();
 
             final codePtr = (params['code'] as String).toNativeUtf8();
-
-            final resPtr = unilabExecute(sidPtr, codePtr);
+            
+            final filename = params['filename'] as String?;
+            final timeout = (params['timeout'] as num?)?.toDouble() ?? 300.0;
+            
+            Pointer<Utf8> resPtr;
+            if (filename != null) {
+              final filePtr = filename.toNativeUtf8();
+              resPtr = unilabExecuteWithFilename(sidPtr, codePtr, filePtr, timeout);
+              malloc.free(filePtr);
+            } else {
+              resPtr = unilabExecute(sidPtr, codePtr, timeout);
+            }
 
             malloc.free(sidPtr);
 

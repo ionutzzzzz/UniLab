@@ -16,7 +16,7 @@ class BaseEngine(ABC):
         pass
 
     @abstractmethod
-    async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+    async def run_code(self, code: str, timeout: Optional[float] = 300.0) -> ExecutionResult:
         pass
 
     @abstractmethod

@@ -65,7 +65,7 @@ BUILTINS = [
     'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
     'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'sum', 'prod', 'syms', 'factorial', 
     'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j',
-    'realmax', 'realmin'
+    'realmax', 'realmin', 'all', 'any', 'kron'
 ]
 workspace_vars = []
 _m_file_cache = []
@@ -469,8 +469,10 @@ def main():
 
     run_parser = subparsers.add_parser("run", help="Run a UniLab (.m) script")
     run_parser.add_argument("script", help="Path to the script file")
+    run_parser.add_argument("--engine", default="rust", choices=["transpiler", "rust"], help="Execution engine to use")
 
     console_parser = subparsers.add_parser("console", help="Launch interactive console")
+    console_parser.add_argument("--engine", default="rust", choices=["transpiler", "rust"], help="Execution engine to use")
     console_parser.add_argument("cmd_args", nargs=argparse.REMAINDER, help="Terminal command to execute (optional)")
 
     if len(sys.argv) == 1:
@@ -483,10 +485,10 @@ def main():
 
     try:
         if args.command == "run":
-            asyncio.run(run_UniLab_script(args.script, "transpiler"))
+            asyncio.run(run_UniLab_script(args.script, args.engine))
         elif args.command == "console":
             cmd_str = " ".join(args.cmd_args) if args.cmd_args else None
-            asyncio.run(run_console("transpiler", cmd_str))
+            asyncio.run(run_console(args.engine, cmd_str))
         else:
             parser.print_help()
     except KeyboardInterrupt:

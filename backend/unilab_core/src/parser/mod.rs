@@ -66,11 +66,11 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Option<Stmt> {
         Rule::expression => Some(Stmt::Expression(parse_expression(pair))),
         Rule::if_stmt => {
             let mut inner = pair.into_inner();
-            let condition = parse_expression(inner.next().unwrap());
+            let condition = parse_expression(inner.next().expect("Expected if condition"));
             
             // Skip separators to find block
             let then_block = loop {
-                let next = inner.next().unwrap();
+                let next = inner.next().expect("Expected block after if condition");
                 if next.as_rule() == Rule::block {
                     break parse_block(next);
                 }
@@ -83,9 +83,9 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Option<Stmt> {
                 match next.as_rule() {
                     Rule::elseif_clause => {
                         let mut sub = next.into_inner();
-                        let cond = parse_expression(sub.next().unwrap());
+                        let cond = parse_expression(sub.next().expect("Expected elseif condition"));
                         let block = loop {
-                            let s = sub.next().unwrap();
+                            let s = sub.next().expect("Expected block after elseif condition");
                             if s.as_rule() == Rule::block {
                                 break parse_block(s);
                             }
@@ -95,7 +95,7 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Option<Stmt> {
                     Rule::else_clause => {
                         let mut sub = next.into_inner();
                         else_block = Some(loop {
-                            let s = sub.next().unwrap();
+                            let s = sub.next().expect("Expected block after else");
                             if s.as_rule() == Rule::block {
                                 break parse_block(s);
                             }
@@ -109,10 +109,10 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Option<Stmt> {
         }
         Rule::for_stmt => {
             let mut inner = pair.into_inner();
-            let var = inner.next().unwrap().as_str().trim().to_string();
-            let iter = parse_expression(inner.next().unwrap());
+            let var = inner.next().expect("Expected for variable").as_str().trim().to_string();
+            let iter = parse_expression(inner.next().expect("Expected for iterator"));
             let body = loop {
-                let next = inner.next().unwrap();
+                let next = inner.next().expect("Expected block after for expression");
                 if next.as_rule() == Rule::block {
                     break parse_block(next);
                 }
@@ -121,9 +121,9 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Option<Stmt> {
         }
         Rule::while_stmt => {
             let mut inner = pair.into_inner();
-            let condition = parse_expression(inner.next().unwrap());
+            let condition = parse_expression(inner.next().expect("Expected while condition"));
             let body = loop {
-                let next = inner.next().unwrap();
+                let next = inner.next().expect("Expected block after while condition");
                 if next.as_rule() == Rule::block {
                     break parse_block(next);
                 }

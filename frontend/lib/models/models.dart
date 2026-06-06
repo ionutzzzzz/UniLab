@@ -26,6 +26,7 @@ class UserSettings {
   final bool? _telemetry;
   final String? _kernelAddress;
   final int? _connectionTimeout;
+  final int? _executionTimeout;
   final bool? _showWhitespace;
   final bool? _enableAutocomplete;
   final String? _defaultProjectPath;
@@ -66,6 +67,7 @@ class UserSettings {
   bool get telemetry => _telemetry ?? true;
   String get kernelAddress => _kernelAddress ?? 'http://localhost:8000';
   int get connectionTimeout => _connectionTimeout ?? 30;
+  int get executionTimeout => _executionTimeout ?? 300;
   bool get showWhitespace => _showWhitespace ?? false;
   bool get enableAutocomplete => _enableAutocomplete ?? true;
   String get defaultProjectPath => _defaultProjectPath ?? '';
@@ -100,6 +102,7 @@ class UserSettings {
     bool? telemetry,
     String? kernelAddress,
     int? connectionTimeout,
+    int? executionTimeout,
     bool? showWhitespace,
     bool? enableAutocomplete,
     String? defaultProjectPath,
@@ -133,6 +136,7 @@ class UserSettings {
     _telemetry = telemetry,
     _kernelAddress = kernelAddress,
     _connectionTimeout = connectionTimeout,
+    _executionTimeout = executionTimeout,
     _showWhitespace = showWhitespace,
     _enableAutocomplete = enableAutocomplete,
     _defaultProjectPath = defaultProjectPath,
@@ -167,6 +171,7 @@ class UserSettings {
     bool? telemetry,
     String? kernelAddress,
     int? connectionTimeout,
+    int? executionTimeout,
     bool? showWhitespace,
     bool? enableAutocomplete,
     String? defaultProjectPath,
@@ -201,6 +206,7 @@ class UserSettings {
       telemetry: telemetry ?? this.telemetry,
       kernelAddress: kernelAddress ?? this.kernelAddress,
       connectionTimeout: connectionTimeout ?? this.connectionTimeout,
+      executionTimeout: executionTimeout ?? this.executionTimeout,
       showWhitespace: showWhitespace ?? this.showWhitespace,
       enableAutocomplete: enableAutocomplete ?? this.enableAutocomplete,
       defaultProjectPath: defaultProjectPath ?? this.defaultProjectPath,

@@ -12,6 +12,7 @@ import '../models/editor_models.dart';
 import '../features/workspace/domain/workspace_variable.dart' as domain;
 import '../bridge/unilab_bridge.dart';
 import '../utils/file_manager.dart';
+import 'settings_provider.dart';
 import 'dart:io' as io;
 
 enum BackendStatus { connecting, connected, error }
@@ -27,6 +28,10 @@ class AppProvider with ChangeNotifier {
   final List<String> _commandHistory = [];
   Map<String, dynamic> _workspaceVariables = {};
   final List<PlotData> _generatedPlots = [];
+  
+  SettingsProvider? _settingsProvider;
+
+  // Simulation State
 
   // Simulation State
   bool _isSimulationActive = false;
@@ -107,6 +112,11 @@ class AppProvider with ChangeNotifier {
       }
       return null;
     });
+  }
+
+  void updateSettings(SettingsProvider settings) {
+    _settingsProvider = settings;
+    notifyListeners();
   }
 
   String _discoverProjectRoot() {
@@ -444,14 +454,22 @@ class AppProvider with ChangeNotifier {
 
   Future<void> createProjectFile(String fileName, String content) async {
     if (kIsWeb) {
-      final newFile = UniLabFile(
-        id: const Uuid().v4(),
-        name: fileName,
-        path: 'web/$fileName',
-        content: content,
-      );
-      _openFiles.add(newFile);
-      _activeFileIndex = _openFiles.length - 1;
+      final path = 'web/$fileName';
+      final existingIndex = _openFiles.indexWhere((f) => f.path == path);
+      if (existingIndex != -1) {
+        _activeFileIndex = existingIndex;
+        // Optionally update content if it's a "create" call that should overwrite?
+        // Usually creation should check if it exists first, but here we just prevent duplicate tab.
+      } else {
+        final newFile = UniLabFile(
+          id: const Uuid().v4(),
+          name: fileName,
+          path: path,
+          content: content,
+        );
+        _openFiles.add(newFile);
+        _activeFileIndex = _openFiles.length - 1;
+      }
       notifyListeners();
       return;
     }
@@ -513,12 +531,22 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> openFile(dynamic file) async {
-    final path = (file as io.File).absolute.path;
+    if (file is! io.File) return;
+    final path = p.canonicalize(file.absolute.path);
     final existingIndex = _openFiles.indexWhere((f) => f.path == path);
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
+      notifyListeners();
+      return;
+    }
+
+    final content = await UniLabFileManager.readFile(file);
+    
+    // Check again after await to prevent race conditions (e.g. from double clicking)
+    final reCheckIndex = _openFiles.indexWhere((f) => f.path == path);
+    if (reCheckIndex != -1) {
+      _activeFileIndex = reCheckIndex;
     } else {
-      final content = await UniLabFileManager.readFile(file);
       _openFiles.add(
         UniLabFile(
           id: const Uuid().v4(),
@@ -636,7 +664,12 @@ class AppProvider with ChangeNotifier {
       source: 'System',
     );
     try {
-      final result = await UniLabBridge.instance.execute(activeFile!.content);
+      final timeout = _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
+      final result = await UniLabBridge.instance.execute(
+        activeFile!.content,
+        filename: activeFile!.path,
+        timeout: timeout,
+      );
       if (result.stdout.isNotEmpty)
         _addConsoleMessage(
           result.stdout,
@@ -668,19 +701,54 @@ class AppProvider with ChangeNotifier {
       _updateVariablesFromMap(result.variables);
 
   void _updatePlotsFromResult(ExecutionResult result) {
-    _generatedPlots.clear();
+    // We no longer clear all plots every time to support Plot History
+    // _generatedPlots.clear();
+    
     final b64List = result.extra['plot_data_b64'] as List? ?? [];
+    final scriptsList = result.extra['plot_scripts'] as List? ?? [];
+    final figuresList = result.extra['plot_figures'] as List? ?? [];
+    
     for (int i = 0; i < b64List.length; i++) {
-      _generatedPlots.add(
-        PlotData(
-          title: 'Figure ${i + 1}',
-          type: 'image',
-          xData: [],
-          yData: [],
-          imageDataUri: b64List[i],
-        ),
+      final scriptPath = i < scriptsList.length ? scriptsList[i] : null;
+      final figNum = i < figuresList.length ? figuresList[i] : null;
+      final imageDataUri = b64List[i];
+      
+      // If it's from a script, try to find an existing plot from that script and figure number to refresh
+      int existingIndex = -1;
+      if (scriptPath != null && figNum != null) {
+        existingIndex = _generatedPlots.indexWhere((p) => p.sourceScript == scriptPath && p.figNum == figNum);
+      } else if (scriptPath != null) {
+        existingIndex = _generatedPlots.indexWhere((p) => p.sourceScript == scriptPath);
+      } else if (figNum != null) {
+        existingIndex = _generatedPlots.indexWhere((p) => p.figNum == figNum && p.sourceScript == null);
+      }
+      
+      String title = 'Figure ${figNum ?? (_generatedPlots.length + 1)}';
+      if (scriptPath != null) {
+        title += ' (${p.basename(scriptPath)})';
+      }
+
+      final newPlot = PlotData(
+        id: existingIndex != -1 ? _generatedPlots[existingIndex].id : null,
+        title: title,
+        type: 'image',
+        xData: [],
+        yData: [],
+        imageDataUri: imageDataUri,
+        sourceScript: scriptPath,
+        figNum: figNum,
+        createdAt: DateTime.now(),
       );
+
+      if (existingIndex != -1) {
+        // Refresh existing plot
+        _generatedPlots[existingIndex] = newPlot;
+      } else {
+        // Add as new plot to history
+        _generatedPlots.add(newPlot);
+      }
     }
+    
     onPlotsUpdated?.call(List.from(_generatedPlots));
     if (_plotsWindowId != null) {
       try {
@@ -756,7 +824,11 @@ class AppProvider with ChangeNotifier {
       source: 'System',
     );
     try {
-      final result = await UniLabBridge.instance.execute(command);
+      final timeout = _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
+      final result = await UniLabBridge.instance.execute(
+        command,
+        timeout: timeout,
+      );
       if (result.stdout.isNotEmpty)
         _addConsoleMessage(
           result.stdout,
@@ -829,15 +901,21 @@ class AppProvider with ChangeNotifier {
     if (result != null) {
       if (kIsWeb) {
         final fileData = result.files.single;
-        _openFiles.add(
-          UniLabFile(
-            id: const Uuid().v4(),
-            name: fileData.name,
-            path: 'web/${fileData.name}',
-            content: String.fromCharCodes(fileData.bytes!),
-          ),
-        );
-        _activeFileIndex = _openFiles.length - 1;
+        final path = 'web/${fileData.name}';
+        final existingIndex = _openFiles.indexWhere((f) => f.path == path);
+        if (existingIndex != -1) {
+          _activeFileIndex = existingIndex;
+        } else {
+          _openFiles.add(
+            UniLabFile(
+              id: const Uuid().v4(),
+              name: fileData.name,
+              path: path,
+              content: String.fromCharCodes(fileData.bytes!),
+            ),
+          );
+          _activeFileIndex = _openFiles.length - 1;
+        }
       } else if (result.files.single.path != null)
         await openFile(io.File(result.files.single.path!));
       notifyListeners();

@@ -224,7 +224,7 @@ class TranspilerEngine(BaseEngine):
     async def stop(self):
         self._save_workspace()
 
-    async def run_code(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+    async def run_code(self, code: str, timeout: Optional[float] = 300.0, filename: Optional[str] = None) -> ExecutionResult:
         # Handle 'help topic' style calls specifically
         stripped_code = code.strip().rstrip(';')
         if not stripped_code:
@@ -235,11 +235,26 @@ class TranspilerEngine(BaseEngine):
         os.chdir(self.cwd)
         
         # Set context-safe workspace path for the runtime
-        from ..runtime import unilab_workspace_ctx, unilab_update_ctx
+        from ..runtime import unilab_workspace_ctx, unilab_update_ctx, unilab_script_ctx
         token = unilab_workspace_ctx.set(str(self.workspace_path))
         update_token = unilab_update_ctx.set(lambda: self._trigger_workspace_changed())
         from ..runtime import unilab_event_ctx
         event_token = unilab_event_ctx.set(self.on_event)
+        
+        # Set script context if filename provided
+        script_token = None
+        if filename:
+            script_token = unilab_script_ctx.set(filename)
+            os.environ['UNILAB_CURRENT_SCRIPT'] = filename
+            # For script runs, we usually want a clean plotting state
+            from .. import runtime
+            runtime._unilab_reset_runtime()
+        else:
+            # For console commands, at least ensure we don't have accidental leftovers if needed,
+            # but maybe we should keep it more MATLAB-like?
+            # Let's at least reset the counter if it's a "fresh" looking command?
+            # Actually, let's keep console state persistent as per MATLAB.
+            pass
         
         try:
             # --- Shell Command Handling ---
@@ -299,7 +314,7 @@ class TranspilerEngine(BaseEngine):
                         script_code = script_path.read_text(encoding="utf-8")
                         # Restore CWD before recursive call to let it handle its own chdir
                         os.chdir(old_cwd)
-                        return await self.run_code(script_code, timeout=timeout)
+                        return await self.run_code(script_code, timeout=timeout, filename=str(script_path.resolve()))
                     except Exception as e:
                         return ExecutionResult(False, "", f"Error running script: {e}", 1, 0.0, self._get_variables(), [])
                 else:
@@ -427,6 +442,8 @@ class TranspilerEngine(BaseEngine):
                 plots = []
                 plot_data_b64 = []
                 plot_3d_data = []
+                plot_scripts = []
+                plot_figures = []
 
                 if plot_indices:
                     # Deduplicate for rendering: only keep the last update for each figure number
@@ -441,16 +458,20 @@ class TranspilerEngine(BaseEngine):
                         filename = parts[0].strip()
 
                         fig_info = parts[1].split("::VER::") if len(parts) > 1 else ["default"]
-                        fig_num = fig_info[0].strip()
+                        fig_num = fig_info[0].split("::SCRIPT::")[0].strip()
                         
-                        final_plot_markers[fig_num] = (idx, filename)
-                        all_plot_files.append((idx, filename))
+                        script_path = None
+                        if "::SCRIPT::" in parts[1]:
+                            script_path = parts[1].split("::SCRIPT::")[1].strip()
+
+                        final_plot_markers[fig_num] = (idx, filename, script_path, fig_num)
+                        all_plot_files.append((idx, filename, script_path, fig_num))
 
                     final_render_indices = {v[0] for v in final_plot_markers.values()}
                     import base64
                     
                     # Process and delete files
-                    for idx, filename in all_plot_files:
+                    for idx, filename, script_path, fig_num in all_plot_files:
                         is_final = idx in final_render_indices
                         p = self.workspace_path / filename
                         if not p.exists(): p = self.cwd / filename
@@ -477,6 +498,8 @@ class TranspilerEngine(BaseEngine):
                         if is_final:
                             plots.append(filename)
                             plot_3d_data.append(data_3d_entry)
+                            plot_scripts.append(script_path)
+                            plot_figures.append(fig_num)
 
                         if p.exists():
                             try:
@@ -506,7 +529,12 @@ class TranspilerEngine(BaseEngine):
                     duration_s=duration,
                     variables_snapshot=self._get_variables(),
                     plots=plots,
-                    extra={"plot_data_b64": plot_data_b64, "plot_3d_data": plot_3d_data}
+                    extra={
+                        "plot_data_b64": plot_data_b64, 
+                        "plot_3d_data": plot_3d_data,
+                        "plot_scripts": plot_scripts,
+                        "plot_figures": plot_figures
+                    }
                 )
             except Exception as e:
                 return ExecutionResult(
@@ -848,17 +876,20 @@ class TranspilerEngine(BaseEngine):
                     import numpy as np
                     arr = np.asanyarray(v)
                     if np.issubdtype(arr.dtype, np.number):
-                        stats['min'] = float(np.min(arr))
-                        stats['max'] = float(np.max(arr))
-                        stats['mean'] = float(np.mean(arr))
-                        stats['median'] = float(np.median(arr))
-                        stats['sum'] = float(np.sum(arr))
-                        stats['std'] = float(np.std(arr))
-                        stats['variance'] = float(np.var(arr))
-                        stats['range'] = float(np.ptp(arr))
+                        # Use absolute values for min/max/median/range if complex
+                        calc_arr = np.abs(arr) if np.iscomplexobj(arr) else arr
+                        
+                        stats['min'] = float(np.min(calc_arr))
+                        stats['max'] = float(np.max(calc_arr))
+                        stats['mean'] = float(np.mean(calc_arr)) # np.mean(complex) returns complex, float() takes real
+                        stats['median'] = float(np.median(calc_arr))
+                        stats['sum'] = float(np.sum(calc_arr))
+                        stats['std'] = float(np.std(arr)) # np.std is real even for complex
+                        stats['variance'] = float(np.var(arr)) # np.var is real even for complex
+                        stats['range'] = float(np.ptp(calc_arr))
                         # Mode can be multiple, take first
                         from scipy import stats as scipy_stats
-                        m = scipy_stats.mode(arr, keepdims=True)
+                        m = scipy_stats.mode(calc_arr, keepdims=True)
                         stats['mode'] = float(m.mode[0])
                 except:
                     pass
@@ -912,16 +943,16 @@ class TranspilerEngine(BaseEngine):
                 pass
 
     # Synchronous wrappers for FFI/C interop (calls async methods via asyncio.run)
-    def run_code_sync(self, code: str, timeout: Optional[float] = 30.0) -> ExecutionResult:
+    def run_code_sync(self, code: str, timeout: Optional[float] = 300.0, filename: Optional[str] = None) -> ExecutionResult:
         """Synchronous wrapper for async run_code method. For use with FFI bridges."""
         try:
-            return asyncio.run(self.run_code(code, timeout))
+            return asyncio.run(self.run_code(code, timeout, filename))
         except RuntimeError as e:
             # If there's already an event loop, use it
             if "asyncio.run() cannot be called from a running event loop" in str(e):
                 import nest_asyncio
                 nest_asyncio.apply()
-                return asyncio.run(self.run_code(code, timeout))
+                return asyncio.run(self.run_code(code, timeout, filename))
             raise
 
     def fetch_variables_sync(self) -> Dict[str, Any]:

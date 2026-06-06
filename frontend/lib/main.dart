@@ -138,7 +138,8 @@ void main(List<String> args) async {
         builder: (context, ref, child) {
           return p.MultiProvider(
             providers: [
-              p.ChangeNotifierProvider(
+              p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+              p.ChangeNotifierProxyProvider<SettingsProvider, AppProvider>(
                 create: (_) => AppProvider(
                   onVariablesUpdated: (vars) {
                     ref
@@ -151,8 +152,8 @@ void main(List<String> args) async {
                     ref.read(rp.plotGalleryProvider.notifier).replaceAll(plots);
                   },
                 ),
+                update: (context, settings, app) => app!..updateSettings(settings),
               ),
-              p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
             ],
             child: child,
           );

@@ -1,24 +1,5 @@
-use crate::Evaluator;
+use crate::{Evaluator, ExecutionResult, PlotData};
 use crate::parser::parse_unilab;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExecutionResult {
-    pub success: bool,
-    pub output: String,
-    pub error: Option<String>,
-    pub plots: Vec<PlotData>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PlotData {
-    pub plot_type: String, // "line", "scatter", etc.
-    pub x: Vec<f64>,
-    pub y: Vec<f64>,
-    pub title: Option<String>,
-    pub xlabel: Option<String>,
-    pub ylabel: Option<String>,
-}
 
 pub fn run_code(code: &str) -> ExecutionResult {
     let mut evaluator = Evaluator::new();

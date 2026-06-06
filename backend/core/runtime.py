@@ -17,6 +17,8 @@ unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
 # ContextVar for engine update callback
 unilab_update_ctx = ContextVar('unilab_update_callback', default=None)
 unilab_event_ctx = ContextVar('unilab_event_callback', default=None)
+# ContextVar for the current script path
+unilab_script_ctx = ContextVar('unilab_script', default=None)
 
 # Store for 3D plot data (fig_num -> {type, x, y, z})
 _unilab_3d_data_store = {}
@@ -2809,6 +2811,17 @@ def _unilab_update_fig_version(fig_num=None):
     _unilab_fig_versions[fig_num] = _unilab_fig_versions.get(fig_num, 0) + 1
     return _unilab_fig_versions[fig_num]
 
+def _unilab_reset_runtime():
+    global _unilab_hold, _unilab_plot_counter, _unilab_fig_versions
+    _unilab_hold = False
+    _unilab_plot_counter = 0
+    _unilab_fig_versions = {}
+    try:
+        import matplotlib.pyplot as plt
+        plt.close('all')
+    except:
+        pass
+
 def _unilab_refresh_graph():
     global _unilab_plot_counter
     try:
@@ -2890,6 +2903,7 @@ def _unilab_refresh_graph():
         fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', edgecolor='#121212', transparent=False, bbox_inches='tight', pad_inches=0.1)
         fig_num = fig.number
         fig_ver = _unilab_fig_versions.get(fig_num, 1)
+        script_path = unilab_script_ctx.get()
 
         # Bridge emission
         import base64
@@ -2904,13 +2918,17 @@ def _unilab_refresh_graph():
                     'filename': filename,
                     'fig': fig_num,
                     'ver': fig_ver,
+                    'script': script_path,
                     'data': data_uri,
                     'meta': meta
                 }))
         except Exception as e:
             print(f'Error emitting plot event: {e}')
 
-        print(f'::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}')
+        marker = f'::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}'
+        if script_path:
+            marker += f'::SCRIPT::{script_path}'
+        print(marker)
     except Exception as e:
         print(f"Error saving graph: {e}")
 
@@ -3704,7 +3722,11 @@ def ones(*shape):
     return np.ones(shape)
 def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is not None else _unilab_to_int(n))
 def factorial(n): return float(math.factorial(_unilab_to_int(n)))
-def trapz(y, x=None): return np.trapz(y, x=x)
+def trapz(y, x=None): 
+    # np.trapz was removed in NumPy 2.0, replaced by np.trapezoid
+    if hasattr(np, 'trapezoid'):
+        return np.trapezoid(y, x=x)
+    return np.trapz(y, x=x)
 def inv(x): return np.linalg.inv(x)
 def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
 def det(x): return np.linalg.det(x)

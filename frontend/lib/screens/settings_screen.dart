@@ -767,6 +767,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
+        _buildSettingItem(
+          ui,
+          'Execution Timeout',
+          'Maximum seconds allowed for a single script or command to run.',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Slider(
+                value: settings.executionTimeout.toDouble(), 
+                min: 5, 
+                max: 1800, // Up to 30 minutes
+                divisions: 359,
+                onChanged: (v) => settingsProvider.updateSettings(settings.copyWith(executionTimeout: v.toInt())),
+              ),
+              UiText(text: '${settings.executionTimeout}s', variant: UiTextVariant.label),
+            ],
+          ),
+        ),
       ],
     );
   }

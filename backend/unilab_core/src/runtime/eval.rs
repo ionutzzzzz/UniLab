@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use ndarray::Array2;
 use std::path::PathBuf;
 use std::fs;
-use crate::api::PlotData;
+use crate::PlotData;
 use crate::runtime::bridge::PythonBridge;
 use num_complex::Complex64;
 use std::time::Instant;
@@ -20,44 +20,14 @@ pub struct Evaluator {
 
 impl Evaluator {
     pub fn new() -> Self {
-        eprintln!("Creating new Evaluator");
         let mut builtins_env = Environment::new();
-
-        // Constants
-        builtins_env.define("pi".to_string(), Value::Scalar(std::f64::consts::PI));
-        builtins_env.define("eps".to_string(), Value::Scalar(f64::EPSILON));
-        builtins_env.define("i".to_string(), Value::Complex(0.0, 1.0));
-        builtins_env.define("j".to_string(), Value::Complex(0.0, 1.0));
-        builtins_env.define("inf".to_string(), Value::Scalar(f64::INFINITY));
-        builtins_env.define("Inf".to_string(), Value::Scalar(f64::INFINITY));
-        builtins_env.define("nan".to_string(), Value::Scalar(f64::NAN));
-        builtins_env.define("NaN".to_string(), Value::Scalar(f64::NAN));
-        builtins_env.define("true".to_string(), Value::Bool(true));
-        builtins_env.define("false".to_string(), Value::Bool(false));
-
-        // Built-ins
-        let builtins = vec![
-            "disp", "range", "size", "plot", "simulate", "linspace", "zeros", "ones", "eye",
-            "rand", "randn", "randperm", "exp", "sin", "cos", "tan", "tanh", "sqrt", "abs", "log", "log10",
-            "sum", "mean", "std", "var", "min", "max", "round", "floor", "ceil",
-            "struct", "hold", "grid", "title", "xlabel", "ylabel", "legend", "subplot",
-            "axis", "xlim", "ylim", "imagesc", "colorbar", "colormap", "factorial",
-            "clc", "close", "tic", "toc", "pause", "find", "length", "mode", "reshape", "unique",
-            "figure", "gcf", "gca", "clf", "cla", "fprintf", "sprintf", "num2str",
-            "deg2rad", "rad2deg", "trapz", "inv", "eig", "diag", "norm", "det",
-            "fopen", "fread", "fclose", "fwrite", "mod", "rem", "meshgrid",
-            "real", "imag", "sort", "sign", "fft", "ifft",
-            "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
-            "ischar", "iscell", "isnumeric", "strcmp", "isequal",
-            "argmin", "argmax", "isempty",
-        ];
-
-        for name in builtins {
-            builtins_env.define(name.to_string(), Value::FunctionHandle(name.to_string()));
-        }
+        Self::setup_builtins(&mut builtins_env);
         
         let env = Environment::with_parent(Arc::new(RwLock::new(builtins_env)));
+        Self::new_with_env(Arc::new(RwLock::new(env)))
+    }
 
+    pub fn new_with_env(env: Arc<RwLock<Environment>>) -> Self {
         let mut search_paths = vec![PathBuf::from(".")];
         
         // Add stdlib libraries to search path
@@ -85,11 +55,47 @@ impl Evaluator {
         }
 
         Self {
-            env: Arc::new(RwLock::new(env)),
+            env,
             search_paths,
             plots: Vec::new(),
             tic_time: None,
             end_stack: Vec::new(),
+        }
+    }
+
+    fn setup_builtins(env: &mut Environment) {
+        // Constants
+        env.define("pi".to_string(), Value::Scalar(std::f64::consts::PI));
+        env.define("eps".to_string(), Value::Scalar(f64::EPSILON));
+        env.define("i".to_string(), Value::Complex(0.0, 1.0));
+        env.define("j".to_string(), Value::Complex(0.0, 1.0));
+        env.define("inf".to_string(), Value::Scalar(f64::INFINITY));
+        env.define("Inf".to_string(), Value::Scalar(f64::INFINITY));
+        env.define("nan".to_string(), Value::Scalar(f64::NAN));
+        env.define("NaN".to_string(), Value::Scalar(f64::NAN));
+        env.define("true".to_string(), Value::Bool(true));
+        env.define("false".to_string(), Value::Bool(false));
+
+        // Built-ins
+        let builtins = vec![
+            "disp", "range", "size", "plot", "simulate", "linspace", "zeros", "ones", "eye",
+            "rand", "randn", "randperm", "exp", "sin", "cos", "tan", "tanh", "sqrt", "abs", "log", "log10",
+            "sum", "mean", "std", "var", "min", "max", "round", "floor", "ceil", "prod",
+            "struct", "hold", "grid", "title", "xlabel", "ylabel", "legend", "subplot",
+            "axis", "xlim", "ylim", "imagesc", "colorbar", "colormap", "factorial",
+            "clc", "close", "tic", "toc", "pause", "find", "length", "mode", "reshape", "unique", "kron",
+            "all", "any", "prod", "det", "inv",
+            "figure", "gcf", "gca", "clf", "cla", "fprintf", "sprintf", "num2str",
+            "deg2rad", "rad2deg", "trapz", "inv", "eig", "diag", "norm", "det",
+            "fopen", "fread", "fclose", "fwrite", "mod", "rem", "meshgrid",
+            "real", "imag", "sort", "sign", "fft", "ifft",
+            "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+            "ischar", "iscell", "isnumeric", "strcmp", "isequal",
+            "argmin", "argmax", "isempty",
+        ];
+
+        for name in builtins {
+            env.define(name.to_string(), Value::FunctionHandle(name.to_string()));
         }
     }
 
@@ -101,7 +107,7 @@ impl Evaluator {
                     name: name.clone(),
                     params: params.clone(),
                     returns: returns.clone(),
-                    body: body.clone(),
+                    body: Arc::new(body.clone()),
                 };
                 self.env.write().unwrap().define(name.clone(), func);
             }
@@ -149,7 +155,7 @@ impl Evaluator {
                                 self.assign_lhs(l, Value::Void)?;
                             }
                         }
-                        return Ok(Value::List(vals));
+                        return Ok(Value::List(vals.clone()));
                     }
                 }
 
@@ -182,7 +188,7 @@ impl Evaluator {
                             let val = if col.len() == 1 {
                                 Value::Scalar(col[0])
                             } else {
-                                Value::Matrix(col.to_owned().insert_axis(ndarray::Axis(1)))
+                                Value::Matrix(Arc::new(col.to_owned().insert_axis(ndarray::Axis(1))))
                             };
                             self.env.write().unwrap().define(var.clone(), val);
                             last = self.eval_block(body)?;
@@ -195,7 +201,7 @@ impl Evaluator {
                              let val = if col.len() == 1 {
                                  Value::Complex(col[0].re, col[0].im)
                              } else {
-                                 Value::ComplexMatrix(col.to_owned().insert_axis(ndarray::Axis(1)))
+                                 Value::ComplexMatrix(Arc::new(col.to_owned().insert_axis(ndarray::Axis(1))))
                              };
                              self.env.write().unwrap().define(var.clone(), val);
                              last = self.eval_block(body)?;
@@ -204,13 +210,38 @@ impl Evaluator {
                     }
                     Value::CellArray(v) => {
                         let mut last = Value::Void;
-                        for item in v {
-                            self.env.write().unwrap().define(var.clone(), item);
+                        for item in v.iter() {
+                            self.env.write().unwrap().define(var.clone(), item.clone());
                             last = self.eval_block(body)?;
                         }
                         Ok(last)
                     }
                     _ => Err(format!("Cannot iterate over {:?}", iter_val)),
+                }
+            }
+            Stmt::ParFor { var, iter, body } => {
+                let iter_val = self.eval_expression(iter)?;
+                match iter_val {
+                    Value::Matrix(m) => {
+                        use rayon::prelude::*;
+                        let items: Vec<Value> = m.columns().into_iter().map(|col| {
+                            if col.len() == 1 {
+                                Value::Scalar(col[0])
+                            } else {
+                                Value::Matrix(Arc::new(col.to_owned().insert_axis(ndarray::Axis(1))))
+                            }
+                        }).collect();
+
+                        items.into_par_iter().map(|val| {
+                            let sub_env = Arc::new(RwLock::new(Environment::with_parent(self.env.clone())));
+                            sub_env.write().unwrap().define(var.clone(), val);
+                            let mut sub_eval = Evaluator::new_with_env(sub_env);
+                            sub_eval.eval_block(body)
+                        }).collect::<Result<Vec<Value>, String>>()?;
+                        
+                        Ok(Value::Void)
+                    }
+                    _ => Err(format!("Cannot parfor over {:?}", iter_val)),
                 }
             }
             Stmt::While { condition, body } => {
@@ -225,7 +256,7 @@ impl Evaluator {
                     name: name.clone(),
                     params: params.clone(),
                     returns: returns.clone(),
-                    body: body.clone(),
+                    body: Arc::new(body.clone()),
                 };
                 self.env.write().unwrap().define(name.clone(), func);
                 Ok(Value::Void)
@@ -250,10 +281,18 @@ impl Evaluator {
                 Ok(Value::Void)
             }
             Stmt::CommandCall { command, args } => {
-                let arg_vals = args.iter().map(|a| Value::String(a.clone())).collect();
+                let arg_vals = args.iter().map(|a| Value::String(Arc::new(a.clone()))).collect();
                 self.call_function(Value::FunctionHandle(command.clone()), arg_vals, 0)
             }
             Stmt::Return => Ok(Value::Void),
+            Stmt::Break => {
+                eprintln!("Warning: 'break' not fully implemented yet.");
+                Ok(Value::Void)
+            }
+            Stmt::Continue => {
+                eprintln!("Warning: 'continue' not fully implemented yet.");
+                Ok(Value::Void)
+            }
             _ => Err(format!("Statement not yet implemented: {:?}", stmt)),
         }
     }
@@ -297,28 +336,23 @@ impl Evaluator {
                          }
 
                          match &mut target_val {
-                             Value::Matrix(m) => {
+                             Value::Matrix(m_arc) => {
+                                 let mut m = (**m_arc).clone();
                                  if idx_vals.len() == 1 {
-                                     let is_logical = if let Value::Matrix(mat) = &idx_vals[0] {
-                                         mat.iter().any(|&x| x == 0.0)
-                                     } else { false };
-
-                                     if is_logical {
-                                         if let Value::Matrix(mat) = &idx_vals[0] {
-                                             let mut src_idx = 0;
-                                             let src_flat: Vec<f64> = match &val {
-                                                 Value::Matrix(m) => m.iter().cloned().collect(),
-                                                 Value::Scalar(n) => vec![*n],
-                                                 _ => Vec::new(),
-                                             };
-                                             let slice = m.as_slice_mut().unwrap();
-                                             for (i, &mask_val) in mat.iter().enumerate() {
-                                                 if mask_val != 0.0 {
-                                                     let fill_val = if src_flat.len() == 1 { src_flat[0] }
-                                                                    else { *src_flat.get(src_idx).unwrap_or(&0.0) };
-                                                     slice[i] = fill_val;
-                                                     src_idx += 1;
-                                                 }
+                                     if let Value::LogicalMatrix(mask) = &idx_vals[0] {
+                                         let mut src_idx = 0;
+                                         let src_flat: Vec<f64> = match &val {
+                                             Value::Matrix(m) => m.iter().cloned().collect(),
+                                             Value::Scalar(n) => vec![*n],
+                                             _ => Vec::new(),
+                                         };
+                                         let slice = m.as_slice_mut().unwrap();
+                                         for (i, &b) in mask.iter().enumerate() {
+                                             if b {
+                                                 let fill_val = if src_flat.len() == 1 { src_flat[0] }
+                                                                else { *src_flat.get(src_idx).unwrap_or(&0.0) };
+                                                 slice[i] = fill_val;
+                                                 src_idx += 1;
                                              }
                                          }
                                      } else {
@@ -361,15 +395,18 @@ impl Evaluator {
                                          }
                                      }
                                  }
-                                 self.env.write().unwrap().define(name.clone(), Value::Matrix(m.clone()));
+                                 self.env.write().unwrap().define(name.clone(), Value::Matrix(Arc::new(m)));
                              }
                              Value::CellArray(v) => {
                                  if idx_vals.len() == 1 {
                                      if let Value::Scalar(i) = &idx_vals[0] {
                                          let idx = *i as usize - 1;
-                                         if idx < v.len() { v[idx] = val; }
+                                         if idx < v.len() {
+                                             let mut new_v = (**v).clone();
+                                             new_v[idx] = val;
+                                             self.env.write().unwrap().define(name.clone(), Value::CellArray(Arc::new(new_v)));
+                                         }
                                      }
-                                     self.env.write().unwrap().define(name.clone(), Value::CellArray(v.clone()));
                                  }
                              }
                              _ => {}
@@ -378,11 +415,12 @@ impl Evaluator {
                  }
             }
             Expr::PropertyAccess { target, property } => {
-                let target_val = self.eval_expression(target).unwrap_or(Value::Struct(std::collections::HashMap::new()));
-                if let Value::Struct(mut map) = target_val {
-                    map.insert(property.clone(), val);
+                let target_val = self.eval_expression(target).unwrap_or(Value::Struct(Arc::new(std::collections::HashMap::new())));
+                if let Value::Struct(map) = target_val {
+                    let mut new_map = (*map).clone();
+                    new_map.insert(property.clone(), val);
                     if let Expr::Identifier(name) = &**target {
-                        self.env.write().unwrap().define(name.clone(), Value::Struct(map));
+                        self.env.write().unwrap().define(name.clone(), Value::Struct(Arc::new(new_map)));
                     }
                 }
             }
@@ -390,13 +428,14 @@ impl Evaluator {
                  if let Expr::Identifier(name) = &**target {
                      let idx_vals = args.iter().map(|a| self.eval_expression(a)).collect::<Result<Vec<Value>, String>>()?;
                      let mut env = self.env.write().unwrap();
-                     if let Some(Value::CellArray(mut v)) = env.get(name) {
+                     if let Some(Value::CellArray(v)) = env.get(name) {
                          if idx_vals.len() == 1 {
                              if let Value::Scalar(i) = &idx_vals[0] {
                                  let idx = *i as usize - 1;
                                  if idx < v.len() {
-                                     v[idx] = val;
-                                     env.define(name.clone(), Value::CellArray(v));
+                                     let mut new_v = (*v).clone();
+                                     new_v[idx] = val;
+                                     env.define(name.clone(), Value::CellArray(Arc::new(new_v)));
                                  }
                              }
                          }
@@ -457,7 +496,7 @@ impl Evaluator {
             if let Expr::CellIndexing { args: c_args, .. } = a {
                 if c_args.len() == 1 && c_args[0] == Expr::Colon {
                     if let Value::CellArray(v) = val {
-                        for item in v { arg_vals.push(item); }
+                        for item in v.iter() { arg_vals.push(item.clone()); }
                         continue;
                     }
                 }
@@ -472,7 +511,7 @@ impl Evaluator {
         match expr {
             Expr::Number(n) => Ok(Value::Scalar(*n)),
             Expr::Complex(re, im) => Ok(Value::Complex(*re, *im)),
-            Expr::String(s) => Ok(Value::String(s.clone())),
+            Expr::String(s) => Ok(Value::String(Arc::new(s.clone()))),
             Expr::End => {
                 if let Some(val) = self.end_stack.last() {
                     Ok(Value::Scalar(*val))
@@ -482,11 +521,18 @@ impl Evaluator {
             }
             Expr::Colon => Ok(Value::Colon),
             Expr::Identifier(name) => {
-                if let Some(val) = self.env.read().unwrap().get(name) {
+                let builtins_requiring_no_args = vec!["clc", "tic", "toc", "clf", "cla", "gcf", "gca", "hold", "grid", "colorbar", "figure", "close", "pause", "all", "any", "prod"];
+                
+                let val_opt = self.env.read().unwrap().get(name);
+                if let Some(val) = val_opt {
+                    if let Value::FunctionHandle(ref h_name) = val {
+                        if builtins_requiring_no_args.contains(&h_name.as_str()) {
+                            return self.call_function(val, Vec::new(), 1);
+                        }
+                    }
                     return Ok(val);
                 }
                 
-                let builtins_requiring_no_args = vec!["clc", "tic", "toc", "clf", "cla", "gcf", "gca", "hold", "grid", "colorbar", "figure", "close", "pause"];
                 if builtins_requiring_no_args.contains(&name.as_str()) {
                     return self.call_function(Value::FunctionHandle(name.clone()), Vec::new(), 1);
                 }
@@ -507,8 +553,8 @@ impl Evaluator {
                     (UnaryOperator::Plus, v) => Ok(v),
                     (UnaryOperator::Minus, Value::Scalar(n)) => Ok(Value::Scalar(-n)),
                     (UnaryOperator::Minus, Value::Complex(re, im)) => Ok(Value::Complex(-re, -im)),
-                    (UnaryOperator::Minus, Value::Matrix(m)) => Ok(Value::Matrix(m.mapv(|x| -x))),
-                    (UnaryOperator::Minus, Value::ComplexMatrix(m)) => Ok(Value::ComplexMatrix(m.mapv(|x| -x))),
+                    (UnaryOperator::Minus, Value::Matrix(m)) => Ok(Value::Matrix(m.mapv(|x| -x).into())),
+                    (UnaryOperator::Minus, Value::ComplexMatrix(m)) => Ok(Value::ComplexMatrix(m.mapv(|x| -x).into())),
                     (UnaryOperator::Not, v) => Ok(Value::Bool(!v.is_truthy())),
                     _ => Err("Invalid unary operation".to_string()),
                 }
@@ -555,10 +601,10 @@ impl Evaluator {
                                 }
                                 Value::Matrix(indices) => {
                                     let mut res = Vec::new();
-                                    for &idx_val in indices {
+                                    for &idx_val in indices.iter() {
                                         res.push(v[idx_val as usize - 1].clone());
                                     }
-                                    return Ok(Value::CellArray(res));
+                                    return Ok(Value::CellArray(res.into()));
                                 }
                                 Value::Colon => return Ok(Value::CellArray(v.clone())),
                                 _ => {}
@@ -571,7 +617,7 @@ impl Evaluator {
             }
             Expr::Matrix(rows) => {
                 if rows.is_empty() {
-                    return Ok(Value::Matrix(Array2::zeros((0, 0))));
+                    return Ok(Value::Matrix(Array2::zeros((0, 0)).into()));
                 }
                 
                 let mut block_rows = Vec::new();
@@ -600,8 +646,8 @@ impl Evaluator {
                                 Value::Scalar(n) => row_mats.push(Array2::from_elem((1, 1), Complex64::new(*n, 0.0))),
                                 Value::Complex(re, im) => row_mats.push(Array2::from_elem((1, 1), Complex64::new(*re, *im))),
                                 Value::Matrix(m) => row_mats.push(m.mapv(|x| Complex64::new(x, 0.0))),
-                                Value::ComplexMatrix(m) => row_mats.push(m.clone()),
-                                _ => return Ok(Value::CellArray(row.iter().cloned().collect())), // Fall back to CellArray if heterogeneous non-math
+                                Value::ComplexMatrix(m) => row_mats.push((**m).clone()),
+                                _ => return Ok(Value::CellArray(Arc::new(row.iter().cloned().collect()))), // Fall back to CellArray if heterogeneous non-math
                             }
                         }
                         // Horizontal concat row
@@ -612,16 +658,44 @@ impl Evaluator {
                     // Vertical concat rows
                     let views: Vec<_> = final_rows.iter().map(|m| m.view()).collect();
                     let final_concat = ndarray::concatenate(ndarray::Axis(0), &views).map_err(|e| e.to_string())?;
-                    Ok(Value::ComplexMatrix(final_concat))
+                    Ok(Value::ComplexMatrix(Arc::new(final_concat)))
                 } else {
+                    // Check if we should concatenate strings
+                    let mut all_strings_or_scalars = true;
+                    let mut has_string = false;
+                    for row in &block_rows {
+                        for val in row {
+                            match val {
+                                Value::String(_) => has_string = true,
+                                Value::Scalar(_) => {},
+                                _ => { all_strings_or_scalars = false; break; }
+                            }
+                        }
+                        if !all_strings_or_scalars { break; }
+                    }
+
+                    if has_string && all_strings_or_scalars {
+                        let mut res = String::new();
+                        for row in block_rows {
+                            for val in row {
+                                match val {
+                                    Value::String(s) => res.push_str(&s),
+                                    Value::Scalar(n) => res.push_str(&format!("{}", n)),
+                                    _ => {}
+                                }
+                            }
+                        }
+                        return Ok(Value::String(Arc::new(res)));
+                    }
+
                     let mut final_rows = Vec::new();
                     for row in block_rows {
                         let mut row_mats = Vec::new();
                         for val in &row {
                             match val {
                                 Value::Scalar(n) => row_mats.push(Array2::from_elem((1, 1), *n)),
-                                Value::Matrix(m) => row_mats.push(m.clone()),
-                                _ => return Ok(Value::CellArray(row.iter().cloned().collect())),
+                                Value::Matrix(m) => row_mats.push((**m).clone()),
+                                _ => return Ok(Value::CellArray(Arc::new(row.iter().cloned().collect()))),
                             }
                         }
                         let views: Vec<_> = row_mats.iter().map(|m| m.view()).collect();
@@ -630,14 +704,14 @@ impl Evaluator {
                     }
                     let views: Vec<_> = final_rows.iter().map(|m| m.view()).collect();
                     let final_concat = ndarray::concatenate(ndarray::Axis(0), &views).map_err(|e| e.to_string())?;
-                    Ok(Value::Matrix(final_concat))
+                    Ok(Value::Matrix(Arc::new(final_concat)))
                 }
             }
             Expr::Transpose(inner) => {
                 let v = self.eval_expression(inner)?;
                 match v {
-                    Value::Matrix(m) => Ok(Value::Matrix(m.reversed_axes())),
-                    Value::ComplexMatrix(m) => Ok(Value::ComplexMatrix(m.reversed_axes())),
+                    Value::Matrix(m) => Ok(Value::Matrix((*m).clone().reversed_axes().into())),
+                    Value::ComplexMatrix(m) => Ok(Value::ComplexMatrix((*m).clone().reversed_axes().into())),
                     Value::Scalar(n) => Ok(Value::Scalar(n)),
                     Value::Complex(re, im) => Ok(Value::Complex(re, im)),
                     Value::String(s) => Ok(Value::String(s)),
@@ -662,14 +736,14 @@ impl Evaluator {
                         items.push(self.eval_expression(entry)?);
                     }
                 }
-                Ok(Value::CellArray(items))
+                Ok(Value::CellArray(Arc::new(items)))
             }
             Expr::FunctionHandle(name) => Ok(Value::FunctionHandle(name.clone())),
             Expr::KeywordArg(_, val) => self.eval_expression(val),
             Expr::AnonymousFunc { params, body } => {
                 Ok(Value::AnonymousFunction {
                     params: params.clone(),
-                    body: *body.clone(),
+                    body: Arc::new(*body.clone()),
                 })
             }
         }
@@ -679,7 +753,7 @@ impl Evaluator {
         match (left.clone(), op, right.clone()) {
             (Value::String(a), op, Value::String(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::String(format!("{}{}", a, b))),
+                    BinaryOperator::Add => Ok(Value::String(Arc::new(format!("{}{}", a, b)))),
                     BinaryOperator::Eq => Ok(Value::Bool(a == b)),
                     BinaryOperator::Ne => Ok(Value::Bool(a != b)),
                     _ => Err(format!("Operator {:?} not implemented for Strings", op)),
@@ -746,30 +820,39 @@ impl Evaluator {
             }
             (Value::Matrix(a), op, Value::Matrix(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::Matrix(a + b)),
-                    BinaryOperator::Sub => Ok(Value::Matrix(a - b)),
-                    BinaryOperator::Mul => Ok(Value::Matrix(a.dot(&b))),
-                    BinaryOperator::Div => Ok(Value::Matrix(a / b)),
-                    BinaryOperator::DotMul => Ok(Value::Matrix(a * b)),
-                    BinaryOperator::DotDiv => Ok(Value::Matrix(a / b)),
+                    BinaryOperator::Add => Ok(Value::Matrix(Arc::new(&*a + &*b))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(Arc::new(&*a - &*b))),
+                    BinaryOperator::Mul => Ok(Value::Matrix(Arc::new(a.dot(&*b)))),
+                    BinaryOperator::DotMul => {
+                        let mut res = (*a).clone();
+                        ndarray::azip!((res in &mut res, &b in &*b) *res *= b);
+                        Ok(Value::Matrix(Arc::new(res)))
+                    }
+                    BinaryOperator::DotDiv => {
+                        let mut res = (*a).clone();
+                        ndarray::azip!((res in &mut res, &b in &*b) *res /= b);
+                        Ok(Value::Matrix(Arc::new(res)))
+                    }
+                    BinaryOperator::Div => Ok(Value::Matrix(Arc::new(&*a / &*b))),
                     BinaryOperator::LDiv | BinaryOperator::DotLDiv => {
                         // Fall back to Python for LDiv
                         PythonBridge::call_runtime_func("mldivide", vec![Value::Matrix(a), Value::Matrix(b)], 1).map_err(|e| e.to_string())
                     }
                     BinaryOperator::DotPow => {
-                        let mut res = a.clone();
+                        let mut res = (*a).clone();
+                        let b_slice = b.as_slice().unwrap();
                         for (i, val) in res.iter_mut().enumerate() {
-                            *val = val.powf(b.as_slice().unwrap()[i]);
+                            *val = val.powf(b_slice[i]);
                         }
-                        Ok(Value::Matrix(res))
+                        Ok(Value::Matrix(Arc::new(res)))
                     }
                     BinaryOperator::Eq => {
                         let res = Array2::from_shape_fn(a.raw_dim(), |d| a[d] == b[d]);
-                        Ok(Value::LogicalMatrix(res))
+                        Ok(Value::LogicalMatrix(Arc::new(res)))
                     }
                     BinaryOperator::Ne => {
                         let res = Array2::from_shape_fn(a.raw_dim(), |d| a[d] != b[d]);
-                        Ok(Value::LogicalMatrix(res))
+                        Ok(Value::LogicalMatrix(Arc::new(res)))
                     }
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Matrix", op)),
                 }
@@ -781,6 +864,10 @@ impl Evaluator {
                     BinaryOperator::Sub => Ok(Value::Scalar(a_val - b)),
                     BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Scalar(a_val * b)),
                     BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Scalar(a_val / b)),
+                    BinaryOperator::Eq => Ok(Value::Bool(a_val == b)),
+                    BinaryOperator::Ne => Ok(Value::Bool(a_val != b)),
+                    BinaryOperator::Gt => Ok(Value::Bool(a_val > b)),
+                    BinaryOperator::Lt => Ok(Value::Bool(a_val < b)),
                     _ => Err(format!("Operator {:?} not implemented for Bool/Scalar", op)),
                 }
             }
@@ -791,90 +878,94 @@ impl Evaluator {
                     BinaryOperator::Sub => Ok(Value::Scalar(a - b_val)),
                     BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Scalar(a * b_val)),
                     BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Scalar(a / b_val)),
+                    BinaryOperator::Eq => Ok(Value::Bool(a == b_val)),
+                    BinaryOperator::Ne => Ok(Value::Bool(a != b_val)),
+                    BinaryOperator::Gt => Ok(Value::Bool(a > b_val)),
+                    BinaryOperator::Lt => Ok(Value::Bool(a < b_val)),
                     _ => Err(format!("Operator {:?} not implemented for Scalar/Bool", op)),
                 }
             }
             (Value::Matrix(a), op, Value::Bool(b)) => {
                 let b_val = if b { 1.0 } else { 0.0 };
                 match op {
-                    BinaryOperator::Add => Ok(Value::Matrix(a.mapv(|x| x + b_val))),
-                    BinaryOperator::Sub => Ok(Value::Matrix(a.mapv(|x| x - b_val))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(a.mapv(|x| x * b_val))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(a.mapv(|x| x / b_val))),
+                    BinaryOperator::Add => Ok(Value::Matrix(Arc::new(a.mapv(|x| x + b_val)))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(Arc::new(a.mapv(|x| x - b_val)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(Arc::new(a.mapv(|x| x * b_val)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(Arc::new(a.mapv(|x| x / b_val)))),
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Bool", op)),
                 }
             }
             (Value::Bool(a), op, Value::Matrix(b)) => {
                 let a_val = if a { 1.0 } else { 0.0 };
                 match op {
-                    BinaryOperator::Add => Ok(Value::Matrix(b.mapv(|x| a_val + x))),
-                    BinaryOperator::Sub => Ok(Value::Matrix(b.mapv(|x| a_val - x))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(b.mapv(|x| a_val * x))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(b.mapv(|x| a_val / x))),
+                    BinaryOperator::Add => Ok(Value::Matrix(Arc::new(b.mapv(|x| a_val + x)))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(Arc::new(b.mapv(|x| a_val - x)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(Arc::new(b.mapv(|x| a_val * x)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(Arc::new(b.mapv(|x| a_val / x)))),
                     _ => Err(format!("Operator {:?} not implemented for Bool/Matrix", op)),
                 }
             }
             (Value::Matrix(a), op, Value::Scalar(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::Matrix(a.mapv(|x| x + b))),
-                    BinaryOperator::Sub => Ok(Value::Matrix(a.mapv(|x| x - b))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(a.mapv(|x| x * b))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(a.mapv(|x| x / b))),
-                    BinaryOperator::Pow | BinaryOperator::DotPow => Ok(Value::Matrix(a.mapv(|x| x.powf(b)))),
-                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(a.mapv(|x| x == b))),
-                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(a.mapv(|x| x != b))),
-                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(a.mapv(|x| x < b))),
-                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(a.mapv(|x| x > b))),
-                    BinaryOperator::Le => Ok(Value::LogicalMatrix(a.mapv(|x| x <= b))),
-                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(a.mapv(|x| x >= b))),
+                    BinaryOperator::Add => Ok(Value::Matrix(Arc::new((*a).mapv(|x| x + b)))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(Arc::new((*a).mapv(|x| x - b)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(Arc::new((*a).mapv(|x| x * b)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(Arc::new((*a).mapv(|x| x / b)))),
+                    BinaryOperator::Pow | BinaryOperator::DotPow => Ok(Value::Matrix(Arc::new((*a).mapv(|x| x.powf(b))))),
+                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x == b)))),
+                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x != b)))),
+                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x < b)))),
+                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x > b)))),
+                    BinaryOperator::Le => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x <= b)))),
+                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(Arc::new((*a).mapv(|x| x >= b)))),
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Scalar", op)),
                 }
             }
             (Value::Scalar(a), op, Value::Matrix(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::Matrix(b.mapv(|x| a + x))),
-                    BinaryOperator::Sub => Ok(Value::Matrix(b.mapv(|x| a - x))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(b.mapv(|x| a * x))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(b.mapv(|x| a / x))),
-                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(b.mapv(|x| a == x))),
-                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(b.mapv(|x| a != x))),
-                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(b.mapv(|x| a < x))),
-                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(b.mapv(|x| a > x))),
-                    BinaryOperator::Le => Ok(Value::LogicalMatrix(b.mapv(|x| a <= x))),
-                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(b.mapv(|x| a >= x))),
+                    BinaryOperator::Add => Ok(Value::Matrix(Arc::new((*b).mapv(|x| a + x)))),
+                    BinaryOperator::Sub => Ok(Value::Matrix(Arc::new((*b).mapv(|x| a - x)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::Matrix(Arc::new((*b).mapv(|x| a * x)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::Matrix(Arc::new((*b).mapv(|x| a / x)))),
+                    BinaryOperator::Eq => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a == x)))),
+                    BinaryOperator::Ne => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a != x)))),
+                    BinaryOperator::Lt => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a < x)))),
+                    BinaryOperator::Gt => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a > x)))),
+                    BinaryOperator::Le => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a <= x)))),
+                    BinaryOperator::Ge => Ok(Value::LogicalMatrix(Arc::new((*b).mapv(|x| a >= x)))),
                     _ => Err(format!("Operator {:?} not implemented for Scalar/Matrix", op)),
                 }
             }
             (Value::ComplexMatrix(a), op, Value::ComplexMatrix(b)) => {
                  match op {
-                     BinaryOperator::Add => Ok(Value::ComplexMatrix(a + b)),
-                     BinaryOperator::Sub => Ok(Value::ComplexMatrix(a - b)),
-                     BinaryOperator::DotMul => Ok(Value::ComplexMatrix(a * b)),
-                     BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(a / b)),
+                     BinaryOperator::Add => Ok(Value::ComplexMatrix(Arc::new(&*a + &*b))),
+                     BinaryOperator::Sub => Ok(Value::ComplexMatrix(Arc::new(&*a - &*b))),
+                     BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new(&*a * &*b))),
+                     BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(Arc::new(&*a / &*b))),
                      _ => Err(format!("Operator {:?} not implemented for ComplexMatrix/ComplexMatrix", op)),
                  }
             }
             (Value::Matrix(a), op, Value::ComplexMatrix(b)) => {
                  match op {
                      BinaryOperator::Add | BinaryOperator::DotAdd => {
-                         let res = a.mapv(|x| Complex64::new(x, 0.0)) + b;
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).mapv(|x| Complex64::new(x, 0.0)) + &*b;
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::Sub | BinaryOperator::DotSub => {
-                         let res = a.mapv(|x| Complex64::new(x, 0.0)) - b;
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).mapv(|x| Complex64::new(x, 0.0)) - &*b;
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::Mul => {
-                         let res = a.mapv(|x| Complex64::new(x, 0.0)).dot(&b);
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).mapv(|x| Complex64::new(x, 0.0)).dot(&*b);
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::DotMul => {
-                         let res = a.mapv(|x| Complex64::new(x, 0.0)) * b;
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).mapv(|x| Complex64::new(x, 0.0)) * &*b;
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::DotDiv => {
-                         let res = a.mapv(|x| Complex64::new(x, 0.0)) / b;
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).mapv(|x| Complex64::new(x, 0.0)) / &*b;
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      _ => Err(format!("Operator {:?} not implemented for Matrix/ComplexMatrix", op)),
                  }
@@ -882,77 +973,77 @@ impl Evaluator {
             (Value::ComplexMatrix(a), op, Value::Matrix(b)) => {
                  match op {
                      BinaryOperator::Add | BinaryOperator::DotAdd => {
-                         let res = a + b.mapv(|x| Complex64::new(x, 0.0));
-                         Ok(Value::ComplexMatrix(res))
+                         let res = &*a + &(*b).mapv(|x| Complex64::new(x, 0.0));
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::Sub | BinaryOperator::DotSub => {
-                         let res = a - b.mapv(|x| Complex64::new(x, 0.0));
-                         Ok(Value::ComplexMatrix(res))
+                         let res = &*a - &(*b).mapv(|x| Complex64::new(x, 0.0));
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::Mul => {
-                         let res = a.dot(&b.mapv(|x| Complex64::new(x, 0.0)));
-                         Ok(Value::ComplexMatrix(res))
+                         let res = (*a).dot(&(*b).mapv(|x| Complex64::new(x, 0.0)));
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::DotMul => {
-                         let res = a * b.mapv(|x| Complex64::new(x, 0.0));
-                         Ok(Value::ComplexMatrix(res))
+                         let res = &*a * &(*b).mapv(|x| Complex64::new(x, 0.0));
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      BinaryOperator::DotDiv => {
-                         let res = a / b.mapv(|x| Complex64::new(x, 0.0));
-                         Ok(Value::ComplexMatrix(res))
+                         let res = &*a / &(*b).mapv(|x| Complex64::new(x, 0.0));
+                         Ok(Value::ComplexMatrix(Arc::new(res)))
                      }
                      _ => Err(format!("Operator {:?} not implemented for ComplexMatrix/Matrix", op)),
                  }
             }
             (Value::ComplexMatrix(a), op, Value::Scalar(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::ComplexMatrix(a.mapv(|x| x + b))),
-                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(a.mapv(|x| x - b))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(a.mapv(|x| x * b))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(a.mapv(|x| x / b))),
+                    BinaryOperator::Add => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x + b)))),
+                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x - b)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x * b)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x / b)))),
                     _ => Err(format!("Operator {:?} not implemented for ComplexMatrix/Scalar", op)),
                 }
             }
             (Value::Scalar(a), op, Value::ComplexMatrix(b)) => {
                 match op {
-                    BinaryOperator::Add => Ok(Value::ComplexMatrix(b.mapv(|x| a + x))),
-                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(b.mapv(|x| a - x))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(b.mapv(|x| a * x))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(b.mapv(|x| a / x))),
+                    BinaryOperator::Add => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a + x)))),
+                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a - x)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a * x)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a / x)))),
                     _ => Err(format!("Operator {:?} not implemented for Scalar/ComplexMatrix", op)),
                 }
             }
             (Value::ComplexMatrix(a), op, Value::Complex(re, im)) => {
                 let b = Complex64::new(re, im);
                 match op {
-                    BinaryOperator::Add => Ok(Value::ComplexMatrix(a.mapv(|x| x + b))),
-                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(a.mapv(|x| x - b))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(a.mapv(|x| x * b))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(a.mapv(|x| x / b))),
+                    BinaryOperator::Add => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x + b)))),
+                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x - b)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x * b)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x / b)))),
                     _ => Err(format!("Operator {:?} not implemented for ComplexMatrix/Complex", op)),
                 }
             }
             (Value::Complex(re, im), op, Value::ComplexMatrix(b)) => {
                 let a = Complex64::new(re, im);
                 match op {
-                    BinaryOperator::Add => Ok(Value::ComplexMatrix(b.mapv(|x| a + x))),
-                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(b.mapv(|x| a - x))),
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(b.mapv(|x| a * x))),
-                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(b.mapv(|x| a / x))),
+                    BinaryOperator::Add => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a + x)))),
+                    BinaryOperator::Sub => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a - x)))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a * x)))),
+                    BinaryOperator::Div | BinaryOperator::DotDiv => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a / x)))),
                     _ => Err(format!("Operator {:?} not implemented for Complex/ComplexMatrix", op)),
                 }
             }
             (Value::Complex(re, im), op, Value::Matrix(b)) => {
                 let a = Complex64::new(re, im);
                 match op {
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(b.mapv(|x| a * x))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*b).mapv(|x| a * x)))),
                     _ => Err(format!("Operator {:?} not implemented for Complex/Matrix", op)),
                 }
             }
             (Value::Matrix(a), op, Value::Complex(re, im)) => {
                 let b = Complex64::new(re, im);
                 match op {
-                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(a.mapv(|x| x * b))),
+                    BinaryOperator::Mul | BinaryOperator::DotMul => Ok(Value::ComplexMatrix(Arc::new((*a).mapv(|x| x * b)))),
                     _ => Err(format!("Operator {:?} not implemented for Matrix/Complex", op)),
                 }
             }
@@ -978,7 +1069,7 @@ impl Evaluator {
                 let mut res_vals = Vec::new();
                 if returns.len() == 1 && returns[0] == "varargout" {
                     if let Some(Value::CellArray(v)) = self.env.read().unwrap().get("varargout") {
-                        res_vals = v;
+                        res_vals = v.to_vec();
                     }
                 } else {
                     for ret_name in &returns {
@@ -992,7 +1083,7 @@ impl Evaluator {
                 } else if res_vals.len() == 1 {
                     Ok(res_vals[0].clone())
                 } else {
-                    Ok(Value::List(res_vals))
+                    Ok(Value::List(res_vals.into()))
                 }
             }
             Value::AnonymousFunction { params, body } => {
@@ -1020,14 +1111,14 @@ impl Evaluator {
                     }
                     "num2str" => {
                         if args.len() == 1 {
-                            return Ok(Value::String(format!("{}", args[0])));
+                            return Ok(Value::String(format!("{}", args[0]).into()));
                         }
                         Err("Invalid num2str args".to_string())
                     }
                     "fprintf" => {
                         if args.len() >= 1 {
                             if let Value::String(fmt) = &args[0] {
-                                let mut res = fmt.clone();
+                                let mut res: String = (**fmt).clone();
                                 for i in 1..args.len() {
                                     res = res.replacen("%s", &format!("{}", args[i]), 1);
                                     res = res.replacen("%d", &format!("{}", args[i]), 1);
@@ -1054,7 +1145,7 @@ impl Evaluator {
                                     curr += 1.0;
                                 }
                                 let len = v.len();
-                                return Ok(Value::Matrix(Array2::from_shape_vec((1, len), v).unwrap()));
+                                return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((1, len), v).unwrap())));
                             }
                         } else if args.len() == 3 {
                             if let (Value::Scalar(start), Value::Scalar(step), Value::Scalar(stop)) = (&args[0], &args[1], &args[2]) {
@@ -1073,9 +1164,9 @@ impl Evaluator {
                                 }
                                 let len = v.len();
                                 if len == 0 {
-                                    return Ok(Value::Matrix(Array2::zeros((0, 0))));
+                                    return Ok(Value::Matrix(Arc::new(Array2::zeros((0, 0)))));
                                 }
-                                return Ok(Value::Matrix(Array2::from_shape_vec((1, len), v).unwrap()));
+                                return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((1, len), v).unwrap())));
                             }
                         }
                         Err("Invalid range args".to_string())
@@ -1100,7 +1191,7 @@ impl Evaluator {
                                      indices.push((i + 1) as f64);
                                  }
                              }
-                             return Ok(Value::Matrix(Array2::from_shape_vec((1, indices.len()), indices).unwrap()));
+                             return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((1, indices.len()), indices).unwrap())));
                          }
                          Err("Invalid find args".to_string())
                     }
@@ -1109,11 +1200,11 @@ impl Evaluator {
                         for i in (0..args.len()).step_by(2) {
                             if let Value::String(key) = &args[i] {
                                 if i + 1 < args.len() {
-                                    map.insert(key.clone(), args[i+1].clone());
+                                    map.insert((**key).clone(), args[i+1].clone());
                                 }
                             }
                         }
-                        Ok(Value::Struct(map))
+                        Ok(Value::Struct(Arc::new(map)))
                     }
                     "size" => {
                         if args.len() == 1 {
@@ -1123,10 +1214,10 @@ impl Evaluator {
                                 _ => (1, 1),
                             };
                             if nargout > 1 {
-                                return Ok(Value::List(vec![Value::Scalar(rows as f64), Value::Scalar(cols as f64)]));
+                                return Ok(Value::List(Arc::new(vec![Value::Scalar(rows as f64), Value::Scalar(cols as f64)])));
                             }
                             let res = vec![rows as f64, cols as f64];
-                            return Ok(Value::Matrix(Array2::from_shape_vec((1, 2), res).unwrap()));
+                            return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((1, 2), res).unwrap())));
                         } else if args.len() == 2 {
                             let dim = match &args[1] {
                                 Value::Scalar(n) => *n as usize,
@@ -1163,6 +1254,66 @@ impl Evaluator {
                         }
                         Err("Invalid plot args".to_string())
                     }
+                    "linspace" => {
+                        if args.len() >= 2 {
+                            if let (Value::Scalar(start), Value::Scalar(stop)) = (&args[0], &args[1]) {
+                                let n = if args.len() == 3 {
+                                    if let Value::Scalar(n_val) = &args[2] { *n_val as usize } else { 100 }
+                                } else { 100 };
+                                if n == 0 { return Ok(Value::Matrix(Array2::zeros((0, 0)).into())); }
+                                if n == 1 { return Ok(Value::Matrix(Arc::new(Array2::from_elem((1, 1), *stop)))); }
+                                let mut v = Vec::with_capacity(n);
+                                let step = (stop - start) / (n - 1) as f64;
+                                for i in 0..n {
+                                    v.push(start + step * i as f64);
+                                }
+                                return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((1, n), v).unwrap())));
+                            }
+                        }
+                        Err("Invalid linspace args".to_string())
+                    }
+                    "zeros" | "ones" | "rand" | "randn" => {
+                        let (r, c) = if args.len() == 1 {
+                            if let Value::Scalar(n) = &args[0] { (*n as usize, *n as usize) }
+                            else if let Value::Matrix(m) = &args[0] {
+                                if m.len() >= 2 { (m[[0, 0]] as usize, m[[0, 1]] as usize) }
+                                else { (m[[0, 0]] as usize, m[[0, 0]] as usize) }
+                            } else { (1, 1) }
+                        } else if args.len() == 2 {
+                            if let (Value::Scalar(r_val), Value::Scalar(c_val)) = (&args[0], &args[1]) {
+                                (*r_val as usize, *c_val as usize)
+                            } else { (1, 1) }
+                        } else { (1, 1) };
+
+                        match name.as_str() {
+                            "zeros" => Ok(Value::Matrix(Array2::zeros((r, c)).into())),
+                            "ones" => Ok(Value::Matrix(Array2::from_elem((r, c), 1.0).into())),
+                            "rand" => {
+                                use rand::Rng;
+                                let mut rng = rand::thread_rng();
+                                let data: Vec<f64> = (0..r*c).map(|_| rng.r#gen()).collect();
+                                Ok(Value::Matrix(Array2::from_shape_vec((r, c), data).unwrap().into()))
+                            }
+                            "randn" => {
+                                use rand_distr::{Normal, Distribution};
+                                let mut rng = rand::thread_rng();
+                                let normal = Normal::new(0.0, 1.0).unwrap();
+                                let data: Vec<f64> = (0..r*c).map(|_| normal.sample(&mut rng)).collect();
+                                Ok(Value::Matrix(Array2::from_shape_vec((r, c), data).unwrap().into()))
+                            }
+                            _ => unreachable!()
+                        }
+                    }
+                    "eye" => {
+                        let (r, c) = if args.len() == 1 {
+                            if let Value::Scalar(n) = &args[0] { (*n as usize, *n as usize) } else { (1, 1) }
+                        } else if args.len() == 2 {
+                            if let (Value::Scalar(r_val), Value::Scalar(c_val)) = (&args[0], &args[1]) {
+                                (*r_val as usize, *c_val as usize)
+                            } else { (1, 1) }
+                        } else { (1, 1) };
+                        Ok(Value::Matrix(Arc::new(Array2::eye(r.min(c)).slice_move(ndarray::s![0..r, 0..c]).to_owned())))
+                    }
                     "simulate" => {
                           if args.len() >= 1 {
                               PythonBridge::call_simulate(&args[0], args[1..].to_vec()).map_err(|e| e.to_string())?;
@@ -1172,8 +1323,8 @@ impl Evaluator {
                     }
                     "sum" | "mean" | "std" | "var" | "min" | "max" | "round" | "floor" | "ceil" |
                     "sin" | "cos" | "tan" | "tanh" | "sinh" | "cosh" | "asinh" | "acosh" | "atanh" | "exp" | "log" | "log10" | "sqrt" | "abs" |
-                    "rand" | "randn" | "randperm" | "reshape" | "linspace" | "zeros" | "ones" | "eye" |
-                    "factorial" | "trapz" | "inv" | "eig" | "diag" | "norm" | "det" | "mod" | "rem" | "meshgrid" |
+                    "randperm" | "reshape" |
+                    "factorial" | "trapz" | "norm" | "mod" | "rem" | "meshgrid" |
                     "real" | "imag" | "sort" | "sign" | "fft" | "ifft" |
                     "ischar" | "iscell" | "isnumeric" | "strcmp" | "isequal" |
                     "argmin" | "argmax" | "isempty" => {
@@ -1192,13 +1343,65 @@ impl Evaluator {
                                         _ => return Ok(Value::Bool(false)),
                                     }
                                 }
-                                "sign" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.signum())); } }
+                                "diag" => {
+                                    if let Some(arg) = args.first() {
+                                        match arg {
+                                            Value::Matrix(m) => {
+                                                if m.nrows() == 1 || m.ncols() == 1 {
+                                                    // Construct diagonal matrix from vector
+                                                    let v = m.iter().cloned().collect::<Vec<f64>>();
+                                                    return Ok(Value::Matrix(Arc::new(Array2::from_diag(&ndarray::Array1::from_vec(v)))));
+                                                } else {
+                                                    // Extract diagonal from matrix
+                                                    let diag_v = m.diag().iter().cloned().collect::<Vec<f64>>();
+                                                    let len = diag_v.len();
+                                                    return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((len, 1), diag_v).unwrap())));
+                                                }
+                                            }
+                                            Value::Scalar(n) => {
+                                                return Ok(Value::Matrix(Arc::new(Array2::from_elem((1, 1), *n))));
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    return Ok(Value::Void);
+                                }
+                                "factorial" => {
+                                    if let Value::Scalar(n) = args[0] {
+                                        let res: f64 = (1..=(n as u64)).map(|x| x as f64).product();
+                                        return Ok(Value::Scalar(res));
+                                    }
+                                }
+                                "kron" => {
+                                    if args.len() == 2 {
+                                        if let (Value::Matrix(a), Value::Matrix(b)) = (&args[0], &args[1]) {
+                                            let mut res = Array2::zeros((a.nrows() * b.nrows(), a.ncols() * b.ncols()));
+                                            for (i, row_a) in a.rows().into_iter().enumerate() {
+                                                for (j, &val_a) in row_a.into_iter().enumerate() {
+                                                    let mut block = res.slice_mut(ndarray::s![
+                                                        i * b.nrows() .. (i + 1) * b.nrows(),
+                                                        j * b.ncols() .. (j + 1) * b.ncols()
+                                                    ]);
+                                                    block.assign(&(&**b * val_a));
+                                                }
+                                            }
+                                            return Ok(Value::Matrix(Arc::new(res)));
+                                        }
+                                    }
+                                }
+                                "sign" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.signum())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(m.mapv(|x| x.signum()).into())),
+                                        _ => {}
+                                    }
+                                }
                                 "real" => {
                                     match &args[0] {
                                         Value::Scalar(n) => return Ok(Value::Scalar(*n)),
                                         Value::Complex(re, _) => return Ok(Value::Scalar(*re)),
                                         Value::Matrix(m) => return Ok(Value::Matrix(m.clone())),
-                                        Value::ComplexMatrix(m) => return Ok(Value::Matrix(m.mapv(|x| x.re))),
+                                        Value::ComplexMatrix(m) => return Ok(Value::Matrix(m.mapv(|x| x.re).into())),
                                         _ => {}
                                     }
                                 }
@@ -1206,25 +1409,275 @@ impl Evaluator {
                                     match &args[0] {
                                         Value::Scalar(_) => return Ok(Value::Scalar(0.0)),
                                         Value::Complex(_, im) => return Ok(Value::Scalar(*im)),
-                                        Value::Matrix(m) => return Ok(Value::Matrix(Array2::zeros(m.raw_dim()))),
-                                        Value::ComplexMatrix(m) => return Ok(Value::Matrix(m.mapv(|x| x.im))),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Array2::zeros(m.raw_dim()).into())),
+                                        Value::ComplexMatrix(m) => return Ok(Value::Matrix(m.mapv(|x| x.im).into())),
                                         _ => {}
                                     }
                                 }
-                                "exp" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.exp())); } }
-                                "sin" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.sin())); } }
-                                "cos" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.cos())); } }
-                                "tan" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.tan())); } }
-                                "tanh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.tanh())); } }
-                                "sinh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.sinh())); } }
-                                "cosh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.cosh())); } }
-                                "asinh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.asinh())); } }
-                                "acosh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.acosh())); } }
-                                "atanh" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.atanh())); } }
-                                "sqrt" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.sqrt())); } }
-                                "abs" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.abs())); } }
-                                "log" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.ln())); } }
-                                "log10" => { if let Value::Scalar(n) = args[0] { return Ok(Value::Scalar(n.log10())); } }
+                                "prod" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                        Value::Matrix(m) => return Ok(Value::Scalar(m.iter().product())),
+                                        _ => return Ok(Value::Scalar(1.0)),
+                                    }
+                                }
+                                "eig" => {
+                                    if let Value::Matrix(m) = &args[0] {
+                                        if m.nrows() == 2 && m.ncols() == 2 {
+                                            // Solve quadratic for 2x2: det(A-lambda*I) = 0
+                                            // lambda^2 - tr(A)lambda + det(A) = 0
+                                            let tr = m[[0,0]] + m[[1,1]];
+                                            let det = m[[0,0]]*m[[1,1]] - m[[0,1]]*m[[1,0]];
+                                            let disc = tr*tr - 4.0*det;
+                                            if disc >= 0.0 {
+                                                let l1 = (tr + disc.sqrt()) / 2.0;
+                                                let l2 = (tr - disc.sqrt()) / 2.0;
+                                                if nargout > 1 {
+                                                    return Ok(Value::List(Arc::new(vec![
+                                                        Value::Matrix(Arc::new(Array2::eye(2))), // Placeholder for eigenvectors
+                                                        Value::Matrix(Arc::new(Array2::from_diag(&ndarray::array![l1, l2])))
+                                                    ])));
+                                                }
+                                                return Ok(Value::Matrix(Arc::new(ndarray::array![[l1], [l2]])));
+                                            }
+                                        }
+                                    }
+                                    return PythonBridge::call_runtime_func(&name, args, nargout).map_err(|e| e.to_string());
+                                }
+                                "prod" => {
+                                    if let Some(arg) = args.first() {
+                                        match arg {
+                                            Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                            Value::Matrix(m) => return Ok(Value::Scalar(m.iter().product())),
+                                            _ => return Ok(Value::Scalar(1.0)),
+                                        }
+                                    }
+                                    return Ok(Value::Scalar(1.0));
+                                }
+                                "all" => {
+                                    if let Some(arg) = args.first() {
+                                        match arg {
+                                            Value::Scalar(n) => return Ok(Value::Bool(*n != 0.0)),
+                                            Value::Matrix(m) => return Ok(Value::Bool(m.iter().all(|&x| x != 0.0))),
+                                            Value::LogicalMatrix(m) => return Ok(Value::Bool(m.iter().all(|&x| x))),
+                                            _ => return Ok(Value::Bool(true)),
+                                        }
+                                    }
+                                    return Ok(Value::Bool(true));
+                                }
+                                "any" => {
+                                    if let Some(arg) = args.first() {
+                                        match arg {
+                                            Value::Scalar(n) => return Ok(Value::Bool(*n != 0.0)),
+                                            Value::Matrix(m) => return Ok(Value::Bool(m.iter().any(|&x| x != 0.0))),
+                                            Value::LogicalMatrix(m) => return Ok(Value::Bool(m.iter().any(|&x| x))),
+                                            _ => return Ok(Value::Bool(true)),
+                                        }
+                                    }
+                                    return Ok(Value::Bool(false));
+                                }
+                                "det" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        if m.nrows() == 2 && m.ncols() == 2 {
+                                            return Ok(Value::Scalar(m[[0,0]]*m[[1,1]] - m[[0,1]]*m[[1,0]]));
+                                        }
+                                    }
+                                    return PythonBridge::call_runtime_func(&name, args, nargout).map_err(|e| e.to_string());
+                                }
+                                "inv" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        if m.nrows() == 2 && m.ncols() == 2 {
+                                            let det = m[[0,0]]*m[[1,1]] - m[[0,1]]*m[[1,0]];
+                                            if det != 0.0 {
+                                                let mut inv_m = Array2::zeros((2, 2));
+                                                inv_m[[0,0]] = m[[1,1]] / det;
+                                                inv_m[[1,1]] = m[[0,0]] / det;
+                                                inv_m[[0,1]] = -m[[0,1]] / det;
+                                                inv_m[[1,0]] = -m[[1,0]] / det;
+                                                return Ok(Value::Matrix(Arc::new(inv_m)));
+                                            }
+                                        }
+                                    }
+                                    return PythonBridge::call_runtime_func(&name, args, nargout).map_err(|e| e.to_string());
+                                }
+                                "sum" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        return Ok(Value::Scalar(m.iter().sum()));
+                                    }
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                        _ => return Ok(Value::Scalar(0.0)),
+                                    }
+                                }
+                                "mean" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        let sum: f64 = m.iter().sum();
+                                        return Ok(Value::Scalar(sum / m.len() as f64));
+                                    }
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                        _ => return Ok(Value::Scalar(0.0)),
+                                    }
+                                }
+                                "min" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        let mut min_val = f64::INFINITY;
+                                        let mut min_idx = 0;
+                                        for (i, &val) in m.iter().enumerate() {
+                                            if val < min_val {
+                                                min_val = val;
+                                                min_idx = i + 1; // 1-based
+                                            }
+                                        }
+                                        if nargout > 1 {
+                                            return Ok(Value::List(Arc::new(vec![Value::Scalar(min_val), Value::Scalar(min_idx as f64)])));
+                                        }
+                                        return Ok(Value::Scalar(min_val));
+                                    }
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                        _ => return Ok(Value::Scalar(0.0)),
+                                    }
+                                }
+                                "max" => {
+                                    if let Some(Value::Matrix(m)) = args.first() {
+                                        let mut max_val = f64::NEG_INFINITY;
+                                        let mut max_idx = 0;
+                                        for (i, &val) in m.iter().enumerate() {
+                                            if val > max_val {
+                                                max_val = val;
+                                                max_idx = i + 1; // 1-based
+                                            }
+                                        }
+                                        if nargout > 1 {
+                                            return Ok(Value::List(Arc::new(vec![Value::Scalar(max_val), Value::Scalar(max_idx as f64)])));
+                                        }
+                                        return Ok(Value::Scalar(max_val));
+                                    }
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(*n)),
+                                        _ => return Ok(Value::Scalar(0.0)),
+                                    }
+                                }
+                                "round" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.round())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.round())))),
+                                        _ => {}
+                                    }
+                                }
+                                "floor" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.floor())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.floor())))),
+                                        _ => {}
+                                    }
+                                }
+                                "ceil" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.ceil())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.ceil())))),
+                                        _ => {}
+                                    }
+                                }
+                                "exp" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.exp())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.exp())))),
+                                        _ => {}
+                                    }
+                                }
+                                "sin" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.sin())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.sin())))),
+                                        _ => {}
+                                    }
+                                }
+                                "cos" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.cos())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.cos())))),
+                                        _ => {}
+                                    }
+                                }
+                                "tan" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.tan())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.tan())))),
+                                        _ => {}
+                                    }
+                                }
+                                "tanh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.tanh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.tanh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "sinh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.sinh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.sinh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "cosh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.cosh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.cosh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "asinh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.asinh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.asinh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "acosh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.acosh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.acosh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "atanh" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.atanh())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.atanh())))),
+                                        _ => {}
+                                    }
+                                }
+                                "sqrt" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.sqrt())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.sqrt())))),
+                                        _ => {}
+                                    }
+                                }
+                                "abs" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.abs())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.abs())))),
+                                        _ => {}
+                                    }
+                                }
+                                "log" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.ln())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.ln())))),
+                                        _ => {}
+                                    }
+                                }
+                                "log10" => {
+                                    match &args[0] {
+                                        Value::Scalar(n) => return Ok(Value::Scalar(n.log10())),
+                                        Value::Matrix(m) => return Ok(Value::Matrix(Arc::new(m.mapv(|x| x.log10())))),
+                                        _ => {}
+                                    }
+                                }
                                 _ => {}
                             }
                         }
@@ -1286,14 +1739,14 @@ impl Evaluator {
                                 }
                                 new_env.write().unwrap().define("nargin".to_string(), Value::Scalar(args.len() as f64));
                                 new_env.write().unwrap().define("nargout".to_string(), Value::Scalar(nargout.max(1) as f64));
-                                new_env.write().unwrap().define("varargin".to_string(), Value::CellArray(args.clone()));
+                                new_env.write().unwrap().define("varargin".to_string(), Value::CellArray(args.clone().into()));
                                 let old_env = std::mem::replace(&mut self.env, new_env);
                                 let _ = self.eval_block(body)?;
                                 
                                 let mut res_vals = Vec::new();
                                 if returns.len() == 1 && returns[0] == "varargout" {
                                     if let Some(Value::CellArray(v)) = self.env.read().unwrap().get("varargout") {
-                                        res_vals = v;
+                                        res_vals = v.to_vec();
                                     }
                                 } else {
                                     let limit = nargout.max(1);
@@ -1310,7 +1763,7 @@ impl Evaluator {
                                 } else if res_vals.len() == 1 {
                                     return Ok(res_vals[0].clone());
                                 } else {
-                                    return Ok(Value::List(res_vals));
+                                    return Ok(Value::List(res_vals.into()));
                                 }
                             } else {
                                 return self.eval_program(&program);
@@ -1329,7 +1782,7 @@ impl Evaluator {
                     match &args[0] {
                         Value::Scalar(i) => return Ok(Value::Scalar(m.as_slice().unwrap()[*i as usize - 1])),
                         Value::Matrix(indices) => {
-                            for &idx_val in indices {
+                            for &idx_val in indices.iter() {
                                 res_data.push(m.as_slice().unwrap()[idx_val as usize - 1]);
                             }
                             if indices.len() == 1 {
@@ -1343,7 +1796,7 @@ impl Evaluator {
                             } else {
                                 (indices.nrows(), indices.ncols())
                             };
-                            return Ok(Value::Matrix(Array2::from_shape_vec(shape, res_data).unwrap()));
+                            return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec(shape, res_data).unwrap())));
                         }
                         Value::LogicalMatrix(mask) => {
                             let flat_m = m.as_slice().unwrap();
@@ -1353,11 +1806,11 @@ impl Evaluator {
                                 }
                             }
                             let len = res_data.len();
-                            return Ok(Value::Matrix(Array2::from_shape_vec((len, 1), res_data).unwrap()));
+                            return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((len, 1), res_data).unwrap())));
                         }
                         Value::Colon => {
                             let data = m.iter().cloned().collect();
-                            return Ok(Value::Matrix(Array2::from_shape_vec((m.len(), 1), data).unwrap()));
+                            return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((m.len(), 1), data).unwrap())));
                         }
                         _ => return Err("Invalid index type".to_string()),
                     }
@@ -1397,7 +1850,7 @@ impl Evaluator {
                     if rows_idx.len() == 1 && cols_idx.len() == 1 {
                         return Ok(Value::Scalar(res_data[0]));
                     }
-                    return Ok(Value::Matrix(Array2::from_shape_vec((rows_idx.len(), cols_idx.len()), res_data).unwrap()));
+                    return Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((rows_idx.len(), cols_idx.len()), res_data).unwrap())));
                 }
                 Err("Invalid matrix indexing".to_string())
             }
@@ -1427,7 +1880,7 @@ impl Evaluator {
                              res_data.push(m[[ri, ci]]);
                          }
                      }
-                     return Ok(Value::ComplexMatrix(Array2::from_shape_vec((rows_idx.len(), cols_idx.len()), res_data).unwrap()));
+                     return Ok(Value::ComplexMatrix(Array2::from_shape_vec((rows_idx.len(), cols_idx.len()), res_data).unwrap().into()));
                  } else if args.len() == 1 {
                      match &args[0] {
                          Value::Scalar(i) => {
@@ -1435,7 +1888,7 @@ impl Evaluator {
                              return Ok(Value::Complex(res.re, res.im));
                          }
                          Value::Matrix(indices) => {
-                             for &idx_val in indices {
+                             for &idx_val in indices.iter() {
                                  res_data.push(m.as_slice().unwrap()[idx_val as usize - 1]);
                              }
                              if indices.len() == 1 {
@@ -1450,7 +1903,7 @@ impl Evaluator {
                              } else {
                                  (indices.nrows(), indices.ncols())
                              };
-                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec(shape, res_data).unwrap()));
+                             return Ok(Value::ComplexMatrix(Arc::new(Array2::from_shape_vec(shape, res_data).unwrap())));
                          }
                          Value::LogicalMatrix(mask) => {
                              let flat_m = m.as_slice().unwrap();
@@ -1460,11 +1913,11 @@ impl Evaluator {
                                  }
                              }
                              let len = res_data.len();
-                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec((len, 1), res_data).unwrap()));
+                             return Ok(Value::ComplexMatrix(Arc::new(Array2::from_shape_vec((len, 1), res_data).unwrap())));
                          }
                          Value::Colon => {
                              let data = m.iter().cloned().collect();
-                             return Ok(Value::ComplexMatrix(Array2::from_shape_vec((m.len(), 1), data).unwrap()));
+                             return Ok(Value::ComplexMatrix(Arc::new(Array2::from_shape_vec((m.len(), 1), data).unwrap())));
                          }
                          _ => return Err("Invalid index type".to_string()),
                      }
@@ -1480,14 +1933,13 @@ impl Evaluator {
                                 return Ok(v[idx].clone());
                             }
                         }
-                        Value::Matrix(indices) => {
-                            let mut res = Vec::new();
-                            for &idx_val in indices {
-                                res.push(v[idx_val as usize - 1].clone());
-                            }
-                            return Ok(Value::CellArray(res));
-                        }
-                        Value::Colon => return Ok(Value::CellArray(v.clone())),
+                                            Value::Matrix(indices) => {
+                                                let mut res = Vec::new();
+                                                for &idx_val in indices.iter() {
+                                                    res.push(v[idx_val as usize - 1].clone());
+                                                }
+                                                return Ok(Value::CellArray(res.into()));
+                                            }                        Value::Colon => return Ok(Value::CellArray(v.clone())),
                         _ => {}
                     }
                 }

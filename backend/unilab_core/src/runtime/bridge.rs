@@ -4,6 +4,7 @@ use pyo3::IntoPyObjectExt;
 use numpy::{ToPyArray, PyArray1, PyArray2, PyArrayMethods};
 use crate::runtime::value::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use num_complex::Complex64;
 
 pub struct PythonBridge;
@@ -28,49 +29,15 @@ impl PythonBridge {
         Ok(())
     }
 
-    pub fn call_plot(x: &Value, y: &Value) -> PyResult<()> {
-        Python::with_gil(|py| {
-            Self::setup_python_path(py)?;
-            let plt = py.import("matplotlib.pyplot")?;
-            
-            let py_x = match x {
-                Value::Matrix(m) if m.nrows() == 1 || m.ncols() == 1 => {
-                    let flat = m.iter().cloned().collect::<Vec<f64>>();
-                    flat.into_py_any(py)?.into_bound(py)
-                }
-                _ => Self::value_to_py(py, x)?,
-            };
-            let py_y = match y {
-                Value::Matrix(m) if m.nrows() == 1 || m.ncols() == 1 => {
-                    let flat = m.iter().cloned().collect::<Vec<f64>>();
-                    flat.into_py_any(py)?.into_bound(py)
-                }
-                _ => Self::value_to_py(py, y)?,
-            };
-            
-            plt.call_method1("plot", (py_x, py_y))?;
-            plt.call_method0("show")?;
-            Ok(())
-        })
+    pub fn call_plot(_x: &Value, _y: &Value) -> PyResult<()> {
+        // Direct plotting from Rust is disabled to avoid segfaults with GUI backends.
+        // Data is now captured in Evaluator.plots and handled by the caller.
+        Ok(())
     }
 
-    pub fn call_simulate(model: &Value, args: Vec<Value>) -> PyResult<()> {
-        Python::with_gil(|py| {
-            Self::setup_python_path(py)?;
-            let engine = match py.import("core.simulation.engine") {
-                Ok(m) => m,
-                Err(_) => py.import("backend.core.simulation.engine")?,
-            };
-            
-            let py_model = Self::value_to_py(py, model)?;
-            let mut py_args = Vec::new();
-            for arg in args {
-                py_args.push(Self::value_to_py(py, &arg)?);
-            }
-            
-            engine.call_method1("unilab_simulate", (py_model, PyTuple::new(py, py_args)?))?;
-            Ok(())
-        })
+    pub fn call_simulate(_model: &Value, _args: Vec<Value>) -> PyResult<()> {
+        // Simulation should be handled at a higher level or via message passing.
+        Ok(())
     }
 
     pub fn call_runtime_func(name: &str, args: Vec<Value>, nargout: usize) -> PyResult<Value> {
@@ -107,7 +74,7 @@ impl PythonBridge {
     pub fn value_to_py<'py>(py: Python<'py>, val: &Value) -> PyResult<Bound<'py, PyAny>> {
         match val {
             Value::Scalar(n) => Ok(n.into_py_any(py)?.into_bound(py)),
-            Value::String(s) => Ok(PyString::new(py, s).into_any()),
+            Value::String(s) => Ok(PyString::new(py, &**s).into_any()),
             Value::Bool(b) => Ok(b.into_py_any(py)?.into_bound(py)),
             Value::Matrix(m) => {
                 let py_arr = m.to_pyarray(py);
@@ -123,14 +90,14 @@ impl PythonBridge {
             }
             Value::CellArray(v) => {
                 let mut list = Vec::new();
-                for item in v {
+                for item in v.iter() {
                     list.push(Self::value_to_py(py, item)?);
                 }
                 Ok(PyList::new(py, list)?.into_any())
             }
             Value::Struct(map) => {
                 let dict = PyDict::new(py);
-                for (k, v) in map {
+                for (k, v) in map.iter() {
                     dict.set_item(k, Self::value_to_py(py, v)?)?;
                 }
                 Ok(dict.into_any())
@@ -151,35 +118,35 @@ impl PythonBridge {
         if let Ok(arr) = obj.downcast::<PyArray2<f64>>() {
             let nd = arr.to_owned_array();
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
-            return Ok(Value::Matrix(nd));
+            return Ok(Value::Matrix(Arc::new(nd)));
         }
         if let Ok(arr) = obj.downcast::<PyArray1<f64>>() {
             let nd = arr.to_owned_array();
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
             let len = nd.len();
-            return Ok(Value::Matrix(nd.into_shape((1, len)).unwrap()));
+            return Ok(Value::Matrix(Arc::new(nd.into_shape((1, len)).unwrap())));
         }
         if let Ok(arr) = obj.downcast::<PyArray2<f32>>() {
             let nd = arr.to_owned_array().mapv(|x| x as f64);
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
-            return Ok(Value::Matrix(nd));
+            return Ok(Value::Matrix(Arc::new(nd)));
         }
         if let Ok(arr) = obj.downcast::<PyArray1<f32>>() {
             let nd = arr.to_owned_array().mapv(|x| x as f64);
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
             let len = nd.len();
-            return Ok(Value::Matrix(nd.into_shape((1, len)).unwrap()));
+            return Ok(Value::Matrix(Arc::new(nd.into_shape((1, len)).unwrap())));
         }
         if let Ok(arr) = obj.downcast::<PyArray2<i64>>() {
             let nd = arr.to_owned_array().mapv(|x| x as f64);
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
-            return Ok(Value::Matrix(nd));
+            return Ok(Value::Matrix(Arc::new(nd)));
         }
         if let Ok(arr) = obj.downcast::<PyArray1<i64>>() {
             let nd = arr.to_owned_array().mapv(|x| x as f64);
             if nd.len() == 1 { return Ok(Value::Scalar(nd.as_slice().unwrap()[0])); }
             let len = nd.len();
-            return Ok(Value::Matrix(nd.into_shape((1, len)).unwrap()));
+            return Ok(Value::Matrix(Arc::new(nd.into_shape((1, len)).unwrap())));
         }
         if let Ok(arr) = obj.downcast::<PyArray2<Complex64>>() {
             let nd = arr.to_owned_array();
@@ -187,7 +154,7 @@ impl PythonBridge {
                 let c = nd.as_slice().unwrap()[0];
                 return Ok(Value::Complex(c.re, c.im));
             }
-            return Ok(Value::ComplexMatrix(nd));
+            return Ok(Value::ComplexMatrix(Arc::new(nd)));
         }
         if let Ok(arr) = obj.downcast::<PyArray1<Complex64>>() {
             let nd = arr.to_owned_array();
@@ -196,14 +163,14 @@ impl PythonBridge {
                 return Ok(Value::Complex(c.re, c.im));
             }
             let len = nd.len();
-            return Ok(Value::ComplexMatrix(nd.into_shape((1, len)).unwrap()));
+            return Ok(Value::ComplexMatrix(Arc::new(nd.into_shape((1, len)).unwrap())));
         }
 
         if let Ok(n) = obj.extract::<f64>() {
             return Ok(Value::Scalar(n));
         }
         if let Ok(s) = obj.extract::<String>() {
-            return Ok(Value::String(s));
+            return Ok(Value::String(Arc::new(s)));
         }
         if let Ok(b) = obj.extract::<bool>() {
             return Ok(Value::Bool(b));
@@ -214,14 +181,14 @@ impl PythonBridge {
             for item in list {
                 v.push(Self::py_to_value(&item)?);
             }
-            return Ok(Value::CellArray(v));
+            return Ok(Value::CellArray(Arc::new(v)));
         }
         if let Ok(tuple) = obj.downcast::<PyTuple>() {
             let mut v = Vec::new();
             for item in tuple {
                 v.push(Self::py_to_value(&item)?);
             }
-            return Ok(Value::CellArray(v));
+            return Ok(Value::CellArray(Arc::new(v)));
         }
         if let Ok(dict) = obj.downcast::<PyDict>() {
             let mut map = HashMap::new();
@@ -229,7 +196,7 @@ impl PythonBridge {
                 let k_str = k.extract::<String>()?;
                 map.insert(k_str, Self::py_to_value(&v)?);
             }
-            return Ok(Value::Struct(map));
+            return Ok(Value::Struct(Arc::new(map)));
         }
         Ok(Value::Void)
     }

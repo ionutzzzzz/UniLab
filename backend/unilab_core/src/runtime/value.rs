@@ -2,6 +2,7 @@ use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::collections::HashMap;
+use std::sync::Arc;
 use crate::parser::ast::{Stmt, Expr};
 use num_complex::Complex64;
 
@@ -9,27 +10,27 @@ use num_complex::Complex64;
 pub enum Value {
     Scalar(f64),
     Complex(f64, f64),
-    Matrix(Array2<f64>),
-    ComplexMatrix(Array2<Complex64>),
-    LogicalMatrix(Array2<bool>),
-    String(String),
+    Matrix(Arc<Array2<f64>>),
+    ComplexMatrix(Arc<Array2<Complex64>>),
+    LogicalMatrix(Arc<Array2<bool>>),
+    String(Arc<String>),
     Bool(bool),
-    CellArray(Vec<Value>),
-    Struct(HashMap<String, Value>),
+    CellArray(Arc<Vec<Value>>),
+    Struct(Arc<HashMap<String, Value>>),
     FunctionHandle(String),
     Function {
         name: String,
         params: Vec<String>,
         returns: Vec<String>,
-        body: Vec<Stmt>,
+        body: Arc<Vec<Stmt>>,
     },
     AnonymousFunction {
         params: Vec<String>,
-        body: Expr,
+        body: Arc<Expr>,
     },
     Void,
     Colon,
-    List(Vec<Value>),
+    List(Arc<Vec<Value>>),
 }
 
 impl Value {

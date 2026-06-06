@@ -41,6 +41,7 @@ class SettingsProvider with ChangeNotifier {
     final telemetry = prefs.getBool('telemetry') ?? true;
     final kernelAddress = prefs.getString('kernelAddress') ?? 'http://localhost:8000';
     final connectionTimeout = prefs.getInt('connectionTimeout') ?? 30;
+    final executionTimeout = prefs.getInt('executionTimeout') ?? 300;
     final showWhitespace = prefs.getBool('showWhitespace') ?? false;
     final enableAutocomplete = prefs.getBool('enableAutocomplete') ?? true;
     final defaultProjectPath = prefs.getString('defaultProjectPath') ?? '';
@@ -93,6 +94,7 @@ class SettingsProvider with ChangeNotifier {
       telemetry: telemetry,
       kernelAddress: kernelAddress,
       connectionTimeout: connectionTimeout,
+      executionTimeout: executionTimeout,
       showWhitespace: showWhitespace,
       enableAutocomplete: enableAutocomplete,
       defaultProjectPath: defaultProjectPath,
@@ -134,6 +136,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setBool('telemetry', _settings.telemetry);
     await prefs.setString('kernelAddress', _settings.kernelAddress);
     await prefs.setInt('connectionTimeout', _settings.connectionTimeout);
+    await prefs.setInt('executionTimeout', _settings.executionTimeout);
     await prefs.setBool('showWhitespace', _settings.showWhitespace);
     await prefs.setBool('enableAutocomplete', _settings.enableAutocomplete);
     await prefs.setString('defaultProjectPath', _settings.defaultProjectPath);

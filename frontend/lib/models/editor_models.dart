@@ -131,6 +131,8 @@ class PlotData {
   final List<List<double>>? zData; // For 3D plots
   final String? fileName;
   final String? imageDataUri; // For base64 PNG images from backend
+  final String? sourceScript; // The script that generated this plot
+  final String? figNum; // Figure number
   DateTime createdAt;
 
   PlotData({
@@ -142,6 +144,8 @@ class PlotData {
     this.zData,
     this.fileName,
     this.imageDataUri,
+    this.sourceScript,
+    this.figNum,
     DateTime? createdAt,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -154,6 +158,8 @@ class PlotData {
       xData: (json['xData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
       yData: (json['yData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
       imageDataUri: json['imageDataUri'] as String?,
+      sourceScript: json['sourceScript'] as String?,
+      figNum: json['figNum'] as String?,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
     );
   }
@@ -167,6 +173,8 @@ class PlotData {
     List<List<double>>? zData,
     String? fileName,
     String? imageDataUri,
+    String? sourceScript,
+    String? figNum,
     DateTime? createdAt,
   }) {
     return PlotData(
@@ -178,6 +186,8 @@ class PlotData {
       zData: zData ?? this.zData,
       fileName: fileName ?? this.fileName,
       imageDataUri: imageDataUri ?? this.imageDataUri,
+      sourceScript: sourceScript ?? this.sourceScript,
+      figNum: figNum ?? this.figNum,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -190,6 +200,8 @@ class PlotData {
       'xData': xData,
       'yData': yData,
       'imageDataUri': imageDataUri,
+      'sourceScript': sourceScript,
+      'figNum': figNum,
       'createdAt': createdAt.toIso8601String(),
     };
   }
