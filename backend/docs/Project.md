@@ -1,7 +1,7 @@
 # UniLab: Project Evolution & Native GUI Transition
 
-**Last Updated:** May 26, 2026  
-**Status:** Phase 1 (Python Core) Complete | Phase 2 (Native GUI) Initialized
+**Last Updated:** June 6, 2026  
+**Status:** Phase 1 (Python Core) Complete | Phase 2 (Native GUI) In Development
 
 ---
 
@@ -40,8 +40,9 @@ We are currently migrating the core engine to **Rust** and the UI to **Flutter**
 
 ### Q3 2026: Foundation
 - [x] Architectural design for Flutter/Rust transition.
-- [ ] Initialization of Flutter project and Rust workspace.
-- [ ] Porting the Lark EBNF grammar to a Rust-native parser (Nom/Pest).
+- [x] Initialization of Flutter project and Rust workspace.
+- [x] Integration of `flutter_rust_bridge`.
+- [ ] Porting the Lark EBNF grammar to a Rust-native parser (Nom/Pest) - *In Progress*.
 
 ### Q4 2026: Core Math in Rust
 - [ ] Implementing basic matrix operations (`ndarray`) in Rust.
@@ -58,3 +59,4 @@ We are currently migrating the core engine to **Rust** and the UI to **Flutter**
 ## 📝 Document History
 - **v1.0 (May 18, 2026):** Bug fixes and Python core completion.
 - **v2.0 (May 26, 2026):** Architectural pivot to Flutter/Rust for Native GUI.
+- **v2.1 (June 6, 2026):** Phase 2 Initialization - Flutter and Rust environments ready.

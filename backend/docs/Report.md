@@ -1,8 +1,8 @@
 # UniLab: Comprehensive Technical Report
 ## Scientific Computing & Native GUI Transition
 
-**Date:** May 26, 2026  
-**Status:** Version 2.0 (Architectural Pivot)  
+**Date:** June 6, 2026  
+**Status:** Version 2.1 (Phase 2 Initialization)  
 **Project Type:** Native Cross-Platform Simulation & Modeling
 
 ---
@@ -14,7 +14,18 @@ UniLab is transitioning from a MATLAB-to-Python transpiler into a **fully native
 ### Project Evolution
 - **Phase 1 (Legacy):** Python-based backend using NumPy/SciPy (Stabilized).
 - **Phase 2 (Active):** Native transition to Rust and Flutter for true cross-platform parity.
-- **Goal:** A professional-grade, offline-capable alternative to MATLAB with a custom native compiler.
+- **Current Status:** Flutter project and Rust workspace initialized; `flutter_rust_bridge` integrated.
+
+---
+
+## Native Transition Progress (Phase 2)
+
+As of June 2026, the foundational elements for the native transition are in place:
+
+1. **Rust Core (`unilab_core`):** The Rust workspace has been initialized with modules for parsing, runtime execution, and standard library.
+2. **Flutter Frontend:** The Flutter application has been initialized with a professional multi-panel layout architecture (MATLAB-inspired).
+3. **Communication Bridge:** `flutter_rust_bridge` is successfully integrated, allowing asynchronous calls between the Dart UI and Rust math engine.
+4. **Parser Development:** Work has begun on porting the `pest` grammar for MATLAB syntax parsing.
 
 ---
 
@@ -55,23 +66,24 @@ Flutter UI (Real-time data-driven rendering)
 
 ## Roadmap: The Path to Native UniLab
 
-### Phase 1: Engine Foundation
+### Phase 1: Engine Foundation (In Progress)
 - **Parser Migration:** Porting the Lark EBNF grammar to Rust using the `pest` library for faster, native parsing.
 - **AST Interpreter:** Building a high-speed tree-walking interpreter in Rust to replace the Python `exec()` model.
 - **Numerical Core:** Integrating `ndarray` and `nalgebra` to replace NumPy functionalities.
 
-### Phase 2: Native GUI Development
+### Phase 2: Native GUI Development (In Progress)
 - **Flutter Workspace:** Developing a local file explorer and workspace manager that works offline.
 - **Interactive Plotting:** Building custom Flutter widgets that render data vectors directly from Rust, removing the dependency on Matplotlib.
 - **Code Editor:** Implementation of a high-performance editor with syntax highlighting and code completion.
 
-### Phase 3: The Custom Compiler
+### Phase 3: The Custom Compiler (Planned)
 - **IR Generation:** Designing an Intermediate Representation (IR) optimized for mathematical operations.
 - **LLVM Integration:** Exploring LLVM as a backend for the UniLab compiler to achieve native machine-code speeds.
 
 ---
 
-## Legacy Phase 1: Bugs Found & Fixed (Python Core)
+## Historical Context: Phase 1 Bugs Found & Fixed (Python Core)
+*The following section documents the stabilization of the legacy Python core which remains the reference implementation for the Rust port.*
 
 ### Summary Table
 | # | File | Bug | Fix | Impact |

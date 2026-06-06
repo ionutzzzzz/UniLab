@@ -1,12 +1,12 @@
 # UniLab: Development Roadmap (v2.0 Native GUI)
 
 ## 🏗️ Phase 1: Foundation & Bridging (Q3 2026)
-- [ ] Initialize Flutter Project (`unilab`)
-- [ ] Initialize Rust Workspace (`unilab_core`)
-- [ ] Integrate `flutter_rust_bridge` for cross-language calls
-- [ ] Proof of Concept: Native math execution (Rust) → UI display (Flutter)
-- [ ] Port Lark EBNF Grammar to Rust using `pest` or `nom`
-- [ ] Implement Abstract Syntax Tree (AST) structures in Rust
+- [x] Initialize Flutter Project (`unilab`)
+- [x] Initialize Rust Workspace (`unilab_core`)
+- [x] Integrate `flutter_rust_bridge` for cross-language calls
+- [x] Proof of Concept: Native math execution (Rust) → UI display (Flutter)
+- [ ] Port Lark EBNF Grammar to Rust using `pest` or `nom` (In Progress)
+- [x] Implement Abstract Syntax Tree (AST) structures in Rust
 
 ## 🔢 Phase 2: Core Math & Scripting (Q4 2026)
 - [ ] Build high-speed AST tree-walking interpreter in Rust
@@ -17,7 +17,7 @@
 - [ ] Handle MATLAB-style variable scoping (local, global) in Rust
 
 ## 🎨 Phase 3: Unified Workspace (Q1 2027)
-- [ ] Build local File/Workspace manager in Flutter
+- [x] Build local File/Workspace manager in Flutter (Base implementation)
 - [ ] Implement Code Editor widget with UniLab syntax highlighting
 - [ ] Create interactive REPL (Terminal) in Flutter
 - [ ] Build 3D Surface Plotting widget using Flutter/Impeller
@@ -45,3 +45,4 @@
 - [x] 📚 65+ scientific libraries (MATLAB-compatible)
 - [x] 📐 Architectural Pivot Plan (Flutter/Rust)
 - [x] 📑 Global Documentation Update
+- [x] 🌉 Flutter-Rust Bridge integration

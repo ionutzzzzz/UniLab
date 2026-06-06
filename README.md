@@ -80,9 +80,16 @@ cd backend
 python3 UniLab.py console
 ```
 
-### Building the New GUI (Coming Soon)
+### Building the New GUI (In Development)
 
-Stay tuned as we initialize the Flutter and Rust workspaces.
+The project is currently in Phase 2 of the architectural migration. The Flutter frontend and Rust core have been initialized.
+
+```bash
+# Build the bridge and run the app
+./script/build_bridge.sh
+cd frontend
+flutter run
+```
 
 ---
 
@@ -92,9 +99,10 @@ Stay tuned as we initialize the Flutter and Rust workspaces.
 - [X] 65+ Scientific Library toolboxes
 - [X] Architectural Design for Cross-Platform GUI
 - [X] Initialize Flutter + Rust (FFI/Wasm) bridge
-- [ ] Port Parser/Transpiler to Rust
+- [X] Setup `flutter_rust_bridge` communication
+- [ ] Port Parser/Transpiler to Rust (In Progress)
 - [ ] Native high-performance plotting in Flutter
-- [X] Local File/Workspace Manager
+- [X] Local File/Workspace Manager (Base implementation)
 - [ ] Custom UniLab Compiler/Interpreter in Rust
 
 ---

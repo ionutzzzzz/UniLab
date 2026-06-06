@@ -1,36 +1,32 @@
 # UniLab Bug Fix & Evolution Changelog
 
+**Date:** June 6, 2026  
+**Version:** 2.1.0 (Phase 2 Initialized)  
+**Status:** Flutter and Rust Environments Configured
+
+---
+
+## Phase 2 Initialization
+
+### 1. Flutter & Rust Workspace Setup
+- **Change:** Initialized the Flutter project in `frontend/` and the Rust workspace in `backend/`.
+- **Reason:** To begin the transition to a native cross-platform stack.
+- **Progress:** Completed foundational workspace configuration.
+
+### 2. Cross-Language Bridge Integration
+- **Change:** Integrated `flutter_rust_bridge` (FRB).
+- **Reason:** To enable high-performance, type-safe communication between Flutter (Dart) and the core math engine (Rust).
+- **Deliverables:** `backend/unilab_core/src/ffi.rs` and bridge boilerplate generated.
+
+### 3. Documentation Consolidation
+- **Change:** Cleaned up redundant markdown files and updated all project documentation with the current architectural status.
+- **Files Removed:** `matlab.html`, `RedisignPlan.html`, `unilab_ui_ux_redesign.md`, `IMPROVEMENT_PLAN.md`.
+
+---
+
 **Date:** May 26, 2026  
 **Version:** 2.0.0 (Architecture Pivot)  
 **Status:** Transitioning to Native Cross-Platform GUI
-
----
-
-## Overview
-This update marks a major strategic shift for UniLab. After stabilizing the Python core (v1.0), we are pivoting to a **Local-First, Native Cross-Platform** architecture using **Flutter** and **Rust**.
-
----
-
-## Architectural Changes
-
-### 1. Engine Transition (Python → Rust)
-- **Change:** Moving from a Python-based transpiler to a Rust-native execution core.
-- **Reason:** To enable local execution on mobile devices and web browsers (via Wasm) without requiring a Python environment.
-- **Benefit:** Massive performance gains and the foundation for a custom UniLab compiler.
-
-### 2. UI Transition (React/SCSS → Flutter)
-- **Change:** Replacing the web-only React frontend with a unified Flutter GUI.
-- **Reason:** To achieve pixel-perfect consistency across iOS, Android, Windows, macOS, and Linux.
-- **Benefit:** Highly interactive, high-fidelity plotting and a smooth native UX.
-
----
-
-## Roadmap Milestones
-- [x] Initial Architectural Plan Approved
-- [ ] Setup `flutter_rust_bridge`
-- [ ] Migrate `UniLab_GRAMMAR` to Rust (Nom/Pest)
-
----
 
 **Date:** May 18, 2026  
 **Version:** 1.0.1 (Stability Patch)  
