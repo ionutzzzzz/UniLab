@@ -98,7 +98,7 @@ UniLab_GRAMMAR = r"""
          | cell_array
     
     anonymous_func: AT LPAR func_params? RPAR expression
-    function_handle: AT qualified_name
+    function_handle: AT (qualified_name | FILE_PATH)
     
     ?qualified_name: IDENTIFIER (DOT IDENTIFIER)*
     
@@ -114,8 +114,9 @@ UniLab_GRAMMAR = r"""
     command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
     IDENTIFIER: /(?!(?:function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export|edit)\b)[a-zA-Z_][a-zA-Z0-9_]*/
+    FILE_PATH: /[a-zA-Z0-9_\/]+\.m/
     NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
-    STRING: /'(?:[^']|'')*'/
+    STRING: /'([^']|'')*'|"([^"\\]|\\.)*"/
     
     ADD_OP: "+" | "-" | ".+" | ".-"
     MUL_OP: "*" | "/" | "\\" | ".*" | "./" | ".\\"
@@ -172,6 +173,7 @@ class UniLabToPython(Transformer):
     def __init__(self):
         self.variables = set()
         self.globals = set()
+        self.functions = []
         self.called_functions = set()
         self.added_paths = set()
         self._switch_depth = 0
@@ -195,7 +197,13 @@ class UniLabToPython(Transformer):
         if s.endswith('i'): return s[:-1] + 'j'
         return s
     def string(self, s):
-        content = str(s[0])[1:-1].replace("''", "'")
+        s_val = str(s[0])
+        quote = s_val[0]
+        if quote == "'":
+            content = s_val[1:-1].replace("''", "'")
+        else:
+            # Handle backslash escapes for double quotes
+            content = s_val[1:-1].encode('utf-8').decode('unicode_escape')
         return repr(content)
     def end_expr(self, items): return "unilab_end"
     def colon_arg(self, items): return "slice(None)"
@@ -233,7 +241,14 @@ class UniLabToPython(Transformer):
     def attr_access(self, items):
         target, attr = items[0], items[2]
         if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
-             target = target[12:-1]
+             m = re.match(r"unilab_call\((.*)\)", target)
+             if m:
+                 name = m.group(1)
+                 if name not in self.variables:
+                     target = f"unilab_get_undefined('{name}', globals())"
+                 else:
+                     target = name
+                 # Do not add to variables yet, wait for assignment to confirm if it's a variable
         return f"unilab_get({target}, '{attr}')"
 
     def function_call(self, items):
@@ -381,10 +396,14 @@ class UniLabToPython(Transformer):
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
             
             if "unilab_get" in str(lhs):
-                match = re.match(r"unilab_get\(([^,]+),\s*([^)]+)\)", str(lhs))
+                match = re.search(r"unilab_get\((?:unilab_get_undefined\('([^']+)',\s*globals\(\)\)|([^,]+)),\s*'([^']+)'\)", str(lhs))
                 if match:
-                    obj, attr = match.group(1), match.group(2)
-                    stmt = f"{obj} = unilab_set({obj}, {expr}, {attr})"
+                    # If it was unilab_get_undefined, name is in group 1. Else group 2.
+                    obj = match.group(1) or match.group(2)
+                    attr = match.group(3)
+                    self.variables.add(obj)
+                    # We need to check if obj exists or use get_undefined again if it's nested
+                    stmt = f"{obj} = unilab_set_attr(globals().get('{obj}', None), '{attr}', {expr}, globals())"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
 
         self.variables.add(str(lhs))
@@ -537,9 +556,14 @@ class UniLabToPython(Transformer):
         if idx < len(items) and str(items[idx]) == "catch":
             idx += 1
             err_var = items[idx] if not isinstance(items[idx], list) and str(items[idx]) != "END" else None
-            if err_var: idx += 1
+            if err_var: 
+                idx += 1
+                lines.append(f"except Exception as {err_var}:")
+                lines.append(f"    {err_var} = unilab_exception({err_var})")
+            else:
+                lines.append("except Exception:")
+            
             catch_block = items[idx]
-            lines.append(f"except Exception as {err_var if err_var else 'e'}:")
             lines.extend(self._indent(catch_block))
         return lines
 
@@ -638,7 +662,8 @@ class UniLabToPython(Transformer):
             inner.append(ret_stmt)
             
         lines.extend(self._indent(inner))
-        return lines
+        self.functions.append("\n".join(lines))
+        return []
     def return_stmt(self, items): return "__UNILAB_RETURN__"
     def break_stmt(self, items): return "break"
     def continue_stmt(self, items): return "continue"
@@ -656,7 +681,12 @@ class UniLabToPython(Transformer):
                 if str(item).strip() == ";" or "\n" in str(item):
                     if current_row: rows.append(current_row); current_row = []
         if current_row: rows.append(current_row)
-        row_strs = [f"[{', '.join(map(str, r))}]" for r in rows]
+        row_strs = []
+        for r in rows:
+            items_str = []
+            for item in r:
+                items_str.append(str(item))
+            row_strs.append(f"[{', '.join(items_str)}]")
         return f"unilab_matrix_concat({', '.join(row_strs)})"
 
     def cell_array(self, items):
@@ -669,7 +699,14 @@ class UniLabToPython(Transformer):
                     if current_row: rows.append(current_row); current_row = []
         if current_row: rows.append(current_row)
         if not rows: return "unilab_cell_concat()"
-        row_strs = [f"[{', '.join(map(str, r))}]" for r in rows]
+        
+        row_strs = []
+        for r in rows:
+            # print(f"DEBUG: processing row {r}")
+            items_str = []
+            for item in r:
+                items_str.append(str(item))
+            row_strs.append(f"[{', '.join(items_str)}]")
         return f"unilab_cell_concat({', '.join(row_strs)})"
         
     def row(self, items): return [str(i) for i in items if str(i) != ","]
@@ -693,7 +730,10 @@ class UniLabToPython(Transformer):
         return f"unilab_handle(lambda {', '.join(processed_params)}: ({expr}))"
         
     def function_handle(self, items):
-        return f"unilab_handle({str(items[1])})"
+        target = str(items[1])
+        if '.' in target or '/' in target:
+            return f"unilab_handle('{target}')"
+        return f"unilab_handle({target})"
         
     def cmd_call(self, items):
         name, args = str(items[0]), [f"'{str(a)}'" for a in items[1:]]
@@ -730,9 +770,11 @@ class UniLabTranspiler:
         try:
             tree = self.parser.parse(code + "\n")
             self.transformer.variables, self.transformer.called_functions, self.transformer.added_paths = set(), set(), set()
+            self.transformer.functions = []
             result = self.transformer.transform(tree)
             
-            transpiled = (str(result), self.transformer.called_functions, self.transformer.added_paths)
+            final_code = "\n\n".join(self.transformer.functions) + "\n\n" + str(result)
+            transpiled = (final_code, self.transformer.called_functions, self.transformer.added_paths)
             
             # Simple LRU-ish cache management
             if len(self._cache) >= self._cache_limit:

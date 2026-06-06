@@ -413,7 +413,16 @@ fn parse_atom(pair: pest::iterators::Pair<Rule>) -> Expr {
                 Expr::Number(s.parse().unwrap())
             }
         }
-        Rule::string => Expr::String(first.as_str()[1..first.as_str().len()-1].replace("''", "'")),
+        Rule::string => {
+            let s = first.as_str();
+            let quote = s.chars().next().unwrap();
+            let content = &s[1..s.len()-1];
+            if quote == '\'' {
+                Expr::String(content.replace("''", "'"))
+            } else {
+                Expr::String(content.replace("\\\"", "\""))
+            }
+        },
         Rule::identifier => Expr::Identifier(first.as_str().trim().to_string()),
         Rule::matrix => {
             let mut matrix = Vec::new();

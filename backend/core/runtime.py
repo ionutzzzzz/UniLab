@@ -1138,9 +1138,40 @@ class UnilabHandle:
     def __init__(self, func):
         self.func = func
     def __call__(self, *args, **kwargs):
+        if isinstance(self.func, str):
+            # Execute file
+            return unilab_execute_file(self.func, *args, **kwargs)
         return self.func(*args, **kwargs)
     def __repr__(self):
         return f"<function handle: {self.func}>"
+
+def unilab_execute_file(path, *args, **kwargs):
+    from backend.core.unilab_core import UniLabCore
+    core = UniLabCore()
+    # We might need a proper session here, but for simple script execution
+    # we can try to read and execute. 
+    # For now, let's assume it's on the filesystem.
+    full_path = pathlib.Path(path)
+    if not full_path.exists():
+        # Try relative to project root?
+        full_path = pathlib.Path.cwd() / path
+    
+    if full_path.exists():
+        content = full_path.read_text()
+        from backend.core.transpiler_core import UniLabTranspiler
+        transpiler = UniLabTranspiler()
+        py_code, _ = transpiler.transpile(content)
+        
+        # We should probably run this in a clean namespace or the current one
+        # but function handle call expects parameters?
+        # Standard MATLAB file handles usually point to functions.
+        # If it's a script, arguments are usually ignored.
+        exec_globals = globals().copy()
+        # Pass arguments if any (MATLAB functions use nargin/varargin)
+        # This is a bit complex for a generic script, but let's try.
+        exec(py_code, exec_globals)
+        return exec_globals.get('ans', None)
+    return None
 
 def unilab_handle(func):
     if isinstance(func, UnilabHandle): return func
@@ -1574,6 +1605,35 @@ def unilab_ge(a, b):
         import sympy
         return a >= b
     return a >= b
+
+class UnilabStruct:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def __repr__(self):
+        fields = ", ".join([f"{k}: {repr(v)}" for k, v in self.__dict__.items()])
+        return f"struct({fields})"
+
+def unilab_get_undefined(name, globals_dict):
+    if globals_dict and name in globals_dict:
+        return globals_dict[name]
+    return None
+
+def unilab_set_attr(obj, attr, val, globals_dict=None):
+    if obj is None:
+        obj = UnilabStruct()
+    
+    if isinstance(obj, UnilabStruct):
+        setattr(obj, attr, val)
+    elif isinstance(obj, dict):
+        obj[attr] = val
+    else:
+        try:
+            setattr(obj, attr, val)
+        except (AttributeError, TypeError):
+            # Fallback: convert to struct if possible? 
+            # In MATLAB, if you do x.a = 1 and x was a double, it might error or convert.
+            pass
+    return obj
 
 def unilab_get(obj, attr):
     if isinstance(obj, dict):
@@ -2230,6 +2290,12 @@ def fprintf(*args):
         data_args = args[1:]
         
     try:
+        # Determine output target
+        target = sys.stdout
+        if handle == 2: target = sys.stderr
+        elif handle > 2 and handle in _unilab_fid_map:
+            target = _unilab_fid_map[handle]
+
         if not data_args:
             output = str(fmt)
         else:
@@ -2279,12 +2345,9 @@ def fprintf(*args):
     except Exception as e:
         output = str(fmt).replace('\\n', '\n').replace('\\t', '\t')
         
-    if handle == 2:
-        sys.stderr.write(output)
-        sys.stderr.flush()
-    else:
-        sys.stdout.write(output)
-        sys.stdout.flush()
+    # Write to target
+    target.write(output)
+    target.flush()
 
 def clc():
     """Clear Command Window."""
@@ -2583,17 +2646,23 @@ def toc():
     return elapsed
 
 def rand(*args):
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)): 
-        args = [int(a) for a in np.asarray(args[0]).flatten()]
-        return np.random.rand(*args)
-    args = [int(a) for a in args]
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)): 
+            args = [int(a) for a in np.asarray(args[0]).flatten()]
+        else:
+            args = [int(args[0]), int(args[0])]
+    else:
+        args = [int(a) for a in args]
     return np.random.rand(*args) if args else np.random.rand()
 
 def randn(*args):
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        args = [int(a) for a in np.asarray(args[0]).flatten()]
-        return np.random.randn(*args)
-    args = [int(a) for a in args]
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)):
+            args = [int(a) for a in np.asarray(args[0]).flatten()]
+        else:
+            args = [int(args[0]), int(args[0])]
+    else:
+        args = [int(a) for a in args]
     return np.random.randn(*args) if args else np.random.randn()
 
 def randi(imax, *args):
@@ -3542,6 +3611,10 @@ def unilab_clear_workspace(g):
     modules_to_keep = [k for k, v in g.items() if isinstance(v, types.ModuleType)]
     keys_to_keep.update(modules_to_keep)
     
+    # Preserve user-defined functions
+    functions_to_keep = [k for k, v in g.items() if isinstance(v, types.FunctionType)]
+    keys_to_keep.update(functions_to_keep)
+    
     to_remove = [k for k in g if k not in keys_to_keep and not k.startswith('__')]
     for k in to_remove: del g[k]
     
@@ -3695,8 +3768,6 @@ def log(x): return np.log(x)
 def log10(x): return np.log10(x)
 def sqrt(x): return np.sqrt(x)
 def abs(x): return np.abs(x)
-def rand(*args): return np.random.rand(*[_unilab_to_int(a) for a in args])
-def randn(*args): return np.random.randn(*[_unilab_to_int(a) for a in args])
 # randperm already defined? Let's check again.
 def reshape(x, *shape): 
     if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
@@ -3765,8 +3836,14 @@ def cumsum(x, axis=None):
     return np.cumsum(x, axis=axis)
 def randi(imax, *shape):
     if len(shape) == 0: shape = (1, 1)
-    elif len(shape) == 1: shape = (int(shape[0]), int(shape[0]))
-    else: shape = [int(s) for s in shape]
+    elif len(shape) == 1:
+        if isinstance(shape[0], (list, tuple, np.ndarray)):
+            s = np.asarray(shape[0]).flatten()
+            shape = [_unilab_to_int(a) for a in s]
+        else:
+            shape = (int(shape[0]), int(shape[0]))
+    else: 
+        shape = [int(s) for s in shape]
     return np.random.randint(1, _unilab_to_int(imax) + 1, size=shape)
 
 def argmin(x, axis=None):
@@ -3776,3 +3853,82 @@ def argmin(x, axis=None):
 def argmax(x, axis=None):
     if axis is not None: axis = _unilab_to_int(axis) - 1
     return np.argmax(x, axis=axis) + 1
+
+class UnilabTable:
+    def __init__(self, data_list, names):
+        self.data = data_list
+        self.names = names
+    def __repr__(self):
+        names = [str(n) for n in self.names]
+        header = "    " + "    ".join(names)
+        rows = []
+        num_rows = len(self.data[0]) if self.data else 0
+        for i in range(num_rows):
+            row_data = [str(col[i]) for col in self.data]
+            rows.append(f"{i+1}   " + "    ".join(row_data))
+        return "\n".join([header] + rows)
+
+class UnilabException:
+    def __init__(self, e):
+        self.message = str(e)
+        self.identifier = type(e).__name__
+
+def unilab_exception(e):
+    return UnilabException(e)
+
+_unilab_fid_map = {}
+_unilab_next_fid = 3
+
+def fopen(filename, mode='r'):
+    global _unilab_next_fid
+    # Map MATLAB modes to Python modes
+    mode_map = {'r': 'r', 'w': 'w', 'a': 'a', 'r+': 'r+', 'w+': 'w+'}
+    p_mode = mode_map.get(mode, 'r')
+    try:
+        f = open(filename, p_mode)
+        fid = _unilab_next_fid
+        _unilab_fid_map[fid] = f
+        _unilab_next_fid += 1
+        return float(fid)
+    except Exception:
+        return -1.0
+
+def fclose(fid):
+    fid = int(fid)
+    if fid in _unilab_fid_map:
+        _unilab_fid_map[fid].close()
+        del _unilab_fid_map[fid]
+        return 0.0
+    return -1.0
+
+def fread(fid, size=None, precision='*char'):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return None
+    f = _unilab_fid_map[fid]
+    if precision == '*char':
+        data = f.read()
+        return np.asarray([ord(c) for col in data for c in col]) if isinstance(data, list) else np.asarray([ord(c) for c in data])
+    # Basic implementation for now
+    return f.read()
+
+def table(*args, **kwargs):
+    # Very basic table implementation
+    var_names = kwargs.get('VariableNames', [])
+    data = []
+    
+    # Process positional arguments
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if isinstance(arg, (str, bytes)) and arg == 'VariableNames':
+            if i + 1 < len(args):
+                var_names = args[i+1]
+                i += 2
+                continue
+        data.append(arg)
+        i += 1
+    
+    if (isinstance(var_names, (list, np.ndarray)) and len(var_names) == 0) or var_names is None:
+        var_names = [f"Var{j+1}" for j in range(len(data))]
+    
+    return UnilabTable(data, var_names)

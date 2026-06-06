@@ -30,6 +30,9 @@ typedef UnilabGetAutocomplete = Pointer<Utf8> Function(Pointer<Utf8> sessionId, 
 typedef UnilabListFilesNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 typedef UnilabListFiles = Pointer<Utf8> Function(Pointer<Utf8> sessionId);
 
+typedef UnilabTranspileNative = Pointer<Utf8> Function(Pointer<Utf8> code);
+typedef UnilabTranspile = Pointer<Utf8> Function(Pointer<Utf8> code);
+
 typedef UnilabCreateFileNative = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> filename, Pointer<Utf8> content);
 typedef UnilabCreateFile = Pointer<Utf8> Function(Pointer<Utf8> sessionId, Pointer<Utf8> filename, Pointer<Utf8> content);
 
@@ -441,19 +444,39 @@ class UniLabBridge {
 
   /// List files in the session workspace
 
-  Future<List<Map<String, dynamic>>> listFiles() async {
+    Future<List<Map<String, dynamic>>> listFiles() async {
 
-    if (_sessionId == null) return [];
+      if (_sessionId == null) return [];
 
-    final response = await _sendCommand('list_files', {'sessionId': _sessionId});
+      final response = await _sendCommand('list_files', {'sessionId': _sessionId});
 
-    return List<Map<String, dynamic>>.from(response['files'] ?? []);
+      return List<Map<String, dynamic>>.from(response['files'] ?? []);
 
-  }
+    }
 
+  
 
+    /// Transpile code to Python
 
-  /// Create or overwrite a file
+    Future<String> transpile(String code) async {
+
+      final response = await _sendCommand('transpile', {'code': code});
+
+      if (response['success'] == true) {
+
+        return response['python_code'];
+
+      } else {
+
+        throw Exception(response['error'] ?? 'Transpilation failed');
+
+      }
+
+    }
+
+  
+
+    /// Create or overwrite a file
 
 
   /// Send an event to the active simulation
@@ -565,11 +588,13 @@ class UniLabBridge {
 
         late UnilabGetWorkspace unilabGetWorkspace;
 
-    late UnilabGetAutocomplete unilabGetAutocomplete;
+        late UnilabGetAutocomplete unilabGetAutocomplete;
 
-    late UnilabListFiles unilabListFiles;
+        late UnilabListFiles unilabListFiles;
 
-    late UnilabCreateFile unilabCreateFile;
+        late UnilabTranspile unilabTranspile;
+
+        late UnilabCreateFile unilabCreateFile;
 
     
     late UnilabSendSimEvent unilabSendSimEvent;
@@ -620,11 +645,13 @@ class UniLabBridge {
 
                         unilabGetWorkspace = lib.lookupFunction<UnilabGetWorkspaceNative, UnilabGetWorkspace>('unilab_get_workspace');
 
-            unilabGetAutocomplete = lib.lookupFunction<UnilabGetAutocompleteNative, UnilabGetAutocomplete>('unilab_get_autocomplete');
+                        unilabGetAutocomplete = lib.lookupFunction<UnilabGetAutocompleteNative, UnilabGetAutocomplete>('unilab_get_autocomplete');
 
-            unilabListFiles = lib.lookupFunction<UnilabListFilesNative, UnilabListFiles>('unilab_list_files');
+                        unilabListFiles = lib.lookupFunction<UnilabListFilesNative, UnilabListFiles>('unilab_list_files');
 
-            unilabCreateFile = lib.lookupFunction<UnilabCreateFileNative, UnilabCreateFile>('unilab_create_file');
+                        unilabTranspile = lib.lookupFunction<UnilabTranspileNative, UnilabTranspile>('unilab_transpile');
+
+                        unilabCreateFile = lib.lookupFunction<UnilabCreateFileNative, UnilabCreateFile>('unilab_create_file');
 
             
             unilabSendSimEvent = lib.lookupFunction<UnilabSendSimEventNative, UnilabSendSimEvent>('unilab_send_sim_event');
@@ -751,15 +778,33 @@ class UniLabBridge {
 
             final res = jsonDecode(resPtr.toDartString());
 
-            unilabFreeString(resPtr);
+                        unilabFreeString(resPtr);
 
-            replyPort?.send(res);
+                        replyPort?.send(res);
 
-            break;
+                        break;
 
+            
 
+                      case 'transpile':
 
-          case 'send_sim_event':
+                        final codePtr = (params['code'] as String).toNativeUtf8();
+
+                        final resPtr = unilabTranspile(codePtr);
+
+                        malloc.free(codePtr);
+
+                        final res = jsonDecode(resPtr.toDartString());
+
+                        unilabFreeString(resPtr);
+
+                        replyPort?.send(res);
+
+                        break;
+
+            
+
+                      case 'send_sim_event':
             final evPtr = (params['event'] as String).toNativeUtf8();
             unilabSendSimEvent(evPtr);
             malloc.free(evPtr);

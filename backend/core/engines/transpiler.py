@@ -247,7 +247,6 @@ class TranspilerEngine(BaseEngine):
             script_token = unilab_script_ctx.set(filename)
             os.environ['UNILAB_CURRENT_SCRIPT'] = filename
             # For script runs, we usually want a clean plotting state
-            from .. import runtime
             runtime._unilab_reset_runtime()
         else:
             # For console commands, at least ensure we don't have accidental leftovers if needed,
@@ -537,15 +536,12 @@ class TranspilerEngine(BaseEngine):
                     }
                 )
             except Exception as e:
-                return ExecutionResult(
-                    success=False,
-                    stdout='',
-                    stderr=f"Transpilation Error: {str(e)}",
-                    return_code=1,
-                    duration_s=time.time() - start_ts,
-                    variables_snapshot={},
-                    plots=[]
-                )
+                import traceback
+                traceback.print_exc()
+                return ExecutionResult(False, "", f"Transpilation Error: {str(e)}\n{traceback.format_exc()}", 1, time.time() - start_ts, self._get_variables(), [])
+        except Exception as e:
+            return ExecutionResult(False, "", f"Outer Error: {str(e)}", 1, time.time() - start_ts, self._get_variables(), [])
+
         finally:
             os.chdir(old_cwd)
 

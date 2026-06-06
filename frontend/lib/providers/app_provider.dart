@@ -4,7 +4,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:watcher/watcher.dart';
+import 'package:highlight/highlight.dart' as hl;
+import 'package:highlight/languages/matlab.dart';
 import 'package:uuid/uuid.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
 import '../models/models.dart';
@@ -42,6 +49,7 @@ class AppProvider with ChangeNotifier {
 
   bool _isExecuting = false;
   final Set<String> _savingFileIds = {};
+  final List<String> _recentFiles = [];
   Map<String, dynamic> _serverInfo = {};
   String _selectedConsoleTab = 'output';
   String _selectedWorkspaceSegment = 'Variables';
@@ -78,6 +86,7 @@ class AppProvider with ChangeNotifier {
   bool get isExecuting => _isExecuting;
   List<dynamic> get availableSamples => _availableSamples;
   List<dynamic> get projectFiles => _projectFiles;
+  List<String> get recentFiles => List.unmodifiable(_recentFiles);
   String get projectRoot => _projectRoot;
   BackendStatus get backendStatus => _backendStatus;
   Map<String, dynamic> get serverInfo => _serverInfo;
@@ -97,6 +106,7 @@ class AppProvider with ChangeNotifier {
   AppProvider({this.onVariablesUpdated, this.onPlotsUpdated}) {
     _projectRoot = _discoverProjectRoot();
     _loadAvailableSamples();
+    _loadRecentFiles();
     refreshProjectFiles();
     _initWatcher();
     _initBridge();
@@ -116,6 +126,25 @@ class AppProvider with ChangeNotifier {
 
   void updateSettings(SettingsProvider settings) {
     _settingsProvider = settings;
+    notifyListeners();
+  }
+
+  Future<void> _loadRecentFiles() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('recentFiles') ?? [];
+    _recentFiles.clear();
+    _recentFiles.addAll(list);
+    notifyListeners();
+  }
+
+  Future<void> _addToRecentFiles(String path) async {
+    if (path.isEmpty || path.startsWith('unilab://') || path.startsWith('web/')) return;
+    _recentFiles.remove(path);
+    _recentFiles.insert(0, path);
+    if (_recentFiles.length > 20) _recentFiles.removeLast();
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('recentFiles', _recentFiles);
     notifyListeners();
   }
 
@@ -152,6 +181,8 @@ class AppProvider with ChangeNotifier {
         UniLabBridge.resetInstance();
       }
       final backendPath = await UniLabBridge.findBackendPath();
+      _addConsoleMessage('Connecting to backend at $backendPath...', ConsoleMessageType.output);
+      
       await UniLabBridge.instance.initialize(backendPath);
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
@@ -168,6 +199,7 @@ class AppProvider with ChangeNotifier {
       await fetchWorkspaceVariables();
     } catch (e) {
       _backendStatus = BackendStatus.error;
+      _addConsoleMessage('Backend initialization error: $e', ConsoleMessageType.error);
       debugPrint('[AppProvider] Bridge initialization error: $e');
     }
     notifyListeners();
@@ -536,6 +568,7 @@ class AppProvider with ChangeNotifier {
     final existingIndex = _openFiles.indexWhere((f) => f.path == path);
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
+      _addToRecentFiles(path);
       notifyListeners();
       return;
     }
@@ -557,6 +590,7 @@ class AppProvider with ChangeNotifier {
       );
       _activeFileIndex = _openFiles.length - 1;
     }
+    _addToRecentFiles(path);
     notifyListeners();
   }
 
@@ -604,12 +638,15 @@ class AppProvider with ChangeNotifier {
     if (_activeFileIndex < 0 || kIsWeb) return;
     final fileToSave = _openFiles[_activeFileIndex];
     if (_savingFileIds.contains(fileToSave.id)) return;
+
+    if (fileToSave.path.isEmpty) {
+      await saveActiveFileAs();
+      return;
+    }
+
     _savingFileIds.add(fileToSave.id);
     try {
-      String savePath = fileToSave.path.isEmpty
-          ? p.join(_projectRoot, fileToSave.name)
-          : fileToSave.path;
-      final file = io.File(savePath);
+      final file = io.File(fileToSave.path);
       await file.writeAsString(fileToSave.content);
       await UniLabBridge.instance.createFile(
         fileToSave.name,
@@ -618,15 +655,173 @@ class AppProvider with ChangeNotifier {
       final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
       if (idx != -1)
         _openFiles[idx] = _openFiles[idx].copyWith(
-          path: savePath,
           isModified: false,
         );
+      _addToRecentFiles(fileToSave.path);
       await refreshProjectFiles();
     } catch (e) {
       _addConsoleMessage('Error saving file: $e', ConsoleMessageType.error);
     } finally {
       _savingFileIds.remove(fileToSave.id);
       notifyListeners();
+    }
+  }
+
+  Future<void> saveActiveFileAs() async {
+    if (_activeFileIndex < 0 || kIsWeb) return;
+    final fileToSave = _openFiles[_activeFileIndex];
+
+    String? outputFile = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save File As',
+      fileName: fileToSave.name,
+      type: FileType.custom,
+      allowedExtensions: ['m', 'txt', 'csv', 'json', 'py'],
+    );
+
+    if (outputFile == null) return;
+
+    // Ensure extension
+    if (!outputFile.contains('.')) {
+      outputFile += '.m';
+    }
+
+    try {
+      final file = io.File(outputFile);
+      await file.writeAsString(fileToSave.content);
+      
+      final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
+      if (idx != -1) {
+        _openFiles[idx] = _openFiles[idx].copyWith(
+          name: p.basename(outputFile),
+          path: outputFile,
+          isModified: false,
+        );
+      }
+      _addToRecentFiles(outputFile);
+      await refreshProjectFiles();
+    } catch (e) {
+      _addConsoleMessage('Error saving file as: $e', ConsoleMessageType.error);
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> exportToPython() async {
+    if (activeFile == null) return;
+    try {
+      final pythonCode = await UniLabBridge.instance.transpile(activeFile!.content);
+      
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export to Python',
+        fileName: activeFile!.name.replaceAll('.m', '.py'),
+        type: FileType.custom,
+        allowedExtensions: ['py'],
+      );
+
+      if (outputFile == null) return;
+
+      final file = io.File(outputFile);
+      await file.writeAsString(pythonCode);
+      _addConsoleMessage('Successfully exported to $outputFile', ConsoleMessageType.output);
+    } catch (e) {
+      _addConsoleMessage('Export failed: $e', ConsoleMessageType.error);
+    }
+  }
+
+  Future<void> exportToPdf() async {
+    if (activeFile == null) return;
+    try {
+      final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoMonoRegular();
+      final boldFont = await PdfGoogleFonts.robotoMonoBold();
+      
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) => pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            child: pw.Text('UniLab Script: ${activeFile!.name}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
+          footer: (pw.Context context) => pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(top: 16),
+            child: pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Text('UniLab Script Export: ${activeFile!.name}', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+              ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 8),
+                child: pw.Text('Generated on ${DateTime.now().toString()}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+              ),
+              pw.Divider(),
+              pw.SizedBox(height: 16),
+              ..._highlightToPdfLines(activeFile!.content, font),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export to PDF',
+        fileName: activeFile!.name.replaceAll('.m', '.pdf'),
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (outputFile != null) {
+        final file = io.File(outputFile);
+        await file.writeAsBytes(bytes);
+        _addConsoleMessage('Successfully exported to $outputFile', ConsoleMessageType.output);
+      }
+    } catch (e) {
+      _addConsoleMessage('Export to PDF failed: $e', ConsoleMessageType.error);
+    }
+  }
+
+  Future<void> printActiveFile() async {
+    if (activeFile == null) return;
+    try {
+      final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoMonoRegular();
+      final boldFont = await PdfGoogleFonts.robotoMonoBold();
+      
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) => pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            child: pw.Text('UniLab Script: ${activeFile!.name}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Text('UniLab Script: ${activeFile!.name}', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+              ),
+              pw.Divider(),
+              pw.SizedBox(height: 16),
+              ..._highlightToPdfLines(activeFile!.content, font),
+            ];
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: activeFile!.name,
+      );
+    } catch (e) {
+      _addConsoleMessage('Printing failed: $e', ConsoleMessageType.error);
     }
   }
 
@@ -657,6 +852,17 @@ class AppProvider with ChangeNotifier {
 
   Future<void> runActiveFile() async {
     if (activeFile == null) return;
+
+    // Ensure session is ready
+    if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
+      _addConsoleMessage('Backend not ready. Attempting to reconnect...', ConsoleMessageType.warning);
+      await _initBridge();
+      if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
+        _addConsoleMessage('Failed to connect to backend. Please check if the server is running.', ConsoleMessageType.error);
+        return;
+      }
+    }
+
     _isExecuting = true;
     _addConsoleMessage(
       '>> Running ${activeFile!.name}...',
@@ -812,6 +1018,16 @@ class AppProvider with ChangeNotifier {
   Future<void> runConsoleCommand(String command) async {
     if (command.isEmpty) return;
 
+    // Ensure session is ready
+    if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
+      _addConsoleMessage('Backend not ready. Attempting to reconnect...', ConsoleMessageType.warning);
+      await _initBridge();
+      if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
+        _addConsoleMessage('Failed to connect to backend.', ConsoleMessageType.error);
+        return;
+      }
+    }
+
     // Add to history
     _commandHistory.remove(command);
     _commandHistory.insert(0, command);
@@ -867,6 +1083,15 @@ class AppProvider with ChangeNotifier {
       );
     } catch (e) {
       return [];
+    }
+  }
+
+  Future<String> fetchHelp(String topic) async {
+    try {
+      final result = await UniLabBridge.instance.execute('help $topic');
+      return result.stdout;
+    } catch (e) {
+      return 'Error fetching help: $e';
     }
   }
 
@@ -951,4 +1176,57 @@ class AppProvider with ChangeNotifier {
   Stream<String> get editorActions => _editorActionController.stream;
   void triggerEditorAction(String action) =>
       _editorActionController.add(action);
+
+  List<pw.Widget> _highlightToPdfLines(String code, pw.Font font) {
+    final result = hl.highlight.parse(code, language: 'matlab');
+    final List<List<pw.InlineSpan>> lines = [[]];
+
+    // Map highlight categories to colors (Light theme style for PDF)
+    final Map<String, PdfColor> colorMap = {
+      'keyword': PdfColors.blue,
+      'string': PdfColors.red900,
+      'number': PdfColors.green900,
+      'comment': PdfColors.green,
+      'function': PdfColors.brown,
+      'params': PdfColors.black,
+      'meta': PdfColors.grey700,
+      'built_in': PdfColors.cyan900,
+    };
+
+    void traverse(hl.Node node, PdfColor? parentColor) {
+      final nodeColor = colorMap[node.className] ?? parentColor ?? PdfColors.black;
+      
+      if (node.value != null) {
+        final parts = node.value!.split('\n');
+        for (int i = 0; i < parts.length; i++) {
+          if (parts[i].isNotEmpty) {
+            lines.last.add(pw.TextSpan(
+              text: parts[i],
+              style: pw.TextStyle(font: font, color: nodeColor, fontSize: 9),
+            ));
+          }
+          
+          if (i < parts.length - 1) {
+            lines.add([]);
+          }
+        }
+      }
+
+      if (node.children != null) {
+        for (final child in node.children!) {
+          traverse(child, nodeColor);
+        }
+      }
+    }
+
+    if (result.nodes != null) {
+      for (final node in result.nodes!) {
+        traverse(node, null);
+      }
+    }
+
+    return lines.map((lineSpans) => pw.RichText(
+      text: pw.TextSpan(children: lineSpans.isEmpty ? [pw.TextSpan(text: ' ')] : lineSpans),
+    )).toList();
+  }
 }

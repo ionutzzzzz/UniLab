@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../../../../theme/ui_theme.dart';
 import '../../../../widgets/ui_text.dart';
 import '../../../../widgets/ui_button.dart';
 import '../../../../providers/app_provider.dart';
+import 'dart:io' as io;
 
 class FileBackstage extends StatefulWidget {
   const FileBackstage({super.key});
@@ -46,6 +48,7 @@ class _FileBackstageState extends State<FileBackstage> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context);
 
     return Scaffold(
       backgroundColor: ui.colors.canvas,
@@ -53,16 +56,16 @@ class _FileBackstageState extends State<FileBackstage> {
         children: [
           // Sidebar
           Container(
-            width: 260,
+            width: 280,
             color: ui.colors.accent,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: IconButton(
-                    icon: const Icon(LucideIcons.arrowLeft, color: Colors.black87),
+                    icon: const Icon(LucideIcons.arrowLeft, color: Colors.white, size: 28),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -75,7 +78,7 @@ class _FileBackstageState extends State<FileBackstage> {
                       if (item.containsKey('divider')) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                          child: Divider(color: Colors.black.withValues(alpha: 0.1), height: 1),
+                          child: Divider(color: Colors.white.withValues(alpha: 0.2), height: 1),
                         );
                       }
                       final isSelected = _selectedIndex == index;
@@ -83,9 +86,28 @@ class _FileBackstageState extends State<FileBackstage> {
                         title: item['title'],
                         icon: item['icon'],
                         isSelected: isSelected,
-                        onTap: () => setState(() => _selectedIndex = index),
+                        onTap: () => _handleMenuTap(index, item['title'], appProvider),
                       );
                     },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      UiText(
+                        text: 'UniLab v1.0.0',
+                        variant: UiTextVariant.caption,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(height: 4),
+                      UiText(
+                        text: 'Connected: ${appProvider.backendStatus.name}',
+                        variant: UiTextVariant.caption,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -95,7 +117,7 @@ class _FileBackstageState extends State<FileBackstage> {
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(64, 80, 64, 40),
-              child: _buildContent(ui),
+              child: _buildContent(ui, appProvider),
             ),
           ),
         ],
@@ -103,7 +125,27 @@ class _FileBackstageState extends State<FileBackstage> {
     );
   }
 
-  Widget _buildContent(UiTheme ui) {
+  void _handleMenuTap(int index, String title, AppProvider appProvider) {
+    if (title == 'Save') {
+      appProvider.saveActiveFile();
+      Navigator.pop(context);
+    } else if (title == 'Save As') {
+      appProvider.saveActiveFileAs();
+      Navigator.pop(context);
+    } else if (title == 'Close') {
+      if (appProvider.activeFileIndex != -1) {
+        appProvider.closeFile(appProvider.activeFileIndex);
+      }
+      Navigator.pop(context);
+    } else if (title == 'Print') {
+      appProvider.printActiveFile();
+      Navigator.pop(context);
+    } else {
+      setState(() => _selectedIndex = index);
+    }
+  }
+
+  Widget _buildContent(UiTheme ui, AppProvider appProvider) {
     final title = _menuItems[_selectedIndex]['title'] ?? '';
     
     return Column(
@@ -111,38 +153,76 @@ class _FileBackstageState extends State<FileBackstage> {
       children: [
         UiText(text: title, variant: UiTextVariant.title, fontSize: 32, fontWeight: FontWeight.w300),
         const SizedBox(height: 48),
-        if (title == 'New') _buildNewSection(ui),
-        if (title == 'Open') _buildOpenSection(ui),
-        if (title == 'Export') _buildExportSection(ui),
-        if (title == 'Save' || title == 'Save As') _buildSaveSection(ui),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title == 'New') _buildNewSection(ui, appProvider),
+                if (title == 'Open') _buildOpenSection(ui, appProvider),
+                if (title == 'Export') _buildExportSection(ui, appProvider),
+                if (title == 'Save' || title == 'Save As') _buildSaveSection(ui, appProvider),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildNewSection(UiTheme ui) {
+  Widget _buildNewSection(UiTheme ui, AppProvider appProvider) {
     return Wrap(
       spacing: 24,
       runSpacing: 24,
       children: [
-        _buildTemplateCard(ui, 'Blank Script', LucideIcons.fileCode2, 'Start with a clean .m file'),
-        _buildTemplateCard(ui, 'Function', LucideIcons.functionSquare, 'Template for reusable logic'),
-        _buildTemplateCard(ui, 'App Designer', LucideIcons.layoutTemplate, 'Interactive UI template'),
-        _buildTemplateCard(ui, 'Live Script', LucideIcons.sparkles, 'Rich text and embedded code'),
+        _buildTemplateCard(
+          ui, 
+          'Blank Script', 
+          LucideIcons.fileCode2, 
+          'Start with a clean .m file',
+          onTap: () {
+            appProvider.addNewFile();
+            Navigator.pop(context);
+          }
+        ),
+        _buildTemplateCard(
+          ui, 
+          'Function', 
+          LucideIcons.functionSquare, 
+          'Template for reusable logic',
+          onTap: () {
+            appProvider.createProjectFile('new_function.m', 'function [out] = new_function(in)\n\t% NEW_FUNCTION Summary of this function goes here\n\t% Detailed explanation goes here\n\tout = in;\nend');
+            Navigator.pop(context);
+          }
+        ),
+        _buildTemplateCard(
+          ui, 
+          'Live Script', 
+          LucideIcons.sparkles, 
+          'Rich text and embedded code',
+          onTap: () {
+            appProvider.addNewFile();
+            Navigator.pop(context);
+          }
+        ),
+        _buildTemplateCard(
+          ui, 
+          'Data Import', 
+          LucideIcons.database, 
+          'Import and analyze data files',
+          onTap: () {
+            appProvider.openImportDataTab();
+            Navigator.pop(context);
+          }
+        ),
       ],
     );
   }
 
-  Widget _buildOpenSection(UiTheme ui) {
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
+  Widget _buildOpenSection(UiTheme ui, AppProvider appProvider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        UiText(text: 'Recent Files', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
-        const SizedBox(height: 16),
-        _buildRecentItem(ui, 'analysis_v1.m', '~/Documents/UniLab/projects/analysis_v1.m'),
-        _buildRecentItem(ui, 'simulation_data.csv', '~/Downloads/simulation_data.csv'),
-        _buildRecentItem(ui, 'plot_utils.m', '~/Documents/UniLab/libs/plot_utils.m'),
-        const SizedBox(height: 32),
         Row(
           children: [
             UiButton(
@@ -166,80 +246,131 @@ class _FileBackstageState extends State<FileBackstage> {
             ),
           ],
         ),
+        const SizedBox(height: 48),
+        UiText(text: 'Recent Files', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
+        const SizedBox(height: 16),
+        if (appProvider.recentFiles.isEmpty)
+          UiText(text: 'No recent files', variant: UiTextVariant.body, color: ui.colors.textMuted)
+        else
+          ...appProvider.recentFiles.map((path) => _buildRecentItem(
+            ui, 
+            p.basename(path), 
+            path,
+            onTap: () {
+              appProvider.openFile(io.File(path));
+              Navigator.pop(context);
+            }
+          )),
       ],
     );
   }
 
-  Widget _buildSaveSection(UiTheme ui) {
+  Widget _buildSaveSection(UiTheme ui, AppProvider appProvider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        UiText(text: 'Save location', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
+        if (appProvider.activeFile != null) ...[
+          UiText(text: 'Current File', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
+          const SizedBox(height: 16),
+          _buildRecentItem(
+            ui, 
+            appProvider.activeFile!.name, 
+            appProvider.activeFile!.path.isEmpty ? 'Not saved yet' : appProvider.activeFile!.path,
+            icon: LucideIcons.fileEdit,
+          ),
+          const SizedBox(height: 32),
+        ],
+        UiText(text: 'Project Root', variant: UiTextVariant.label, fontWeight: FontWeight.bold),
         const SizedBox(height: 16),
-        _buildRecentItem(ui, 'Current Project', '~/Documents/UniLab/projects/default'),
-        _buildRecentItem(ui, 'Local Disk (C:)', '/home/user/'),
-        _buildRecentItem(ui, 'Cloud Storage', 'Connected as john.doe@example.com'),
+        _buildRecentItem(
+          ui, 
+          p.basename(appProvider.projectRoot), 
+          appProvider.projectRoot,
+          icon: LucideIcons.folder,
+        ),
       ],
     );
   }
 
-  Widget _buildExportSection(UiTheme ui) {
+  Widget _buildExportSection(UiTheme ui, AppProvider appProvider) {
     return Wrap(
       spacing: 24,
       runSpacing: 24,
       children: [
-        _buildTemplateCard(ui, 'PDF Document', LucideIcons.fileType, 'Export current work to PDF'),
-        _buildTemplateCard(ui, 'Excel Spreadsheet', LucideIcons.table, 'Export variables to .xlsx'),
-        _buildTemplateCard(ui, 'Python Script', LucideIcons.code, 'Transpile to Python'),
-        _buildTemplateCard(ui, 'Standalone Executable', LucideIcons.box, 'Build as desktop binary'),
+        _buildTemplateCard(ui, 'PDF Document', LucideIcons.fileType, 'Export current work to PDF', onTap: () {
+           appProvider.exportToPdf();
+           Navigator.pop(context);
+        }),
+        _buildTemplateCard(ui, 'Python Script', LucideIcons.code, 'Transpile to Python', onTap: () {
+           appProvider.exportToPython();
+           Navigator.pop(context);
+        }),
+        _buildTemplateCard(ui, 'HTML Report', LucideIcons.fileJson, 'Generate interactive report', onTap: () {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report generation coming soon.')));
+        }),
       ],
     );
   }
 
-  Widget _buildTemplateCard(UiTheme ui, String title, IconData icon, String desc) {
-    return Container(
-      width: 200,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: ui.colors.panel,
-        borderRadius: ui.spacing.radiusMd,
-        border: Border.all(color: ui.colors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: ui.colors.accent, size: 32),
-          const SizedBox(height: 16),
-          UiText(text: title, variant: UiTextVariant.body, fontWeight: FontWeight.bold),
-          const SizedBox(height: 8),
-          UiText(text: desc, variant: UiTextVariant.caption, color: ui.colors.textMuted),
-        ],
+  Widget _buildTemplateCard(UiTheme ui, String title, IconData icon, String desc, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: ui.spacing.radiusMd,
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: ui.colors.panel,
+          borderRadius: ui.spacing.radiusMd,
+          border: Border.all(color: ui.colors.divider),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: ui.colors.accent, size: 32),
+            const SizedBox(height: 16),
+            UiText(text: title, variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+            const SizedBox(height: 8),
+            UiText(text: desc, variant: UiTextVariant.caption, color: ui.colors.textMuted),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildRecentItem(UiTheme ui, String title, String path) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: ui.colors.panel,
-        borderRadius: ui.spacing.radiusSm,
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.clock, size: 16, color: ui.colors.textMuted),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                UiText(text: title, variant: UiTextVariant.body, fontWeight: FontWeight.w500),
-                UiText(text: path, variant: UiTextVariant.caption, color: ui.colors.textMuted),
-              ],
+  Widget _buildRecentItem(UiTheme ui, String title, String path, {IconData icon = LucideIcons.clock, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: ui.spacing.radiusSm,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: ui.colors.panel,
+          borderRadius: ui.spacing.radiusSm,
+          border: Border.all(color: ui.colors.divider.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: ui.colors.textMuted),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(text: title, variant: UiTextVariant.body, fontWeight: FontWeight.w500),
+                  UiText(
+                    text: path, 
+                    variant: UiTextVariant.caption, 
+                    color: ui.colors.textMuted,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -273,20 +404,26 @@ class _BackstageMenuItemState extends State<_BackstageMenuItem> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           decoration: BoxDecoration(
             color: widget.isSelected 
-                ? Colors.black.withValues(alpha: 0.15) 
-                : (_isHovered ? Colors.black.withValues(alpha: 0.05) : Colors.transparent),
+                ? Colors.white.withValues(alpha: 0.2) 
+                : (_isHovered ? Colors.white.withValues(alpha: 0.1) : Colors.transparent),
+            border: Border(
+              left: BorderSide(
+                color: widget.isSelected ? Colors.white : Colors.transparent,
+                width: 4,
+              ),
+            ),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 18, color: Colors.black87),
+              Icon(widget.icon, size: 20, color: Colors.white),
               const SizedBox(width: 16),
               UiText(
                 text: widget.title,
                 variant: UiTextVariant.body,
-                color: Colors.black87,
+                color: Colors.white,
                 fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ],
