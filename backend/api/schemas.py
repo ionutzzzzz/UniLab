@@ -48,6 +48,15 @@ class VariableInfo(BaseModel):
     shape: Optional[List[int]] = None
     preview: Any = None
     size_bytes: Optional[int] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    mean: Optional[float] = None
+    median: Optional[float] = None
+    sum: Optional[float] = None
+    std: Optional[float] = None
+    variance: Optional[float] = None
+    range: Optional[float] = None
+    mode: Optional[float] = None
 
 
 class ExecutionResultResponse(BaseModel):

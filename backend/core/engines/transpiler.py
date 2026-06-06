@@ -841,13 +841,46 @@ class TranspilerEngine(BaseEngine):
             if len(preview) > 100:
                  preview = preview[:100] + "..."
             
+            # Statistical metrics for numeric arrays
+            stats = {}
+            if hasattr(v, '__iter__') and not isinstance(v, (str, bytes)):
+                try:
+                    import numpy as np
+                    arr = np.asanyarray(v)
+                    if np.issubdtype(arr.dtype, np.number):
+                        stats['min'] = float(np.min(arr))
+                        stats['max'] = float(np.max(arr))
+                        stats['mean'] = float(np.mean(arr))
+                        stats['median'] = float(np.median(arr))
+                        stats['sum'] = float(np.sum(arr))
+                        stats['std'] = float(np.std(arr))
+                        stats['variance'] = float(np.var(arr))
+                        stats['range'] = float(np.ptp(arr))
+                        # Mode can be multiple, take first
+                        from scipy import stats as scipy_stats
+                        m = scipy_stats.mode(arr, keepdims=True)
+                        stats['mode'] = float(m.mode[0])
+                except:
+                    pass
+            elif isinstance(v, (int, float)):
+                stats['min'] = float(v)
+                stats['max'] = float(v)
+                stats['mean'] = float(v)
+                stats['median'] = float(v)
+                stats['sum'] = float(v)
+                stats['std'] = 0.0
+                stats['variance'] = 0.0
+                stats['range'] = 0.0
+                stats['mode'] = float(v)
+
             vars_snap[k] = {
                 'name': k,
                 'dtype': cls,
                 'shape': shape_list,
                 'preview': preview,
                 'size': size_str,
-                'bytes': bytes_count
+                'bytes': bytes_count,
+                **stats
             }
         return vars_snap
 

@@ -283,6 +283,15 @@ class AppProvider with ChangeNotifier {
         value: info['preview']?.toString() ?? '',
         size: sizeStr,
         typeClass: info['dtype']?.toString() ?? 'unknown',
+        min: info['min']?.toString() ?? '',
+        max: info['max']?.toString() ?? '',
+        mean: info['mean']?.toString() ?? '',
+        median: info['median']?.toString() ?? '',
+        sum: info['sum']?.toString() ?? '',
+        variance: info['variance']?.toString() ?? '',
+        std: info['std']?.toString() ?? '',
+        range: info['range']?.toString() ?? '',
+        mode: info['mode']?.toString() ?? '',
       );
     }).toList();
     onVariablesUpdated?.call(vars);

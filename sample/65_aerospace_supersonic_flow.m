@@ -70,7 +70,7 @@ end
 figure;
 quiver(X, Y, Vx, Vy); hold on;
 % Draw wedge
-plot([0.5, 1.5, 0.5], [0, 0.1, 0], 'k-', 'LineWidth', 2);
+plot([0.5, 1.5, 0.5], [0, 0.1, 0], 'w-', 'LineWidth', 2);
 title(['Supersonic Flow over Wedge (M=', num2str(M_infinity), ')']);
 xlabel('x/c'); ylabel('y/c');
 axis equal; grid on;

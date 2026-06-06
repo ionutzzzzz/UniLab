@@ -1,25 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
+import '../state/workspace_providers.dart';
 
-class PropertyInspector extends StatelessWidget {
+class PropertyInspector extends ConsumerWidget {
   const PropertyInspector({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = UiTheme.of(context);
+    final variable = ref.watch(selectedVariableProvider);
     
-    // Mock properties for a selected variable
-    final mockProperties = [
-      {'name': 'Name', 'value': 'results_matrix'},
-      {'name': 'Class', 'value': 'double'},
-      {'name': 'Size', 'value': '500x500'},
-      {'name': 'Min', 'value': '0.0012'},
-      {'name': 'Max', 'value': '0.9984'},
-      {'name': 'Mean', 'value': '0.4521'},
-      {'name': 'Complexity', 'value': 'Real'},
-    ];
+    if (variable == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.mousePointer2, size: 40, color: ui.colors.textDisabled),
+            const SizedBox(height: 16),
+            UiText(
+              text: 'Select a variable to inspect',
+              variant: UiTextVariant.body,
+              color: ui.colors.textMuted,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final properties = [
+      {'name': 'Name', 'value': variable.name},
+      {'name': 'Class', 'value': variable.typeClass},
+      {'name': 'Size', 'value': variable.size},
+      {'name': 'Min', 'value': variable.min},
+      {'name': 'Max', 'value': variable.max},
+      {'name': 'Mean', 'value': variable.mean},
+      {'name': 'Median', 'value': variable.median},
+      {'name': 'Sum', 'value': variable.sum},
+      {'name': 'Variance', 'value': variable.variance},
+      {'name': 'Std Dev', 'value': variable.std},
+      {'name': 'Range', 'value': variable.range},
+      {'name': 'Mode', 'value': variable.mode},
+    ].where((p) => p['value'] != null && p['value']!.toString().isNotEmpty).toList();
 
     return Column(
       children: [
@@ -50,12 +74,12 @@ class PropertyInspector extends StatelessWidget {
           child: Container(
             color: ui.colors.canvas,
             child: ListView.builder(
-              itemCount: mockProperties.length,
+              itemCount: properties.length,
               itemBuilder: (context, index) {
-                final prop = mockProperties[index];
+                final prop = properties[index];
                 return _PropertyRow(
                   name: prop['name']!,
-                  value: prop['value']!,
+                  value: prop['value']!.toString(),
                   isEven: index % 2 == 0,
                 );
               },

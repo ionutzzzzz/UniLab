@@ -5,6 +5,13 @@ class WorkspaceVariable {
   final String typeClass;
   final String min;
   final String max;
+  final String mean;
+  final String median;
+  final String sum;
+  final String variance;
+  final String std;
+  final String range;
+  final String mode;
 
   const WorkspaceVariable({
     required this.name,
@@ -13,5 +20,12 @@ class WorkspaceVariable {
     required this.typeClass,
     this.min = '',
     this.max = '',
+    this.mean = '',
+    this.median = '',
+    this.sum = '',
+    this.variance = '',
+    this.std = '',
+    this.range = '',
+    this.mode = '',
   });
 }

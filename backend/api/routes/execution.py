@@ -58,7 +58,16 @@ async def execute_code(
                     "name": name,
                     "dtype": info.get('dtype', 'unknown'),
                     "shape": info.get('shape'),
-                    "preview": str(info.get('preview', ''))[:200]
+                    "preview": str(info.get('preview', ''))[:200],
+                    "min": info.get('min'),
+                    "max": info.get('max'),
+                    "mean": info.get('mean'),
+                    "median": info.get('median'),
+                    "sum": info.get('sum'),
+                    "std": info.get('std'),
+                    "variance": info.get('variance'),
+                    "range": info.get('range'),
+                    "mode": info.get('mode'),
                 }
         
         return ExecutionResultResponse(
@@ -166,7 +175,16 @@ async def batch_execute(
                         "name": name,
                         "dtype": info.get('dtype', 'unknown'),
                         "shape": info.get('shape'),
-                        "preview": str(info.get('preview', ''))[:200]
+                        "preview": str(info.get('preview', ''))[:200],
+                        "min": info.get('min'),
+                        "max": info.get('max'),
+                        "mean": info.get('mean'),
+                        "median": info.get('median'),
+                        "sum": info.get('sum'),
+                        "std": info.get('std'),
+                        "variance": info.get('variance'),
+                        "range": info.get('range'),
+                        "mode": info.get('mode'),
                     }
             
             exec_result = ExecutionResultResponse(

@@ -6,6 +6,19 @@ final workspaceVariablesProvider =
   return WorkspaceVariablesNotifier();
 });
 
+final selectedVariableNameProvider = StateProvider<String?>((ref) => null);
+
+final selectedVariableProvider = Provider<WorkspaceVariable?>((ref) {
+  final name = ref.watch(selectedVariableNameProvider);
+  if (name == null) return null;
+  final variables = ref.watch(workspaceVariablesProvider);
+  try {
+    return variables.firstWhere((v) => v.name == name);
+  } catch (_) {
+    return null;
+  }
+});
+
 class WorkspaceVariablesNotifier extends StateNotifier<List<WorkspaceVariable>> {
   WorkspaceVariablesNotifier() : super([]);
 

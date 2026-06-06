@@ -35,7 +35,16 @@ async def workspace_ws(
                         "dtype": info.get('dtype', 'unknown'),
                         "shape": info.get('shape'),
                         "preview": str(info.get('preview', ''))[:200],
-                        "size_bytes": info.get('bytes', 0)
+                        "size_bytes": info.get('bytes', 0),
+                        "min": info.get('min'),
+                        "max": info.get('max'),
+                        "mean": info.get('mean'),
+                        "median": info.get('median'),
+                        "sum": info.get('sum'),
+                        "std": info.get('std'),
+                        "variance": info.get('variance'),
+                        "range": info.get('range'),
+                        "mode": info.get('mode'),
                     }
                 
                 await websocket.send_json({
@@ -90,7 +99,16 @@ async def get_workspace(
                     "dtype": info.get('dtype', 'unknown'),
                     "shape": info.get('shape'),
                     "preview": str(info.get('preview', ''))[:200],
-                    "size_bytes": estimate_size(info.get('preview'))
+                    "size_bytes": estimate_size(info.get('preview')),
+                    "min": info.get('min'),
+                    "max": info.get('max'),
+                    "mean": info.get('mean'),
+                    "median": info.get('median'),
+                    "sum": info.get('sum'),
+                    "std": info.get('std'),
+                    "variance": info.get('variance'),
+                    "range": info.get('range'),
+                    "mode": info.get('mode'),
                 }
                 variables[name] = var_info
                 total_size += var_info.get('size_bytes', 0)
@@ -123,7 +141,16 @@ async def get_variable(
                 name=var_name,
                 dtype=info.get('dtype', 'unknown'),
                 shape=info.get('shape'),
-                preview=str(info.get('preview', ''))[:1000]
+                preview=str(info.get('preview', ''))[:1000],
+                min=info.get('min'),
+                max=info.get('max'),
+                mean=info.get('mean'),
+                median=info.get('median'),
+                sum=info.get('sum'),
+                std=info.get('std'),
+                variance=info.get('variance'),
+                range=info.get('range'),
+                mode=info.get('mode'),
             )
         else:
             raise HTTPException(status_code=404, detail=f"Variable '{var_name}' not found in workspace")
@@ -236,7 +263,16 @@ async def get_variables_detailed(
                     "dtype": info.get('dtype', 'unknown'),
                     "shape": info.get('shape'),
                     "preview": str(info.get('preview', ''))[:500],
-                    "size_bytes": estimate_size(info.get('preview'))
+                    "size_bytes": estimate_size(info.get('preview')),
+                    "min": info.get('min'),
+                    "max": info.get('max'),
+                    "mean": info.get('mean'),
+                    "median": info.get('median'),
+                    "sum": info.get('sum'),
+                    "std": info.get('std'),
+                    "variance": info.get('variance'),
+                    "range": info.get('range'),
+                    "mode": info.get('mode'),
                 })
         
         return {

@@ -46,6 +46,11 @@ class WorkspaceVariable {
   final String? size; // e.g., "100x100"
   final double? min;
   final double? max;
+  final double? mean;
+  final double? median;
+  final double? sum;
+  final double? variance;
+  final double? std;
   final List<dynamic>? data; // For storing actual data
 
   WorkspaceVariable({
@@ -55,6 +60,11 @@ class WorkspaceVariable {
     this.size,
     this.min,
     this.max,
+    this.mean,
+    this.median,
+    this.sum,
+    this.variance,
+    this.std,
     this.data,
   });
 
@@ -65,6 +75,11 @@ class WorkspaceVariable {
     String? size,
     double? min,
     double? max,
+    double? mean,
+    double? median,
+    double? sum,
+    double? variance,
+    double? std,
     List<dynamic>? data,
   }) {
     return WorkspaceVariable(
@@ -74,6 +89,11 @@ class WorkspaceVariable {
       size: size ?? this.size,
       min: min ?? this.min,
       max: max ?? this.max,
+      mean: mean ?? this.mean,
+      median: median ?? this.median,
+      sum: sum ?? this.sum,
+      variance: variance ?? this.variance,
+      std: std ?? this.std,
       data: data ?? this.data,
     );
   }
