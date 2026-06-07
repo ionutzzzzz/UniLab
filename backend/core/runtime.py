@@ -1397,18 +1397,27 @@ def unilab_mul(a, b):
     if isinstance(a, (list, tuple)): a = np.asarray(a)
     if isinstance(b, (list, tuple)): b = np.asarray(b)
     
-    if np.isscalar(a) and np.isscalar(b): return a * b
-    try:
-        # Matrix multiplication
-        res = np.matmul(a, b)
-        if isinstance(res, np.ndarray) and res.size == 1:
-            return res.item()
-        return res
-    except: 
+    # In MATLAB, * is matrix multiplication, but if either is a scalar, it's element-wise.
+    a_is_scalar = np.isscalar(a) or (hasattr(a, 'ndim') and a.ndim == 0)
+    b_is_scalar = np.isscalar(b) or (hasattr(b, 'ndim') and b.ndim == 0)
+
+    if a_is_scalar or b_is_scalar:
         res = a * b
-        if isinstance(res, np.ndarray) and res.size == 1:
-            return res.item()
-        return res
+    else:
+        try:
+            # Matrix multiplication
+            res = np.matmul(a, b)
+        except (ValueError, TypeError):
+            # Fallback for 1x1 matrices which MATLAB often treats as scalars for *
+            if a.size == 1 or b.size == 1:
+                res = a * b
+            else:
+                # Re-raise to avoid silent broadcasting bugs
+                raise
+
+    if isinstance(res, np.ndarray) and res.size == 1:
+        return res.item()
+    return res
 
 def unilab_dot_mul(a, b):
     if isinstance(a, (list, tuple)): a = np.asarray(a)
@@ -2740,16 +2749,19 @@ def ode45(f, tspan, y0, options=None):
     # UniLab/MATLAB f(t, y) vs solve_ivp f(t, y) - matches!
     # tspan [tstart, tend]
     tspan = np.asarray(tspan).flatten()
-    y0 = np.asarray(y0).flatten()
+    y0_arr = np.asarray(y0)
+    y0_shape = y0_arr.shape
+    y0_flat = y0_arr.flatten()
     
     # Wrap f to ensure it receives and returns 1D arrays for solve_ivp
     def wrapper(t, y):
         # We need to find the engine's globals to get unilab_call, or just call it directly
         # Since we are in runtime.py, we can use unilab_call
-        res = unilab_call(f, t, y)
+        # Reshape y back to original shape for the dynamics function
+        res = unilab_call(f, t, y.reshape(y0_shape))
         return np.asarray(res).flatten()
 
-    sol = solve_ivp(wrapper, (tspan[0], tspan[-1]), y0, t_eval=np.linspace(tspan[0], tspan[-1], 100))
+    sol = solve_ivp(wrapper, (tspan[0], tspan[-1]), y0_flat, t_eval=np.linspace(tspan[0], tspan[-1], 100))
     
     n_out = unilab_get_nargout()
     if n_out <= 1:
