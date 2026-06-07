@@ -1,7 +1,6 @@
 import asyncio
 import pathlib
 import sys
-import os
 import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
@@ -41,7 +40,7 @@ async def test_graphical_engine():
         print(f"STDOUT:\n{res.stdout}")
 
         if graph_path.exists():
-            print(f"✅ Success: graph.jpg still exists (updated)")
+            print("✅ Success: graph.jpg still exists (updated)")
 
     finally:
         await core.stop()

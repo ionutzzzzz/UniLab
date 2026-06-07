@@ -1,0 +1,54 @@
+# Stage 1: Build Rust Core
+FROM rust:1.85-slim as rust-builder
+WORKDIR /app
+COPY backend/unilab_core ./unilab_core
+COPY backend/Cargo.toml backend/Cargo.lock ./
+RUN mkdir -p unilab_cli/src && echo "fn main() {}" > unilab_cli/src/main.rs
+RUN cargo build --release -p unilab_core
+
+# Stage 2: Production Python
+FROM python:3.13-slim
+WORKDIR /app
+
+# Install system dependencies for scientific libraries and Qt (headless)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libfontconfig1 \
+    libxrender1 \
+    libdbus-1-3 \
+    libxkbcommon-x11-0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-xinerama0 \
+    libxcb-xinput0 \
+    libxcb-xfixes0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend/ ./backend/
+# Copy built Rust library from builder stage
+COPY --from=rust-builder /app/target/release/libunilab_core.so ./backend/core/engines/
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV UNILAB_WORKSPACE_ROOT=/app/workspaces
+ENV QT_QPA_PLATFORM=offscreen
+ENV DISPLAY=:0
+
+# Create workspaces directory
+RUN mkdir -p /app/workspaces
+
+# Expose port
+EXPOSE 8000
+
+# Run with Gunicorn
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "backend.api.main:app", "--bind", "0.0.0.0:8000"]

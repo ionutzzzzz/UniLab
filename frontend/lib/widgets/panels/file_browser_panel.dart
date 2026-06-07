@@ -46,10 +46,7 @@ class _FileBrowserPanelState extends State<FileBrowserPanel> {
             decoration: BoxDecoration(
               color: ui.colors.panelHeader,
               border: Border(
-                bottom: BorderSide(
-                  color: ui.colors.border,
-                  width: 1,
-                ),
+                bottom: BorderSide(color: ui.colors.border, width: 1),
               ),
             ),
             child: Row(
@@ -59,11 +56,17 @@ class _FileBrowserPanelState extends State<FileBrowserPanel> {
                   child: _showSearch
                       ? TextField(
                           controller: _searchController,
-                          style: TextStyle(fontSize: 11, color: ui.colors.textPrimary),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: ui.colors.textPrimary,
+                          ),
                           autofocus: true,
                           decoration: InputDecoration(
                             hintText: 'Search files...',
-                            hintStyle: TextStyle(fontSize: 11, color: ui.colors.textMuted),
+                            hintStyle: TextStyle(
+                              fontSize: 11,
+                              color: ui.colors.textMuted,
+                            ),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
@@ -115,34 +118,52 @@ class _FileBrowserPanelState extends State<FileBrowserPanel> {
                             final controller = TextEditingController();
                             return AlertDialog(
                               backgroundColor: ui.colors.panel,
-                              title: Text('New Folder', style: TextStyle(color: ui.colors.textPrimary)),
+                              title: Text(
+                                'New Folder',
+                                style: TextStyle(color: ui.colors.textPrimary),
+                              ),
                               content: TextField(
                                 controller: controller,
                                 style: TextStyle(color: ui.colors.textPrimary),
                                 decoration: InputDecoration(
                                   hintText: 'Folder Name',
-                                  hintStyle: TextStyle(color: ui.colors.textMuted),
+                                  hintStyle: TextStyle(
+                                    color: ui.colors.textMuted,
+                                  ),
                                 ),
                                 autofocus: true,
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
+                                  child: Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      color: ui.colors.textMuted,
+                                    ),
+                                  ),
                                 ),
                                 TextButton(
                                   onPressed: () async {
                                     final name = controller.text;
                                     if (name.isNotEmpty) {
-                                      final path = p.join(appProvider.projectRoot, name);
-                                      await io.Directory(path).create(recursive: true);
+                                      final path = p.join(
+                                        appProvider.projectRoot.toString(),
+                                        name,
+                                      );
+                                      await io.Directory(
+                                        path,
+                                      ).create(recursive: true);
                                       appProvider.refreshProjectFiles();
                                     }
                                     if (context.mounted) {
                                       Navigator.pop(context);
                                     }
                                   },
-                                  child: Text('Create', style: TextStyle(color: ui.colors.accent)),
+                                  child: Text(
+                                    'Create',
+                                    style: TextStyle(color: ui.colors.accent),
+                                  ),
                                 ),
                               ],
                             );
@@ -163,13 +184,15 @@ class _FileBrowserPanelState extends State<FileBrowserPanel> {
             child: Consumer<AppProvider>(
               builder: (context, appProvider, _) {
                 final files = appProvider.projectFiles.where((file) {
-                  final path = kIsWeb ? 'web-file' : (file as io.FileSystemEntity).path;
+                  final path = kIsWeb
+                      ? 'web-file'
+                      : (file as io.FileSystemEntity).path;
                   final name = kIsWeb ? 'web-file' : p.basename(path);
-                  
+
                   if (_searchController.text.isEmpty) return true;
-                  return name
-                      .toLowerCase()
-                      .contains(_searchController.text.toLowerCase());
+                  return name.toLowerCase().contains(
+                    _searchController.text.toLowerCase(),
+                  );
                 }).toList();
 
                 if (files.isEmpty) {
@@ -228,10 +251,7 @@ class _FileTreeItem extends StatefulWidget {
   final dynamic entity;
   final int depth;
 
-  const _FileTreeItem({
-    required this.entity,
-    this.depth = 0,
-  });
+  const _FileTreeItem({required this.entity, this.depth = 0});
 
   @override
   State<_FileTreeItem> createState() => _FileTreeItemState();
@@ -247,7 +267,10 @@ class _FileTreeItemState extends State<_FileTreeItem> {
 
     if (widget.entity is! io.Directory) {
       if (widget.entity is io.File) {
-        Provider.of<AppProvider>(context, listen: false).openFile(widget.entity);
+        Provider.of<AppProvider>(
+          context,
+          listen: false,
+        ).openFile(widget.entity);
       }
       return;
     }
@@ -263,20 +286,24 @@ class _FileTreeItemState extends State<_FileTreeItem> {
 
   Future<void> _refreshChildren() async {
     if (kIsWeb || widget.entity is! io.Directory) return;
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
-      final children = await UniLabFileManager.listDirectory((widget.entity as io.Directory).path);
+      final children = await UniLabFileManager.listDirectory(
+        (widget.entity as io.Directory).path,
+      );
       // Sort: dirs first
       children.sort((a, b) {
         if (a is io.Directory && b is! io.Directory) return -1;
         if (a is! io.Directory && b is io.Directory) return 1;
-        return p.basename((a as io.FileSystemEntity).path).compareTo(p.basename((b as io.FileSystemEntity).path));
+        return p
+            .basename((a as io.FileSystemEntity).path)
+            .compareTo(p.basename((b as io.FileSystemEntity).path));
       });
-      
+
       if (mounted) {
         setState(() {
           _children = children;
@@ -302,7 +329,8 @@ class _FileTreeItemState extends State<_FileTreeItem> {
     final name = p.basename(entity.path);
     final isDirectory = entity is io.Directory;
     final appProvider = Provider.of<AppProvider>(context);
-    final isActive = !isDirectory && appProvider.activeFile?.path == entity.path;
+    final isActive =
+        !isDirectory && appProvider.activeFile?.path == entity.path;
     final ui = UiTheme.of(context);
 
     return Column(
@@ -313,7 +341,10 @@ class _FileTreeItemState extends State<_FileTreeItem> {
               ContextMenuButtonConfig(
                 isDirectory ? 'Expand/Collapse' : 'Open',
                 onPressed: _toggleExpanded,
-                icon: Icon(isDirectory ? LucideIcons.chevronRight : LucideIcons.fileText, size: 16),
+                icon: Icon(
+                  isDirectory ? LucideIcons.chevronRight : LucideIcons.fileText,
+                  size: 16,
+                ),
               ),
               if (isDirectory)
                 ContextMenuButtonConfig(
@@ -329,17 +360,27 @@ class _FileTreeItemState extends State<_FileTreeItem> {
               if (!isDirectory)
                 ContextMenuButtonConfig(
                   'Run',
-                  onPressed: appProvider.isExecuting ? null : () {
-                     appProvider.openFile(entity).then((_) {
-                       appProvider.runActiveFile();
-                     });
-                  },
-                  icon: Icon(LucideIcons.play, size: 16, color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.success),
+                  onPressed: appProvider.isExecuting
+                      ? null
+                      : () {
+                          appProvider.openFile(entity).then((_) {
+                            appProvider.runActiveFile();
+                          });
+                        },
+                  icon: Icon(
+                    LucideIcons.play,
+                    size: 16,
+                    color: appProvider.isExecuting
+                        ? ui.colors.textDisabled
+                        : ui.colors.success,
+                  ),
                 ),
               ContextMenuButtonConfig(
                 'Rename',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File renaming coming soon.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('File renaming coming soon.')),
+                  );
                 },
                 icon: const Icon(LucideIcons.edit3, size: 16),
               ),
@@ -350,110 +391,140 @@ class _FileTreeItemState extends State<_FileTreeItem> {
                     context: context,
                     builder: (context) => AlertDialog(
                       backgroundColor: ui.colors.panel,
-                      title: Text('Delete File', style: TextStyle(color: ui.colors.textPrimary)),
-                      content: Text('Are you sure you want to delete "${p.basename(entity.path)}"?', style: TextStyle(color: ui.colors.textSecondary)),
+                      title: Text(
+                        'Delete File',
+                        style: TextStyle(color: ui.colors.textPrimary),
+                      ),
+                      content: Text(
+                        'Are you sure you want to delete "${p.basename(entity.path)}"?',
+                        style: TextStyle(color: ui.colors.textSecondary),
+                      ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: Text('Cancel', style: TextStyle(color: ui.colors.textMuted)),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(color: ui.colors.textMuted),
+                          ),
                         ),
                         TextButton(
                           onPressed: () {
                             appProvider.deleteFile(entity);
                             Navigator.pop(context);
                           },
-                          child: Text('Delete', style: TextStyle(color: ui.colors.danger)),
+                          child: Text(
+                            'Delete',
+                            style: TextStyle(color: ui.colors.danger),
+                          ),
                         ),
                       ],
                     ),
                   );
                 },
-                icon: Icon(LucideIcons.trash2, size: 16, color: ui.colors.danger),
+                icon: Icon(
+                  LucideIcons.trash2,
+                  size: 16,
+                  color: ui.colors.danger,
+                ),
               ),
               ContextMenuButtonConfig(
                 'Properties',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File properties coming soon.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('File properties coming soon.'),
+                    ),
+                  );
                 },
                 icon: const Icon(LucideIcons.info, size: 16),
               ),
-              ],
-            ),
-            child: InkWell(
-              onTap: _toggleExpanded,
-              child: Container(
-                padding: EdgeInsets.only(
-                  left: 12.0 + (widget.depth * 12.0),
-                  right: 12.0,
-                  top: 4.0,
-                  bottom: 4.0,
-                ),
-                decoration: BoxDecoration(
-                  color: isActive 
-                      ? ui.colors.selected
-                      : Colors.transparent,
-                  border: Border(
-                    left: BorderSide(
-                      color: isActive ? ui.colors.accent : Colors.transparent,
-                      width: 2,
-                    ),
+            ],
+          ),
+          child: InkWell(
+            onTap: _toggleExpanded,
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 12.0 + (widget.depth * 12.0),
+                right: 12.0,
+                top: 4.0,
+                bottom: 4.0,
+              ),
+              decoration: BoxDecoration(
+                color: isActive ? ui.colors.selected : Colors.transparent,
+                border: Border(
+                  left: BorderSide(
+                    color: isActive ? ui.colors.accent : Colors.transparent,
+                    width: 2,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    if (isDirectory)
-                      Icon(
-                        _isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                        size: 14,
-                        color: ui.colors.textMuted,
-                      )
-                    else
-                      const SizedBox(width: 14),
-                    const SizedBox(width: 2),
+              ),
+              child: Row(
+                children: [
+                  if (isDirectory)
                     Icon(
-                      isDirectory
-                          ? (_isExpanded ? LucideIcons.folderOpen : LucideIcons.folder)
-                          : (name.endsWith('.m') ? LucideIcons.fileText : LucideIcons.file),
-                      size: 16,
-                      color: isDirectory ? ui.colors.tan : (isActive ? ui.colors.accent : ui.colors.textSecondary),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: ui.typography.label.copyWith(
-                          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                          color: isActive ? ui.colors.textInverse : ui.colors.textPrimary,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      _isExpanded
+                          ? LucideIcons.chevronDown
+                          : LucideIcons.chevronRight,
+                      size: 14,
+                      color: ui.colors.textMuted,
+                    )
+                  else
+                    const SizedBox(width: 14),
+                  const SizedBox(width: 2),
+                  Icon(
+                    isDirectory
+                        ? (_isExpanded
+                              ? LucideIcons.folderOpen
+                              : LucideIcons.folder)
+                        : (name.endsWith('.m')
+                              ? LucideIcons.fileText
+                              : LucideIcons.file),
+                    size: 16,
+                    color: isDirectory
+                        ? ui.colors.tan
+                        : (isActive
+                              ? ui.colors.accent
+                              : ui.colors.textSecondary),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: ui.typography.label.copyWith(
+                        fontWeight: isActive
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isActive
+                            ? ui.colors.textInverse
+                            : ui.colors.textPrimary,
+                        fontSize: 11,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-
+                  ),
+                ],
               ),
             ),
           ),
-          if (isDirectory && _isExpanded)
-            if (_isLoading)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: SizedBox(
-                  height: 2,
-                  child: LinearProgressIndicator(
-                    minHeight: 1,
-                    backgroundColor: ui.colors.panel,
-                    color: ui.colors.accent,
-                  ),
+        ),
+        if (isDirectory && _isExpanded)
+          if (_isLoading)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: SizedBox(
+                height: 2,
+                child: LinearProgressIndicator(
+                  minHeight: 1,
+                  backgroundColor: ui.colors.panel,
+                  color: ui.colors.accent,
                 ),
-              )
-            else
-              ..._children.map((child) => _FileTreeItem(
-                entity: child,
-                depth: widget.depth + 1,
-              )),
+              ),
+            )
+          else
+            ..._children.map(
+              (child) => _FileTreeItem(entity: child, depth: widget.depth + 1),
+            ),
       ],
     );
   }

@@ -16,44 +16,6 @@ class PlotsPanel extends StatelessWidget {
       color: ui.colors.canvas,
       child: Column(
         children: [
-          // Header (Optional, since ConsolePanel has its own tab bar, but good for local actions)
-          if (false) // Hide local header for now to avoid duplication
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: ui.colors.panelHeader,
-              border: Border(
-                bottom: BorderSide(
-                  color: ui.colors.border,
-                  width: 1,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                UiText(
-                  text: 'PLOTS GALLERY',
-                  variant: UiTextVariant.label,
-                  fontWeight: FontWeight.bold,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.clear_all, size: 14),
-                  onPressed: () {
-                    Provider.of<AppProvider>(context, listen: false).clearPlots();
-                  },
-                  tooltip: 'Clear Plots',
-                  iconSize: 14,
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Plot content area
           Expanded(
             child: Consumer<AppProvider>(
               builder: (context, appProvider, _) {

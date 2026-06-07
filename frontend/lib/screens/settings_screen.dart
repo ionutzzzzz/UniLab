@@ -5,7 +5,6 @@ import 'package:flex_color_picker/flex_color_picker.dart';
 import '../providers/settings_provider.dart';
 import '../providers/app_provider.dart';
 import '../theme/ui_theme.dart';
-import '../theme/plot_colormaps.dart';
 import '../theme/syntax_themes.dart';
 import '../widgets/ui_text.dart';
 import '../widgets/ui_button.dart';
@@ -397,7 +396,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showColorPicker(BuildContext context, SettingsProvider provider) async {
-    final ui = UiTheme.of(context);
     Color colorBeforeDialog = provider.settings.accentColor;
     
     if (await ColorPicker(
@@ -439,7 +437,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _colorCircle(UiTheme ui, Color color, Color current, VoidCallback onTap) {
-    final isSelected = color.value == current.value;
+    final isSelected = color.toARGB32() == current.toARGB32();
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -884,7 +882,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: ui.colors.accent,
+        activeThumbColor: ui.colors.accent,
       ),
     );
   }

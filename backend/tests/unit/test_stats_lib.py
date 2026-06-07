@@ -1,8 +1,6 @@
 import unittest
-import asyncio
 import pathlib
 import shutil
-import numpy as np
 from backend.core.unilab_core import UniLabCore, BackendConfig
 
 class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):

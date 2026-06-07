@@ -230,7 +230,7 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                         Image.memory(
                           base64Decode(widget.plotData.imageDataUri!.split(',').last),
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             LucideIcons.lineChart,
                             size: 32,
                             color: ui.colors.textDisabled.withValues(alpha: 0.3),

@@ -8,7 +8,6 @@ import 'package:provider/provider.dart' as p;
 import 'package:path/path.dart' as path_utils;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
-import '../../../widgets/ui_icon_button.dart';
 import '../../../providers/app_provider.dart';
 import 'package:flutter/services.dart';
 import '../../../widgets/ui_glass_container.dart';
@@ -194,9 +193,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                                   TextButton(
                                     onPressed: () async {
                                       final name = controller.text;
-                                      if (name.isNotEmpty) {
+                                      if (name.isNotEmpty && appProvider.projectRoot != null) {
                                         final path = path_utils.join(
-                                          appProvider.projectRoot,
+                                          appProvider.projectRoot!,
                                           name,
                                         );
                                         await io.Directory(
@@ -544,7 +543,7 @@ class _FileTreeRowState extends State<_FileTreeRow> {
           onWillAcceptWithDetails: (details) {
             final dragPath = details.data;
             if (dragPath == widget.path) return false;
-            if (widget.path.startsWith(dragPath + '/')) return false;
+            if (widget.path.startsWith('$dragPath/')) return false;
             return true;
           },
           onAcceptWithDetails: (details) {
@@ -623,11 +622,12 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                   if (event.buttons == 2) {
                     // Right click
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted)
+                      if (mounted) {
                         widget.onSelect(
                           isCtrlPressed: isCtrl,
                           isShiftPressed: isShift,
                         );
+                      }
                     });
                   } else if (event.buttons == 1) {
                     // Left click
@@ -724,18 +724,22 @@ class _FileTreeRowState extends State<_FileTreeRow> {
   IconData _getFileIcon(String name) {
     final lowerName = name.toLowerCase();
     if (lowerName.endsWith('.m')) return LucideIcons.fileCode2;
-    if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx'))
+    if (lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) {
       return LucideIcons.table2;
+    }
     if (lowerName.endsWith('.md')) return LucideIcons.fileText;
-    if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml'))
+    if (lowerName.endsWith('.json') || lowerName.endsWith('.yaml')) {
       return LucideIcons.fileJson;
+    }
     if (lowerName.endsWith('.png') ||
         lowerName.endsWith('.jpg') ||
-        lowerName.endsWith('.jpeg'))
+        lowerName.endsWith('.jpeg')) {
       return LucideIcons.fileImage;
+    }
     if (lowerName.endsWith('.pdf')) return LucideIcons.fileText;
-    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav'))
+    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav')) {
       return LucideIcons.fileAudio;
+    }
     return LucideIcons.file;
   }
 

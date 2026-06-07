@@ -1,0 +1,9 @@
+display_name: UniLab
+package_name: unilab
+executable_path: unilab
+icon: assets/logo.png
+categories:
+  - Development
+  - Education
+  - Science
+  - Math

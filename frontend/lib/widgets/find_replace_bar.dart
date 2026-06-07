@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
 import '../../theme/ui_theme.dart';
 
 /// Find and Replace dialog

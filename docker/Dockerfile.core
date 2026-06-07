@@ -1,0 +1,21 @@
+# Dockerfile for Unilab-core (CLI Only)
+# Stage 1: Build Rust Core & CLI
+FROM rust:1.85-slim as builder
+WORKDIR /app
+COPY backend/unilab_core ./unilab_core
+COPY backend/unilab_cli ./unilab_cli
+COPY backend/Cargo.toml backend/Cargo.lock ./
+RUN cargo build --release -p unilab_cli
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+WORKDIR /app
+
+# Copy built binaries and libraries
+COPY --from=builder /app/target/release/unilab_cli /usr/local/bin/unilab-core
+COPY --from=builder /app/target/release/libunilab_core.so /usr/local/lib/
+
+# Set library path
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+ENTRYPOINT ["unilab-core"]

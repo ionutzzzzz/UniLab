@@ -1,4 +1,3 @@
-import sys
 
 def test_truecolor():
     print("Testing TrueColor Support:")

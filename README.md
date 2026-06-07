@@ -91,6 +91,42 @@ cd frontend
 flutter run
 ```
 
+### 📦 Desktop Packaging
+
+To create a one-click installer for Windows, Linux, or macOS:
+
+```bash
+./script/build_unilab_desktop.sh
+```
+
+See [README_PACKAGING.md](README_PACKAGING.md) for more details.
+
+---
+
+## 🏗️ Production Deployment
+
+UniLab is available in two versions:
+- **Unilab**: Full GUI application with Web terminal and API.
+- **Unilab-core**: High-performance CLI-only version.
+
+### 🐳 Using Docker
+
+```bash
+# Start the full Unilab GUI/API
+docker-compose -f docker/docker-compose.up --build -d unilab
+
+# Run Unilab-core CLI
+docker-compose -f docker/docker-compose.yml run unilab-core /samples/test.m
+```
+
+### 📦 Native Build
+
+```bash
+# Build both versions
+./script/build_unilab.sh
+```
+Outputs will be in `./release/Unilab` and `./release/Unilab-core`.
+
 ---
 
 ## 🗺️ Roadmap

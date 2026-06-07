@@ -1,7 +1,6 @@
 import asyncio
 import pathlib
 import sys
-import os
 import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent

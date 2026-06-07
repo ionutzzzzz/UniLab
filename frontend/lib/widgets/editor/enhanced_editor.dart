@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_highlight/themes/monokai-sublime.dart';
@@ -7,7 +8,6 @@ import '../../theme/ui_theme.dart';
 import '../../models/editor_models.dart';
 import 'editor_breadcrumbs.dart';
 import 'find_replace_bar.dart';
-import 'line_number_gutter.dart';
 import 'line_number_gutter_painter.dart';
 
 class EnhancedCodeEditor extends ConsumerStatefulWidget {
@@ -31,6 +31,7 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
   late ScrollController _verticalScrollController;
   late ScrollController _horizontalScrollController;
   
+  Timer? _debounce;
   bool _isFindOpen = false;
   final Set<int> _breakpoints = {};
   int? _activeExecutionLine;
@@ -56,10 +57,19 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _codeController.dispose();
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged(String val) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      widget.onChanged?.call(val);
+    });
+    setState(() {});
   }
 
   void _onBreakpointToggle(int line) {
@@ -94,6 +104,7 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
                 child: CodeTheme(
                   data: CodeThemeData(styles: monokaiSublimeTheme),
                   child: SingleChildScrollView(
+                    key: PageStorageKey('editor_scroll_${widget.file.id}'),
                     controller: _verticalScrollController,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -113,10 +124,7 @@ class _EnhancedCodeEditorState extends ConsumerState<EnhancedCodeEditor> {
                           Expanded(
                             child: CodeField(
                               controller: _codeController,
-                              onChanged: (val) {
-                                widget.onChanged?.call(val);
-                                setState(() {});
-                              },
+                              onChanged: _onTextChanged,
 
                               textStyle: ui.typography.codeBody.copyWith(
                                 fontSize: 13,

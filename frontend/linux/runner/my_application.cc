@@ -52,6 +52,13 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "unilab");
   }
 
+  // Set the window icon
+  g_autoptr(GFile) exe_file = g_file_new_for_path("/proc/self/exe");
+  g_autoptr(GFile) bundle_dir = g_file_get_parent(exe_file);
+  g_autofree gchar* bundle_path = g_file_get_path(bundle_dir);
+  g_autofree gchar* icon_path = g_build_filename(bundle_path, "data", "flutter_assets", "assets", "logo.png", nullptr);
+  gtk_window_set_icon_from_file(window, icon_path, NULL);
+
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../theme/ui_theme.dart';
 import '../widgets/ui_text.dart';
+import '../providers/app_provider.dart';
 
 class TitleStrip extends StatelessWidget {
   const TitleStrip({super.key});
@@ -11,6 +14,7 @@ class TitleStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context);
 
     Widget content = Row(
       children: [
@@ -48,7 +52,7 @@ class TitleStrip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.beaker, size: 14, color: ui.colors.accent),
+              Image.asset('assets/logo.png', width: 16, height: 16),
               const SizedBox(width: 8),
               const UiText(
                 text: 'UniLab',
@@ -78,7 +82,9 @@ class TitleStrip extends StatelessWidget {
             Icon(LucideIcons.terminal, size: 12, color: ui.colors.textSecondary),
             const SizedBox(width: 8),
             UiText(
-              text: 'unilab_workspaces/default',
+              text: appProvider.projectRoot != null 
+                  ? 'unilab_workspaces/${p.basename(appProvider.projectRoot!)}' 
+                  : 'unilab_workspaces/none',
               variant: UiTextVariant.label,
               color: ui.colors.textSecondary,
               letterSpacing: 0.1,
@@ -131,9 +137,18 @@ class WindowButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (!appProvider.isWelcomeMode)
+          _WindowButton(
+            icon: LucideIcons.logOut,
+            onTap: () => appProvider.resetToWelcome(),
+            hoverColor: ui.colors.hover,
+            tooltip: 'Close Project',
+          ),
         _WindowButton(
           icon: LucideIcons.minus,
           onTap: () => windowManager.minimize(),
@@ -167,12 +182,14 @@ class _WindowButton extends StatefulWidget {
     required this.onTap,
     required this.hoverColor,
     this.isClose = false,
+    this.tooltip,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final Color hoverColor;
   final bool isClose;
+  final String? tooltip;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -184,7 +201,7 @@ class _WindowButtonState extends State<_WindowButton> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    return MouseRegion(
+    Widget button = MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -206,5 +223,14 @@ class _WindowButtonState extends State<_WindowButton> {
         ),
       ),
     );
+
+    if (widget.tooltip != null) {
+      button = Tooltip(
+        message: widget.tooltip!,
+        child: button,
+      );
+    }
+
+    return button;
   }
 }

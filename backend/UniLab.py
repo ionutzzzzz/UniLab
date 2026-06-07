@@ -65,7 +65,7 @@ BUILTINS = [
     'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
     'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'sum', 'prod', 'syms', 'factorial', 
     'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j',
-    'realmax', 'realmin'
+    'realmax', 'realmin', 'ode45', 'ode45_custom'
 ]
 workspace_vars = []
 _m_file_cache = []

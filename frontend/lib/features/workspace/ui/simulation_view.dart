@@ -29,7 +29,7 @@ class SimulationView extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Theme.of(context).primaryColor.withOpacity(0.1),
+          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
           child: Row(
             children: [
               Icon(
@@ -75,7 +75,7 @@ class SimulationView extends StatelessWidget {
                   width: 280,
                   decoration: BoxDecoration(
                     border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
-                    color: Theme.of(context).cardColor.withOpacity(0.5),
+                    color: Theme.of(context).cardColor.withValues(alpha: 0.5),
                   ),
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(vertical: 8),

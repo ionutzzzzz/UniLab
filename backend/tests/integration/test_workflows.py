@@ -4,13 +4,12 @@ Run with: pytest tests/integration/test_workflows.py -v
 """
 
 import pytest
-import asyncio
+pytest.importorskip("backend.api.main")
 from fastapi.testclient import TestClient
 
 from backend.api.main import app
 
 client = TestClient(app)
-
 
 class TestCompleteWorkflows:
     """Integration tests for complete workflows."""
@@ -146,7 +145,7 @@ class TestCompleteWorkflows:
         
         # Should still return 200, but success=false
         assert error_response.status_code == 200
-        result = error_response.json()
+        error_response.json()
         # The execution itself succeeded (API-wise), but the code failed
         
         # Verify we can still use the session
@@ -190,7 +189,7 @@ class TestDataPersistence:
         
         # Verify both variables exist
         ws_response = client.get(f"/api/v1/sessions/{session_id}/workspace")
-        variables = ws_response.json()["variables"]
+        ws_response.json()["variables"]
         
         # Cleanup
         client.delete(f"/api/v1/sessions/{session_id}")

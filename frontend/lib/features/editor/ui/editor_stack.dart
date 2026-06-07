@@ -5,16 +5,16 @@ import 'package:highlight/languages/matlab.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path_utils;
 import 'package:undo/undo.dart';
-import '../../../theme/ui_theme.dart';
-import '../../../widgets/ui_text.dart';
-import '../../../providers/settings_provider.dart';
-import '../../../providers/app_provider.dart';
-import '../../../models/models.dart';
-import '../../../utils/file_manager.dart';
-import 'editor_tab_bar.dart';
-import 'editor_breadcrumbs.dart';
-import 'editor_surface.dart';
-import 'find_replace_bar.dart';
+import 'package:unilab/theme/ui_theme.dart';
+import 'package:unilab/widgets/ui_text.dart';
+import 'package:unilab/providers/settings_provider.dart';
+import 'package:unilab/providers/app_provider.dart';
+import 'package:unilab/models/models.dart';
+import 'package:unilab/utils/file_manager.dart';
+import 'package:unilab/features/editor/ui/editor_tab_bar.dart';
+import 'package:unilab/features/editor/ui/editor_breadcrumbs.dart';
+import 'package:unilab/features/editor/ui/editor_surface.dart';
+import 'package:unilab/features/editor/ui/find_replace_bar.dart';
 
 // Specialized viewers
 import 'viewers/image_viewer.dart';
@@ -168,6 +168,8 @@ class _EditorStackState extends State<EditorStack> {
     _focusNode.requestFocus();
   }
 
+  Timer? _debounceTimer;
+
   void _onCodeChanged() {
     final appProvider = context.read<AppProvider>();
     final activeFile = appProvider.activeFile;
@@ -213,7 +215,11 @@ class _EditorStackState extends State<EditorStack> {
        }
     }
 
-    appProvider.updateFileContent(fileId, controller.text);
+    // Debounce the provider update to avoid full-app rebuilds on every keystroke
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      appProvider.updateFileContent(fileId, controller.text);
+    });
 
     final settings = context.read<SettingsProvider>().settings;
     if (settings.autoSave) {
@@ -227,7 +233,7 @@ class _EditorStackState extends State<EditorStack> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final activeFile = context.watch<AppProvider>().activeFile;
+    final activeFile = context.read<AppProvider>().activeFile;
     
     if (activeFile != null) {
       if (_lastFileId != null && _controllers.containsKey(_lastFileId) && _lastFileId != activeFile.id) {
@@ -256,6 +262,7 @@ class _EditorStackState extends State<EditorStack> {
   void dispose() {
     _autoSaveTimer?.cancel();
     _undoTimer?.cancel();
+    _debounceTimer?.cancel();
     _actionSubscription?.cancel();
     for (final controller in _controllers.values) {
       controller.dispose();
@@ -273,25 +280,25 @@ class _EditorStackState extends State<EditorStack> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final appProvider = context.watch<AppProvider>();
-    final settings = context.watch<SettingsProvider>().settings;
+    final activeFile = context.select<AppProvider, UniLabFile?>((p) => p.activeFile);
+    final openFiles = context.select<AppProvider, List<UniLabFile>>((p) => p.openFiles);
+    final isShowMinimap = context.select<SettingsProvider, bool>((s) => s.settings.showMinimap);
 
-    if (appProvider.activeFile == null) {
+    if (activeFile == null) {
       return _buildEmptyState(ui);
     }
 
-    final activeFile = appProvider.activeFile!;
     final controller = _getOrCreateController(activeFile);
     
-    final tabs = appProvider.openFiles.map((f) => EditorTabModel(
+    final tabs = openFiles.map((f) => EditorTabModel(
       id: f.id,
       title: f.name,
-      isActive: f.id == appProvider.activeFile?.id,
+      isActive: f.id == activeFile.id,
       isDirty: f.isModified,
     )).toList();
 
     Widget content;
-    bool showMinimap = false;
+    bool effectiveShowMinimap = false;
 
     if (UniLabFileManager.isImageFile(activeFile.path)) {
       content = ImageViewer(path: activeFile.path, name: activeFile.name);
@@ -306,10 +313,11 @@ class _EditorStackState extends State<EditorStack> {
         debugPrint('EditorStack: Unknown or binary file type for path: ${activeFile.path}. Falling back to text editor.');
       }
       content = EditorSurface(
+        key: ValueKey('surface_${activeFile.id}'),
         controller: controller,
         focusNode: _focusNode,
       );
-      showMinimap = settings.showMinimap;
+      effectiveShowMinimap = isShowMinimap;
     }
 
     return Container(
@@ -317,6 +325,8 @@ class _EditorStackState extends State<EditorStack> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final showTabs = constraints.maxHeight > 30;
+          final appProvider = context.read<AppProvider>();
+          
           return Column(
             children: [
               if (showTabs)
@@ -366,7 +376,7 @@ class _EditorStackState extends State<EditorStack> {
                         ],
                       ),
                     ),
-                    if (showMinimap)
+                    if (effectiveShowMinimap)
                       _EditorMinimap(controller: controller),
                   ],
                 ),
@@ -450,8 +460,9 @@ class _MinimapLine extends StatelessWidget {
 
     int leadingSpaces = 0;
     for (int i = 0; i < line.length; i++) {
-      if (line[i] == ' ') leadingSpaces++;
-      else if (line[i] == '\t') leadingSpaces += 4;
+      if (line[i] == ' ') {
+        leadingSpaces++;
+      } else if (line[i] == '\t') leadingSpaces += 4;
       else break;
     }
 

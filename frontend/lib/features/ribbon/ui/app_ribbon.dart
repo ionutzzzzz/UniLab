@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
+import 'dart:io';
+import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../core/commands/command.dart';
@@ -101,6 +103,92 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
           UiButton(label: 'Close', variant: UiButtonVariant.ghost, onPressed: () => Navigator.pop(context)),
         ],
       ),
+    );
+  }
+
+  void _showExamplesDialog(BuildContext context) {
+    final ui = UiTheme.of(context);
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = controller.text.toLowerCase();
+            final filteredSamples = appProvider.availableSamples.where((s) {
+              if (s is! File) return false;
+              return p.basename(s.path).toLowerCase().contains(query);
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: ui.colors.panel,
+              surfaceTintColor: Colors.transparent,
+              title: Row(
+                children: [
+                  Icon(LucideIcons.scrollText, color: ui.colors.accent, size: 20),
+                  const SizedBox(width: 12),
+                  const UiText(text: 'Example Scripts', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(LucideIcons.x, size: 16),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                height: 400,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: controller,
+                      onChanged: (_) => setDialogState(() {}),
+                      style: TextStyle(color: ui.colors.textPrimary, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Search examples...',
+                        hintStyle: TextStyle(color: ui.colors.textMuted),
+                        prefixIcon: Icon(LucideIcons.search, size: 16, color: ui.colors.textMuted),
+                        isDense: true,
+                        filled: true,
+                        fillColor: ui.colors.canvas,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: ui.colors.border),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: filteredSamples.isEmpty 
+                        ? Center(child: UiText(text: 'No matches found', color: ui.colors.textMuted))
+                        : ListView.builder(
+                            itemCount: filteredSamples.length,
+                            itemBuilder: (context, index) {
+                              final file = filteredSamples[index] as File;
+                              final name = p.basename(file.path);
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(LucideIcons.fileCode, size: 16, color: ui.colors.accent),
+                                title: UiText(text: name, variant: UiTextVariant.label),
+                                hoverColor: ui.colors.hover,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                onTap: () {
+                                  appProvider.openSample(file);
+                                  Navigator.pop(context);
+                                },
+                              );
+                            },
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -400,7 +488,11 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
           children: [
             RibbonButton(label: 'Get Started', icon: LucideIcons.rocket, isLarge: true),
             RibbonButton(label: 'User Guide', icon: LucideIcons.bookOpen, isLarge: true),
-            RibbonButton(label: 'Examples', icon: LucideIcons.scrollText),
+            RibbonButton(
+              label: 'Examples', 
+              icon: LucideIcons.scrollText,
+              onTap: () => _showExamplesDialog(context),
+            ),
           ],
         ),
         RibbonGroup(

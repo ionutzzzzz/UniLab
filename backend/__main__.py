@@ -1,8 +1,6 @@
 """UniLab main entry point."""
 import sys
-import os
 import pathlib
-import asyncio
 
 # Ensure project root is in sys.path
 current_dir = pathlib.Path(__file__).resolve().parent

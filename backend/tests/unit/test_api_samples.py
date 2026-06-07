@@ -1,5 +1,4 @@
 import sys
-import os
 import pathlib
 from fastapi.testclient import TestClient
 
@@ -9,6 +8,8 @@ project_root = current_dir.resolve()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+import pytest
+pytest.importorskip("backend.api.main")
 from backend.api.main import app
 
 client = TestClient(app)

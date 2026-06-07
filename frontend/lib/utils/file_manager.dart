@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as p;
+import '../bridge/unilab_bridge.dart';
 
 class UniLabFileManager {
   static final Set<String> _textExtensions = {
@@ -35,13 +36,19 @@ class UniLabFileManager {
     if (kIsWeb) return [];
 
     try {
-      final directory = io.Directory('sample'); 
-      if (await directory.exists()) {
-        return directory
+      final samplePath = await UniLabBridge.findSamplesPath();
+      final sampleDir = io.Directory(samplePath);
+
+      if (await sampleDir.exists()) {
+        final files = sampleDir
             .listSync()
             .whereType<io.File>()
             .where((f) => f.path.endsWith('.m'))
             .toList();
+        
+        // Sort numerically/alphabetically
+        files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+        return files;
       }
     } catch (e) {
       debugPrint('Error loading samples: $e');

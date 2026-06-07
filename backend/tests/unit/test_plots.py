@@ -1,7 +1,6 @@
 import asyncio
 import pathlib
 import sys
-import os
 import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
@@ -34,7 +33,7 @@ async def test_all_plots():
         ]
         
         for name, cmd in test_cases:
-            print(f"\n" + "="*50)
+            print("\n" + "="*50)
             print(f" TEST: {name}")
             print("="*50)
             res = await core.run_code(sid, cmd)

@@ -54,6 +54,69 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.0
   riverpod_generator: ^2.3.0
+  flutter_launcher_icons: ^0.13.1
+  msix: ^3.16.7
+
+flutter_launcher_icons:
+  android: false
+  ios: false
+  image_path: "assets/logo.png"
+  windows:
+    generate: true
+    image_path: "assets/logo.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/logo.png"
+  linux:
+    generate: true
+    image_path: "assets/logo.png"
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png
+    - assets/samples/
+    - assets/backend/backend/
+    - assets/backend/backend/core/
+    - assets/backend/backend/core/engines/
+    - assets/backend/backend/core/simulation/
+    - assets/backend/backend/api/
+    - assets/backend/backend/utils/
+    - assets/backend/backend/stdlib/
+    - assets/backend/backend/stdlib/libraries/
+    - assets/backend/backend/stdlib/libraries/astronomy/
+    - assets/backend/backend/stdlib/libraries/chemistry/
+    - assets/backend/backend/stdlib/libraries/codegen/
+    - assets/backend/backend/stdlib/libraries/containers/
+    - assets/backend/backend/stdlib/libraries/control/
+    - assets/backend/backend/stdlib/libraries/electrical/
+    - assets/backend/backend/stdlib/libraries/files/
+    - assets/backend/backend/stdlib/libraries/finance/
+    - assets/backend/backend/stdlib/libraries/fluid_dynamics/
+    - assets/backend/backend/stdlib/libraries/geometry/
+    - assets/backend/backend/stdlib/libraries/graph_theory/
+    - assets/backend/backend/stdlib/libraries/image/
+    - assets/backend/backend/stdlib/libraries/linear_algebra/
+    - assets/backend/backend/stdlib/libraries/materials_science/
+    - assets/backend/backend/stdlib/libraries/math/
+    - assets/backend/backend/stdlib/libraries/meta/
+    - assets/backend/backend/stdlib/libraries/ml/
+    - assets/backend/backend/stdlib/libraries/numerical_methods/
+    - assets/backend/backend/stdlib/libraries/parallel/
+    - assets/backend/backend/stdlib/libraries/phased/
+    - assets/backend/backend/stdlib/libraries/physics/
+    - assets/backend/backend/stdlib/libraries/quantum_mechanics/
+    - assets/backend/backend/stdlib/libraries/random_generators/
+    - assets/backend/backend/stdlib/libraries/robotics/
+    - assets/backend/backend/stdlib/libraries/signal/
+    - assets/backend/backend/stdlib/libraries/special_functions/
+    - assets/backend/backend/stdlib/libraries/stats/
+    - assets/backend/backend/stdlib/libraries/string_utils/
+    - assets/backend/backend/stdlib/libraries/system/
+    - assets/backend/backend/stdlib/libraries/thermodynamics/
+    - assets/backend/backend/stdlib/libraries/utils/
+    - assets/backend/backend/stdlib/libraries/vision/
+    - assets/backend/backend/stdlib/libraries/viz/
+    - assets/backend/backend/stdlib/packages/
+    - assets/backend/backend/packages/

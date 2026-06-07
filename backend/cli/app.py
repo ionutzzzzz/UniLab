@@ -23,6 +23,10 @@ import re
 import faulthandler
 faulthandler.enable()
 import time
+import sys
+import re
+import time
+import pathlib
 from typing import Optional
 
 def highlight_syntax(code: str) -> str:
@@ -55,22 +59,6 @@ def highlight_syntax(code: str) -> str:
 
     return code + comment
 
-# Vocabulary for Tab Autocomplete
-KEYWORDS = ['function', 'end', 'if', 'elseif', 'else', 'for', 'while', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'clear', 'return', 'break', 'continue', 'export', 'run', 'exit', 'quit', 'list_libraries', 'whos', 'clc']
-BUILTINS = [
-    'disp', 'sin', 'cos', 'tan', 'tanh', 'relu', 'exp', 'log', 'sqrt', 'pi', 'eye', 'zeros', 'ones', 'cell', 
-    'median', 'quantile', 'var', 'std', 'num2str', 'mat2str', 'sprintf', 
-    'plot', 'scatter_plot', 'hist_plot', 'plot_matrix', 'title', 'xlabel', 'ylabel', 
-    'grid', 'hold', 'clf', 'length', 'size', 'reshape', 'numel', 'unique', 
-    'inv', 'det', 'eig', 'svd', 'linspace', 'logspace', 'meshgrid', 'randperm', 
-    'abs', 'round', 'floor', 'ceil', 'fix', 'rem', 'mod', 'sum', 'prod', 'syms', 'factorial', 
-    'randn', 'rand', 'diag', 'plot_nn', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j',
-    'realmax', 'realmin', 'all', 'any', 'kron'
-]
-workspace_vars = []
-_m_file_cache = []
-_last_cache_update = 0
-
 def print_error(msg: str):
     """Prints a message in pastel red to stdout."""
     print(f"\x1b[38;2;255;105;97mError: {msg}\x1b[0m", file=sys.stderr)
@@ -78,64 +66,6 @@ def print_error(msg: str):
 def print_warning(msg: str):
     """Prints a message in pastel yellow to stdout."""
     print(f"\x1b[38;2;253;253;150mWarning: {msg}\x1b[0m")
-
-def update_m_file_cache():
-    global _m_file_cache, _last_cache_update
-    now = time.time()
-    if now - _last_cache_update < 5: # Cache for 5 seconds
-        return
-    
-    m_files = set()
-    try:
-        # Scan current directory
-        for p in pathlib.Path('.').glob('*.m'):
-            m_files.add(p.stem)
-        
-        # Scan libraries
-        current_file_dir = pathlib.Path(__file__).resolve().parent
-        # backend/cli/app.py -> backend/stdlib/libraries
-        libs_dir = current_file_dir.parent / "stdlib" / "libraries"
-        if libs_dir.exists():
-            for p in libs_dir.rglob('*.m'):
-                m_files.add(p.stem)
-    except OSError as e:
-        print_warning(f"Could not update function cache: {e}")
-    except Exception as e:
-        print_warning(f"Unexpected error updating cache: {e}")
-    
-    _m_file_cache = list(m_files)
-    _last_cache_update = now
-
-def unilab_completer(text, state):
-    line = readline.get_line_buffer() if readline else ""
-    stripped_line = line.lstrip()
-    
-    # Context-aware triggers for path completion
-    path_commands = ('run ', 'cd ', 'ls ', 'dir ', 'mkdir ', 'rm ', 'cp ', 'mv ', '!', 'addpath(', 'load(', 'save(', 'export ')
-    is_path_context = any(stripped_line.startswith(cmd) for cmd in path_commands) or '/' in text or '\\' in text or text.startswith('.')
-    
-    if is_path_context:
-        import glob
-        # Handle path completion
-        search_text = text
-        if (stripped_line.startswith('run ') or stripped_line.startswith('!')) and not text:
-            # If nothing typed yet after 'run ', suggest all .m files
-            options = [f for f in glob.glob('*.m')]
-        else:
-            options = glob.glob(text + '*')
-            
-        # Add trailing slash to directories for easier navigation
-        options = [f + '/' if pathlib.Path(f).is_dir() else f for f in options]
-    else:
-        # Symbol completion
-        update_m_file_cache()
-        all_symbols = KEYWORDS + BUILTINS + workspace_vars + _m_file_cache
-        options = [w for w in all_symbols if w.startswith(text)]
-    
-    options = sorted(list(set(options))) # Unique and sorted
-    if state < len(options):
-        return options[state]
-    return None
 
 # Setup paths to ensure we can import core modules
 current_dir = pathlib.Path(__file__).resolve().parent
@@ -221,32 +151,13 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         await core.stop()
 
 async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
-    global workspace_vars
     workspace_root = pathlib.Path("./console_workspaces").resolve()
     try:
         workspace_root.mkdir(exist_ok=True)
     except OSError as e:
         print_error(f"Could not create console workspace: {e}")
         return
-    
-    history_file = workspace_root / ".unilab_history"
-    if not command and readline:
-        try:
-            if history_file.exists():
-                readline.read_history_file(str(history_file))
-            readline.set_history_length(1000)
-            readline.set_completer(unilab_completer)
-            # Custom delimiters: exclude / and \ to allow full path completion
-            readline.set_completer_delims(' \t\n`~!@#$%^&*()-=+[]{}|;:\'",<>?')
-            if 'libedit' in readline.__doc__:
-                readline.parse_and_bind("bind ^I rl_complete")
-            else:
-                readline.parse_and_bind("tab: complete")
-        except OSError as e:
-            print_warning(f"Could not load history file: {e}")
-        except Exception as e:
-            print_warning(f"Unexpected error initializing readline: {e}")
-
+        
     cfg = BackendConfig(
         workspace_root=workspace_root,
         use_docker=False
@@ -261,11 +172,46 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
     
     try:
         session = await core.create_session(username="console_user", engine=engine_name)
+    except Exception as e:
+        print_error(f"Failed to create session: {e}")
+        await core.stop()
+        return
+
+    history_file = workspace_root / ".unilab_history"
+    if not command and readline:
+        def engine_completer(text, state):
+            engine = core.engines.get(session.id)
+            if not engine or not hasattr(engine, 'complete'):
+                return None
+            line = readline.get_line_buffer() if readline else ""
+            options = engine.complete(text, line)
+            options = sorted(list(set(options)))
+            if state < len(options):
+                return options[state]
+            return None
+
+        try:
+            if history_file.exists():
+                readline.read_history_file(str(history_file))
+            readline.set_history_length(1000)
+            readline.set_completer(engine_completer)
+            # Custom delimiters: exclude / and \ to allow full path completion
+            readline.set_completer_delims(' \t\n`~!@#$%^&*()-=+[]{}|;:\'",<>?')
+            if 'libedit' in readline.__doc__:
+                readline.parse_and_bind("bind ^I rl_complete")
+            else:
+                readline.parse_and_bind("tab: complete")
+        except OSError as e:
+            print_warning(f"Could not load history file: {e}")
+        except Exception as e:
+            print_warning(f"Unexpected error initializing readline: {e}")
+    
+    try:
         
         is_tty = sys.stdin.isatty() and not command
         if is_tty:
             print("\n" + "="*60)
-            print(f" \U0001F9EA UniLab Interactive Console")
+            print(" \U0001F9EA UniLab Interactive Console")
             print(" Type 'exit' or 'quit' to close.")
             print(" Type 'list_libraries();' to explore toolboxes.")
             print("="*60 + "\n")

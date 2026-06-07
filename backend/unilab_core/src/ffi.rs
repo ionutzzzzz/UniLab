@@ -55,8 +55,12 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
         let path_str = unsafe { CStr::from_ptr(backend_path) }
             .to_string_lossy()
             .to_string();
+        
+        // Convert to absolute path
+        let abs_backend_parent = std::path::Path::new(&path_str).canonicalize().unwrap_or_else(|_| std::path::PathBuf::from(&path_str));
+        let abs_path_str = abs_backend_parent.to_string_lossy().to_string();
 
-        BACKEND_PATH.set(path_str.clone()).ok();
+        BACKEND_PATH.set(abs_path_str.clone()).ok();
         let _ = get_sessions_map();
 
         unsafe {
@@ -72,13 +76,21 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
             let sys = py.import("sys")?;
             let pypath = sys.getattr("path")?;
 
-            pypath.call_method1("insert", (0, path_str.as_str()))?;
-
-            let parent = std::path::Path::new(&path_str).parent();
-            if let Some(p) = parent {
-                if let Some(p_str) = std::ffi::OsStr::new(p.as_os_str()).to_str() {
-                    let _ = pypath.call_method1("insert", (0, p_str));
-                }
+            // 1. Add the directory containing 'backend/'
+            pypath.call_method1("insert", (0, &abs_path_str))?;
+            
+            // 2. Add 'backend/' itself so 'import core' works
+            let backend_dir = abs_backend_parent.join("backend");
+            if let Some(b_str) = backend_dir.to_str() {
+                let _ = pypath.call_method1("insert", (0, b_str));
+            }
+            
+            // Debug: print sys.path
+            if let Ok(path_list) = pypath.extract::<Vec<String>>() {
+                println!("[UniLab-Rust] Python sys.path: {:?}", path_list);
+            }
+            if let Ok(cwd) = std::env::current_dir() {
+                println!("[UniLab-Rust] Current directory: {:?}", cwd);
             }
 
             PyResult::Ok(())
@@ -118,7 +130,8 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
             .to_string();
 
         let session_id = uuid::Uuid::new_v4().to_string();
-        let workspace = format!("/tmp/unilab_{}", session_id);
+        let workspace = std::env::temp_dir().join(format!("unilab_{}", session_id));
+        let workspace_str = workspace.to_string_lossy().to_string();
         let _ = std::fs::create_dir_all(&workspace);
 
         Python::with_gil(|py| -> Result<String, String> {
@@ -126,7 +139,7 @@ pub extern "C" fn unilab_create_session(username: *const c_char) -> *mut c_char 
             let started_at: f64 = time_mod.call_method0("time").map_err(|e| e.to_string())?.extract().map_err(|e| e.to_string())?;
 
             let pathlib = py.import("pathlib").map_err(|e| e.to_string())?;
-            let workspace_py = pathlib.getattr("Path").map_err(|e| e.to_string())?.call1((&workspace,)).map_err(|e| e.to_string())?;
+            let workspace_py = pathlib.getattr("Path").map_err(|e| e.to_string())?.call1((&workspace_str,)).map_err(|e| e.to_string())?;
 
             let models_mod = import_module(py, "backend.core.models").map_err(|e| e.to_string())?;
             let session_info_cls = models_mod.getattr("SessionInfo").map_err(|e| e.to_string())?;
@@ -444,7 +457,8 @@ pub extern "C" fn unilab_list_files(session_id: *const c_char) -> *mut c_char {
             .to_string_lossy()
             .to_string();
 
-        let workspace_path = format!("/tmp/unilab_{}", session_id_str);
+        let workspace_path = std::env::temp_dir().join(format!("unilab_{}", session_id_str));
+        let workspace_path_str = workspace_path.to_string_lossy().to_string();
         let mut files = Vec::new();
 
         if let Ok(entries) = std::fs::read_dir(&workspace_path) {
@@ -474,7 +488,7 @@ pub extern "C" fn unilab_list_files(session_id: *const c_char) -> *mut c_char {
         let result = json!({
             "files": files,
             "total": files.len(),
-            "path": workspace_path
+            "path": workspace_path_str
         });
         Some(result.to_string())
     });
@@ -509,8 +523,8 @@ pub extern "C" fn unilab_create_file(
             .to_string_lossy()
             .to_string();
 
-        let workspace_path = format!("/tmp/unilab_{}", session_id_str);
-        let file_path = std::path::Path::new(&workspace_path).join(&filename_str);
+        let workspace_path = std::env::temp_dir().join(format!("unilab_{}", session_id_str));
+        let file_path = workspace_path.join(&filename_str);
 
         std::fs::write(&file_path, &content_str).ok()?;
 

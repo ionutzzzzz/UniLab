@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../theme/ui_theme.dart';
 
@@ -145,7 +144,7 @@ class _LinePainter extends CustomPainter {
 
       // background highlight if active
       if (activeLine == i) {
-        paint.color = activeColor.withOpacity(0.08);
+        paint.color = activeColor.withValues(alpha: 0.08);
         final rect = Rect.fromLTWH(0, y, gutterWidth, lineHeight);
         canvas.drawRect(rect, paint);
       }

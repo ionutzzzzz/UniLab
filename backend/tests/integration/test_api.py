@@ -1,8 +1,6 @@
 import unittest
-from fastapi.testclient import TestClient
 import pathlib
 import shutil
-import os
 
 # We might need to mock dependencies if we can't run the full core
 try:

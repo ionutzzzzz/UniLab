@@ -14,7 +14,6 @@ import sys
 import threading
 import asyncio
 import pathlib
-import time
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, filedialog
 
@@ -66,7 +65,7 @@ class UniLabCLIApp(tk.Tk):
         self.geometry("900x600")
         # dark terminal style
         self.configure(bg="#1e1e1e")
-        style = ttk.Style(self)
+        ttk.Style(self)
         # default ttk style may not change much; we'll style manual widgets
 
         # Async runner & core backend

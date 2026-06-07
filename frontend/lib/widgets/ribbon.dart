@@ -409,10 +409,9 @@ class _RibbonButton extends StatefulWidget {
     required this.label,
     required this.onPressed,
     required this.ui,
-    this.iconColor,
     this.isLarge = false,
     this.isLoading = false,
-  });
+  }) : iconColor = null;
 
   @override
   State<_RibbonButton> createState() => _RibbonButtonState();

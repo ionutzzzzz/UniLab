@@ -284,8 +284,8 @@ class _FileBackstageState extends State<FileBackstage> {
         const SizedBox(height: 16),
         _buildRecentItem(
           ui, 
-          p.basename(appProvider.projectRoot), 
-          appProvider.projectRoot,
+          appProvider.projectRoot != null ? p.basename(appProvider.projectRoot!) : 'None', 
+          appProvider.projectRoot ?? 'No project opened',
           icon: LucideIcons.folder,
         ),
       ],

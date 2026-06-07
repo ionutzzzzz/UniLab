@@ -25,16 +25,26 @@ class EditorSurface extends ConsumerStatefulWidget {
   ConsumerState<EditorSurface> createState() => _EditorSurfaceState();
 }
 
-class _EditorSurfaceState extends ConsumerState<EditorSurface> {
+class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKeepAliveClientMixin {
+  late ScrollController _verticalScrollController;
+  late ScrollController _horizontalScrollController;
+
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
+    _verticalScrollController = ScrollController();
+    _horizontalScrollController = ScrollController();
     widget.controller.addListener(_updateCursorPosition);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_updateCursorPosition);
+    _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -70,6 +80,7 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final ui = UiTheme.of(context);
     final settings = p.Provider.of<SettingsProvider>(context).settings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -128,7 +139,7 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> {
       'operator': TextStyle(color: editorFg.withValues(alpha: 0.7)),
     };
 
-    final appProvider = p.Provider.of<AppProvider>(context);
+    final isExecuting = context.select<AppProvider, bool>((p) => p.isExecuting);
 
     return Listener(
       onPointerSignal: (pointerSignal) {
@@ -138,7 +149,7 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> {
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
           if (isCtrlPressed) {
-            final provider = p.Provider.of<SettingsProvider>(context, listen: false);
+            final provider = context.read<SettingsProvider>();
             final currentSize = provider.settings.fontSize;
             // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
             final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
@@ -176,8 +187,8 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> {
           ),
           ContextMenuButtonConfig(
             'Run Selection',
-            icon: Icon(Icons.play_arrow, size: 16, color: appProvider.isExecuting ? ui.colors.textDisabled : ui.colors.accent),
-            onPressed: appProvider.isExecuting ? null : () {},
+            icon: Icon(Icons.play_arrow, size: 16, color: isExecuting ? ui.colors.textDisabled : ui.colors.accent),
+            onPressed: isExecuting ? null : () {},
           ),
           ContextMenuButtonConfig(
             'Peek Definition',
@@ -221,12 +232,18 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> {
 
               if (settings.wordWrap) {
                 return SingleChildScrollView(
+                  key: const PageStorageKey('editor_v_scroll'),
+                  controller: _verticalScrollController,
                   child: codeField,
                 );
               }
 
               return SingleChildScrollView(
+                key: const PageStorageKey('editor_v_scroll_no_wrap'),
+                controller: _verticalScrollController,
                 child: SingleChildScrollView(
+                  key: const PageStorageKey('editor_h_scroll'),
+                  controller: _horizontalScrollController,
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(

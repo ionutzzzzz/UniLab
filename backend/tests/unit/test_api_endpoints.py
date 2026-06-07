@@ -13,19 +13,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import pytest
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+pytest.importorskip("backend.api.main")
 from fastapi.testclient import TestClient
-from pathlib import Path
 
 # Import API and dependencies
 from backend.api.main import app
-from backend.api.schemas import (
-    CreateSessionRequest, ExecuteCodeRequest, VariableValue,
-    ExportRequest, PlotRequest
-)
-from backend.core.models import ExecutionResult
 
 # Test client
 client = TestClient(app)

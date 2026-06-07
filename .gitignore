@@ -6,6 +6,7 @@ __pycache__
 .vscode
 test_runs
 test_workspace
+tmp_run
 console_workspaces
 unilab_workspaces
 graph*.png

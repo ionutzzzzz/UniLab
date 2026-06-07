@@ -1,0 +1,16 @@
+display_name: UniLab
+package_name: unilab
+installed_size: 100000
+maintainer:
+  name: UniLab Team
+  email: domnii@yahoo.com
+priority: optional
+section: utils
+description: UniLab Simulation Environment
+icon: assets/logo.png
+categories:
+  - Development
+  - Education
+  - Science
+  - Math
+  - Engineering

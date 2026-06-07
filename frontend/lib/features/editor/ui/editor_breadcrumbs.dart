@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
-import '../../../widgets/ui_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class EditorBreadcrumbs extends StatelessWidget {

@@ -1,0 +1,17 @@
+output: dist/
+publish:
+  # You can add publishing configurations here
+  
+targets:
+  - name: windows
+    package:
+      - name: exe
+      - name: msix
+  - name: linux
+    package:
+      - name: appimage
+      - name: deb
+  - name: macos
+    package:
+      - name: dmg
+      - name: pkg

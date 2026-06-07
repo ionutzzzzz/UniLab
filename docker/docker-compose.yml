@@ -1,0 +1,24 @@
+services:
+  unilab:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gui
+    ports:
+      - "8000:8000"
+    volumes:
+      - unilab-workspaces:/app/workspaces
+    environment:
+      - UNILAB_WORKSPACE_ROOT=/app/workspaces
+      - LOG_LEVEL=INFO
+    restart: always
+
+  unilab-core:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.core
+    volumes:
+      - ./samples:/samples
+    restart: "no"
+
+volumes:
+  unilab-workspaces:

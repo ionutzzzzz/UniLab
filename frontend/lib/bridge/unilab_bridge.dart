@@ -131,35 +131,26 @@ class UniLabBridge {
 
 
   static DynamicLibrary _loadLibraryHandle(String backendPath) {
-
     String libName = Platform.isLinux ? 'libunilab_core.so' : (Platform.isMacOS ? 'libunilab_core.dylib' : 'unilab_core.dll');
-
-    final locations = [
-
-      p.join(backendPath, 'target', 'release', libName),
-
-      p.join(backendPath, 'target', 'debug', libName),
-
-      libName,
-
-      p.join(Directory.current.path, libName),
-
-    ];
-
     
-
+    final locations = [
+      // Dev paths
+      p.join(backendPath, 'target', 'release', libName),
+      p.join(backendPath, 'target', 'debug', libName),
+      // Packaged paths
+      p.join(Directory(Platform.resolvedExecutable).parent.path, 'lib', libName), // Linux/Windows lib dir
+      p.join(Directory(Platform.resolvedExecutable).parent.path, '..', 'Frameworks', libName), // macOS Frameworks dir
+      p.join(Directory(Platform.resolvedExecutable).parent.path, libName), // Same dir as exe
+      libName,
+    ];
+    
     for (final loc in locations) {
-
       try {
-
+        debugPrint('[UniLabBridge] Attempting to load library from: $loc');
         return DynamicLibrary.open(loc);
-
       } catch (_) {}
-
     }
-
-    throw Exception('Could not load library $libName');
-
+    throw Exception('Could not load library $libName. Searched in: $locations');
   }
 
 
@@ -521,43 +512,47 @@ class UniLabBridge {
 
 
   // Find the backend path
-
   static Future<String> findBackendPath() async {
-
-    try {
-
-      final exe = File(Platform.resolvedExecutable);
-
-      final backendPath = p.join(exe.parent.path, '..', '..', '..', 'backend');
-
-      if (await Directory(backendPath).exists()) return backendPath;
-
-    } catch (_) {}
-
+    final exePath = File(Platform.resolvedExecutable).resolveSymbolicLinksSync();
+    final exeDir = Directory(exePath).parent.path;
     
-
-    final envPath = Platform.environment['UNILAB_BACKEND_PATH'];
-
-    if (envPath != null && await Directory(envPath).exists()) return envPath;
-
-    
-
-    final commonPaths = [
-
-      '/home/john/Documents/GitHub/UniLab/backend', 
-
-      p.join(Directory.current.path, 'backend')
-
+    final locations = [
+      // Packaged locations: we want the directory CONTAINING the 'backend' folder
+      p.join(exeDir, 'data', 'flutter_assets', 'assets', 'backend'), // Linux/Windows
+      p.join(exeDir, '..', 'Resources', 'flutter_assets', 'assets', 'backend'), // macOS
+      // Dev locations: Project root (where backend/ is)
+      Directory.current.path,
     ];
 
-    for (final path in commonPaths) {
-
-      if (await Directory(path).exists()) return path;
-
+    final envPath = Platform.environment['UNILAB_BACKEND_PATH'];
+    if (envPath != null) {
+      locations.insert(0, envPath);
     }
 
-    throw StateError('Cannot find backend directory.');
+    for (final path in locations) {
+      final backendDir = p.join(path, 'backend');
+      if (await Directory(backendDir).exists()) {
+        debugPrint('[UniLabBridge] Found backend parent at: $path');
+        return path;
+      }
+    }
+    
+    throw StateError('Cannot find backend directory. Searched in: $locations');
+  }
 
+  static Future<String> findSamplesPath() async {
+    final exeDir = Directory(Platform.resolvedExecutable).parent.path;
+    final locations = [
+      p.join(exeDir, 'data', 'flutter_assets', 'assets', 'samples'),
+      p.join(exeDir, '..', 'Resources', 'flutter_assets', 'assets', 'samples'),
+      p.join(Directory.current.path, 'sample'),
+      p.join(Directory.current.path, 'assets', 'samples'),
+    ];
+
+    for (final path in locations) {
+      if (await Directory(path).exists()) return path;
+    }
+    return p.join(Directory.current.path, 'sample'); // Fallback
   }
 
 

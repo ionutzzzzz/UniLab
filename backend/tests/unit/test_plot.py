@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath('.'))
-from backend.core.runtime import plot, title, xlabel, ylabel
+from backend.core.runtime import plot
 import numpy as np
 
 x = np.linspace(0, 10, 100)

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -8,10 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:watcher/watcher.dart';
 import 'package:highlight/highlight.dart' as hl;
-import 'package:highlight/languages/matlab.dart';
 import 'package:uuid/uuid.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
 import '../models/models.dart';
@@ -29,13 +26,14 @@ class AppProvider with ChangeNotifier {
   int _activeFileIndex = -1;
   List<dynamic> _availableSamples = [];
   List<dynamic> _projectFiles = [];
-  late String _projectRoot;
+  String? _projectRoot;
+  bool _isWelcomeMode = true;
 
   final List<ConsoleMessage> _consoleMessages = [];
   final List<String> _commandHistory = [];
   Map<String, dynamic> _workspaceVariables = {};
   final List<PlotData> _generatedPlots = [];
-  
+
   SettingsProvider? _settingsProvider;
 
   // Simulation State
@@ -50,6 +48,7 @@ class AppProvider with ChangeNotifier {
   bool _isExecuting = false;
   final Set<String> _savingFileIds = {};
   final List<String> _recentFiles = [];
+  final List<String> _recentProjects = [];
   Map<String, dynamic> _serverInfo = {};
   String _selectedConsoleTab = 'output';
   String _selectedWorkspaceSegment = 'Variables';
@@ -87,7 +86,9 @@ class AppProvider with ChangeNotifier {
   List<dynamic> get availableSamples => _availableSamples;
   List<dynamic> get projectFiles => _projectFiles;
   List<String> get recentFiles => List.unmodifiable(_recentFiles);
-  String get projectRoot => _projectRoot;
+  List<String> get recentProjects => List.unmodifiable(_recentProjects);
+  String? get projectRoot => _projectRoot;
+  bool get isWelcomeMode => _isWelcomeMode;
   BackendStatus get backendStatus => _backendStatus;
   Map<String, dynamic> get serverInfo => _serverInfo;
   String get selectedConsoleTab => _selectedConsoleTab;
@@ -104,11 +105,24 @@ class AppProvider with ChangeNotifier {
   }
 
   AppProvider({this.onVariablesUpdated, this.onPlotsUpdated}) {
-    _projectRoot = _discoverProjectRoot();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await _loadRecentFiles();
+    await _loadRecentProjects();
+    
+    // Check if we should auto-open last project
+    if (_recentProjects.isNotEmpty && !kIsWeb) {
+      final lastProject = _recentProjects.first;
+      if (await io.Directory(lastProject).exists()) {
+        setProjectRoot(lastProject);
+      }
+    } else if (!kIsWeb) {
+      setProjectRoot(await _discoverProjectRoot());
+    }
+    
     _loadAvailableSamples();
-    _loadRecentFiles();
-    refreshProjectFiles();
-    _initWatcher();
     _initBridge();
     _initWindowsListener();
 
@@ -137,32 +151,48 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _loadRecentProjects() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('recentProjects') ?? [];
+    _recentProjects.clear();
+    _recentProjects.addAll(list);
+    notifyListeners();
+  }
+
+  Future<void> _addToRecentProjects(String path) async {
+    if (path.isEmpty || kIsWeb) return;
+    _recentProjects.remove(path);
+    _recentProjects.insert(0, path);
+    if (_recentProjects.length > 10) _recentProjects.removeLast();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('recentProjects', _recentProjects);
+    notifyListeners();
+  }
+
   Future<void> _addToRecentFiles(String path) async {
-    if (path.isEmpty || path.startsWith('unilab://') || path.startsWith('web/')) return;
+    if (path.isEmpty || path.startsWith('unilab://') || path.startsWith('web/'))
+      return;
     _recentFiles.remove(path);
     _recentFiles.insert(0, path);
     if (_recentFiles.length > 20) _recentFiles.removeLast();
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('recentFiles', _recentFiles);
     notifyListeners();
   }
 
-  String _discoverProjectRoot() {
+  Future<String> _discoverProjectRoot() async {
     if (kIsWeb) return '/web-virtual-root';
     try {
-      io.Directory current = io.Directory.current;
-      for (int i = 0; i < 3; i++) {
-        final samplePath = p.join(current.path, 'sample');
-        if (io.Directory(samplePath).existsSync()) return samplePath;
-        final parentSamplePath = p.join(current.parent.path, 'sample');
-        if (io.Directory(parentSamplePath).existsSync())
-          return parentSamplePath;
-        current = current.parent;
-      }
-      return p.join(io.Directory.current.path, 'sample');
+      final backendParent = await UniLabBridge.findBackendPath();
+      final samples = p.join(backendParent, 'samples');
+      if (await io.Directory(samples).exists()) return samples;
+      
+      // Fallback to what findSamplesPath returns
+      return await UniLabBridge.findSamplesPath();
     } catch (e) {
-      return 'sample';
+       return await UniLabBridge.findSamplesPath();
     }
   }
 
@@ -181,8 +211,8 @@ class AppProvider with ChangeNotifier {
         UniLabBridge.resetInstance();
       }
       final backendPath = await UniLabBridge.findBackendPath();
-      _addConsoleMessage('Connecting to backend at $backendPath...', ConsoleMessageType.output);
-      
+      // _addConsoleMessage('Connecting to backend at $backendPath...', ConsoleMessageType.output);
+
       await UniLabBridge.instance.initialize(backendPath);
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
@@ -199,30 +229,13 @@ class AppProvider with ChangeNotifier {
       await fetchWorkspaceVariables();
     } catch (e) {
       _backendStatus = BackendStatus.error;
-      _addConsoleMessage('Backend initialization error: $e', ConsoleMessageType.error);
+      _addConsoleMessage(
+        'Backend initialization error: $e',
+        ConsoleMessageType.error,
+      );
       debugPrint('[AppProvider] Bridge initialization error: $e');
     }
     notifyListeners();
-  }
-
-  Future<void> _preWarmWindows() async {
-    await Future.delayed(const Duration(seconds: 1));
-
-    try {
-      final plotsWin = await dmw.WindowController.create(
-        dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots'})),
-      );
-      _plotsWindowId = plotsWin.windowId.toString();
-      await plotsWin.hide();
-
-      final simWin = await dmw.WindowController.create(
-        dmw.WindowConfiguration(arguments: jsonEncode({'type': 'simulation'})),
-      );
-      _simulationWindowId = simWin.windowId.toString();
-      await simWin.hide();
-    } catch (e) {
-      debugPrint('Error pre-warming windows: $e');
-    }
   }
 
   void _handleSimEvent(Map<String, dynamic> event) {
@@ -315,6 +328,9 @@ class AppProvider with ChangeNotifier {
   }
 
   void _updateVariablesFromMap(Map<String, dynamic> variables) {
+    // Check if variables actually changed to avoid flickering/excessive rebuilds
+    if (mapEquals(_workspaceVariables, variables)) return;
+    
     _workspaceVariables = variables;
     final vars = _workspaceVariables.entries.map((e) {
       final info = e.value as Map<String, dynamic>;
@@ -349,8 +365,9 @@ class AppProvider with ChangeNotifier {
     final lines = text.split('\n');
     for (var line in lines) {
       String trimmedLine = line.trim();
-      if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last)
+      if (trimmedLine.isEmpty && lines.length > 1 && line == lines.last) {
         continue;
+      }
       if (trimmedLine.contains('::CLEAR_TERMINAL::')) {
         clearConsole();
         continue;
@@ -379,7 +396,14 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> _handleOpenFileCommand(String filename) async {
-    final fullPath = p.join(_projectRoot, filename);
+    String fullPath;
+    if (filename.startsWith('sample/')) {
+      final samplesPath = await UniLabBridge.findSamplesPath();
+      fullPath = p.join(p.dirname(samplesPath), filename);
+    } else {
+      if (_projectRoot == null) return;
+      fullPath = p.join(_projectRoot!, filename);
+    }
     final file = io.File(fullPath);
     if (await file.exists()) await openFile(file);
   }
@@ -390,10 +414,10 @@ class AppProvider with ChangeNotifier {
   }
 
   void _initWatcher() {
-    if (kIsWeb) return;
+    if (kIsWeb || _projectRoot == null) return;
     _watcherSubscription?.cancel();
     try {
-      final watcher = DirectoryWatcher(_projectRoot);
+      final watcher = DirectoryWatcher(_projectRoot!);
       _watcherSubscription = watcher.events.listen(
         (event) => refreshProjectFiles(),
       );
@@ -447,11 +471,11 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> refreshProjectFiles() async {
-    if (kIsWeb) return;
+    if (kIsWeb || _projectRoot == null) return;
     try {
-      final dir = io.Directory(_projectRoot);
+      final dir = io.Directory(_projectRoot!);
       if (await dir.exists()) {
-        _projectFiles = await UniLabFileManager.listDirectory(_projectRoot);
+        _projectFiles = await UniLabFileManager.listDirectory(_projectRoot!);
         _projectFiles.sort((a, b) {
           if (a is io.Directory && b is! io.Directory) return -1;
           if (a is! io.Directory && b is io.Directory) return 1;
@@ -468,8 +492,21 @@ class AppProvider with ChangeNotifier {
 
   void setProjectRoot(String path) {
     _projectRoot = path;
+    _isWelcomeMode = false;
+    _addToRecentProjects(path);
     _initWatcher();
     refreshProjectFiles();
+    notifyListeners();
+  }
+
+  void resetToWelcome() {
+    _isWelcomeMode = true;
+    _projectRoot = null;
+    _openFiles.clear();
+    _activeFileIndex = -1;
+    _watcherSubscription?.cancel();
+    _projectFiles = [];
+    notifyListeners();
   }
 
   void addNewFile() {
@@ -505,8 +542,9 @@ class AppProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (_projectRoot == null) return;
     try {
-      final path = p.join(_projectRoot, fileName);
+      final path = p.join(_projectRoot!, fileName);
       final file = io.File(path);
       await file.writeAsString(content);
       await UniLabBridge.instance.createFile(fileName, content);
@@ -537,9 +575,9 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void loadSample(String name, String content) {
+  void loadSample(String name, String content, {String? path}) {
     final existingIndex = _openFiles.indexWhere(
-      (f) => f.name == name && f.path == 'sample/$name',
+      (f) => f.name == name && (path == null || f.path == path),
     );
     if (existingIndex != -1) {
       _activeFileIndex = existingIndex;
@@ -548,7 +586,7 @@ class AppProvider with ChangeNotifier {
         UniLabFile(
           id: const Uuid().v4(),
           name: name,
-          path: 'sample/$name',
+          path: path ?? 'sample/$name',
           content: content,
         ),
       );
@@ -559,7 +597,12 @@ class AppProvider with ChangeNotifier {
 
   Future<void> openSample(dynamic file) async {
     final content = await UniLabFileManager.readFile(file as io.File);
-    loadSample(p.basename(file.path), content);
+    loadSample(p.basename(file.path), content, path: file.path);
+  }
+
+  Future<void> refreshAvailableSamples() async {
+    _availableSamples = await UniLabFileManager.getSamples();
+    notifyListeners();
   }
 
   Future<void> openFile(dynamic file) async {
@@ -574,7 +617,7 @@ class AppProvider with ChangeNotifier {
     }
 
     final content = await UniLabFileManager.readFile(file);
-    
+
     // Check again after await to prevent race conditions (e.g. from double clicking)
     final reCheckIndex = _openFiles.indexWhere((f) => f.path == path);
     if (reCheckIndex != -1) {
@@ -596,8 +639,9 @@ class AppProvider with ChangeNotifier {
 
   void closeFile(int index) {
     _openFiles.removeAt(index);
-    if (_activeFileIndex >= _openFiles.length)
+    if (_activeFileIndex >= _openFiles.length) {
       _activeFileIndex = _openFiles.length - 1;
+    }
     notifyListeners();
   }
 
@@ -610,9 +654,9 @@ class AppProvider with ChangeNotifier {
     if (oldIndex < newIndex) newIndex -= 1;
     final UniLabFile file = _openFiles.removeAt(oldIndex);
     _openFiles.insert(newIndex, file);
-    if (_activeFileIndex == oldIndex)
+    if (_activeFileIndex == oldIndex) {
       _activeFileIndex = newIndex;
-    else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex)
+    } else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex)
       _activeFileIndex -= 1;
     else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex)
       _activeFileIndex += 1;
@@ -639,7 +683,30 @@ class AppProvider with ChangeNotifier {
     final fileToSave = _openFiles[_activeFileIndex];
     if (_savingFileIds.contains(fileToSave.id)) return;
 
-    if (fileToSave.path.isEmpty) {
+    // Check if path is empty or in a restricted/read-only location (like /usr/share or assets)
+    bool isReadOnly = fileToSave.path.isEmpty;
+    if (!isReadOnly && !kIsWeb) {
+      try {
+        final file = io.File(fileToSave.path);
+        // Check if we can actually write to this file/directory
+        if (await file.exists()) {
+          // Try to open for appending just to check permissions
+          final sink = file.openWrite(mode: io.FileMode.append);
+          await sink.flush();
+          await sink.close();
+        } else {
+          // If it doesn't exist, check if parent directory is writable
+          final parent = file.parent;
+          if (!await parent.exists()) {
+             isReadOnly = true;
+          }
+        }
+      } catch (e) {
+        isReadOnly = true;
+      }
+    }
+
+    if (isReadOnly) {
       await saveActiveFileAs();
       return;
     }
@@ -653,10 +720,9 @@ class AppProvider with ChangeNotifier {
         fileToSave.content,
       );
       final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
-      if (idx != -1)
-        _openFiles[idx] = _openFiles[idx].copyWith(
-          isModified: false,
-        );
+      if (idx != -1) {
+        _openFiles[idx] = _openFiles[idx].copyWith(isModified: false);
+      }
       _addToRecentFiles(fileToSave.path);
       await refreshProjectFiles();
     } catch (e) {
@@ -688,7 +754,7 @@ class AppProvider with ChangeNotifier {
     try {
       final file = io.File(outputFile);
       await file.writeAsString(fileToSave.content);
-      
+
       final idx = _openFiles.indexWhere((f) => f.id == fileToSave.id);
       if (idx != -1) {
         _openFiles[idx] = _openFiles[idx].copyWith(
@@ -709,8 +775,10 @@ class AppProvider with ChangeNotifier {
   Future<void> exportToPython() async {
     if (activeFile == null) return;
     try {
-      final pythonCode = await UniLabBridge.instance.transpile(activeFile!.content);
-      
+      final pythonCode = await UniLabBridge.instance.transpile(
+        activeFile!.content,
+      );
+
       String? outputFile = await FilePicker.platform.saveFile(
         dialogTitle: 'Export to Python',
         fileName: activeFile!.name.replaceAll('.m', '.py'),
@@ -722,7 +790,10 @@ class AppProvider with ChangeNotifier {
 
       final file = io.File(outputFile);
       await file.writeAsString(pythonCode);
-      _addConsoleMessage('Successfully exported to $outputFile', ConsoleMessageType.output);
+      _addConsoleMessage(
+        'Successfully exported to $outputFile',
+        ConsoleMessageType.output,
+      );
     } catch (e) {
       _addConsoleMessage('Export failed: $e', ConsoleMessageType.error);
     }
@@ -734,7 +805,7 @@ class AppProvider with ChangeNotifier {
       final pdf = pw.Document();
       final font = await PdfGoogleFonts.robotoMonoRegular();
       final boldFont = await PdfGoogleFonts.robotoMonoBold();
-      
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -742,22 +813,34 @@ class AppProvider with ChangeNotifier {
           header: (pw.Context context) => pw.Container(
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(bottom: 16),
-            child: pw.Text('UniLab Script: ${activeFile!.name}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+            child: pw.Text(
+              'UniLab Script: ${activeFile!.name}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+            ),
           ),
           footer: (pw.Context context) => pw.Container(
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(top: 16),
-            child: pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+            child: pw.Text(
+              'Page ${context.pageNumber} of ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+            ),
           ),
           build: (pw.Context context) {
             return [
               pw.Header(
                 level: 0,
-                child: pw.Text('UniLab Script Export: ${activeFile!.name}', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+                child: pw.Text(
+                  'UniLab Script Export: ${activeFile!.name}',
+                  style: pw.TextStyle(font: boldFont, fontSize: 18),
+                ),
               ),
               pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 8),
-                child: pw.Text('Generated on ${DateTime.now().toString()}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+                child: pw.Text(
+                  'Generated on ${DateTime.now().toString()}',
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+                ),
               ),
               pw.Divider(),
               pw.SizedBox(height: 16),
@@ -768,7 +851,7 @@ class AppProvider with ChangeNotifier {
       );
 
       final bytes = await pdf.save();
-      
+
       String? outputFile = await FilePicker.platform.saveFile(
         dialogTitle: 'Export to PDF',
         fileName: activeFile!.name.replaceAll('.m', '.pdf'),
@@ -779,7 +862,10 @@ class AppProvider with ChangeNotifier {
       if (outputFile != null) {
         final file = io.File(outputFile);
         await file.writeAsBytes(bytes);
-        _addConsoleMessage('Successfully exported to $outputFile', ConsoleMessageType.output);
+        _addConsoleMessage(
+          'Successfully exported to $outputFile',
+          ConsoleMessageType.output,
+        );
       }
     } catch (e) {
       _addConsoleMessage('Export to PDF failed: $e', ConsoleMessageType.error);
@@ -792,7 +878,7 @@ class AppProvider with ChangeNotifier {
       final pdf = pw.Document();
       final font = await PdfGoogleFonts.robotoMonoRegular();
       final boldFont = await PdfGoogleFonts.robotoMonoBold();
-      
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -800,13 +886,19 @@ class AppProvider with ChangeNotifier {
           header: (pw.Context context) => pw.Container(
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(bottom: 16),
-            child: pw.Text('UniLab Script: ${activeFile!.name}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+            child: pw.Text(
+              'UniLab Script: ${activeFile!.name}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+            ),
           ),
           build: (pw.Context context) {
             return [
               pw.Header(
                 level: 0,
-                child: pw.Text('UniLab Script: ${activeFile!.name}', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+                child: pw.Text(
+                  'UniLab Script: ${activeFile!.name}',
+                  style: pw.TextStyle(font: boldFont, fontSize: 18),
+                ),
               ),
               pw.Divider(),
               pw.SizedBox(height: 16),
@@ -854,11 +946,19 @@ class AppProvider with ChangeNotifier {
     if (activeFile == null) return;
 
     // Ensure session is ready
-    if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
-      _addConsoleMessage('Backend not ready. Attempting to reconnect...', ConsoleMessageType.warning);
+    if (_backendStatus != BackendStatus.connected ||
+        UniLabBridge.instance.sessionId == null) {
+      _addConsoleMessage(
+        'Backend not ready. Attempting to reconnect...',
+        ConsoleMessageType.warning,
+      );
       await _initBridge();
-      if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
-        _addConsoleMessage('Failed to connect to backend. Please check if the server is running.', ConsoleMessageType.error);
+      if (_backendStatus != BackendStatus.connected ||
+          UniLabBridge.instance.sessionId == null) {
+        _addConsoleMessage(
+          'Failed to connect to backend. Please check if the server is running.',
+          ConsoleMessageType.error,
+        );
         return;
       }
     }
@@ -870,24 +970,27 @@ class AppProvider with ChangeNotifier {
       source: 'System',
     );
     try {
-      final timeout = _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
+      final timeout =
+          _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
       final result = await UniLabBridge.instance.execute(
         activeFile!.content,
         filename: activeFile!.path,
         timeout: timeout,
       );
-      if (result.stdout.isNotEmpty)
+      if (result.stdout.isNotEmpty) {
         _addConsoleMessage(
           result.stdout,
           ConsoleMessageType.output,
           source: 'Script',
         );
-      if (result.stderr.isNotEmpty)
+      }
+      if (result.stderr.isNotEmpty) {
         _addConsoleMessage(
           result.stderr,
           ConsoleMessageType.error,
           source: 'Error',
         );
+      }
       _updateVariablesFromResult(result);
       _updatePlotsFromResult(result);
     } catch (e) {
@@ -909,26 +1012,32 @@ class AppProvider with ChangeNotifier {
   void _updatePlotsFromResult(ExecutionResult result) {
     // We no longer clear all plots every time to support Plot History
     // _generatedPlots.clear();
-    
+
     final b64List = result.extra['plot_data_b64'] as List? ?? [];
     final scriptsList = result.extra['plot_scripts'] as List? ?? [];
     final figuresList = result.extra['plot_figures'] as List? ?? [];
-    
+
     for (int i = 0; i < b64List.length; i++) {
       final scriptPath = i < scriptsList.length ? scriptsList[i] : null;
       final figNum = i < figuresList.length ? figuresList[i] : null;
       final imageDataUri = b64List[i];
-      
+
       // If it's from a script, try to find an existing plot from that script and figure number to refresh
       int existingIndex = -1;
       if (scriptPath != null && figNum != null) {
-        existingIndex = _generatedPlots.indexWhere((p) => p.sourceScript == scriptPath && p.figNum == figNum);
+        existingIndex = _generatedPlots.indexWhere(
+          (p) => p.sourceScript == scriptPath && p.figNum == figNum,
+        );
       } else if (scriptPath != null) {
-        existingIndex = _generatedPlots.indexWhere((p) => p.sourceScript == scriptPath);
+        existingIndex = _generatedPlots.indexWhere(
+          (p) => p.sourceScript == scriptPath,
+        );
       } else if (figNum != null) {
-        existingIndex = _generatedPlots.indexWhere((p) => p.figNum == figNum && p.sourceScript == null);
+        existingIndex = _generatedPlots.indexWhere(
+          (p) => p.figNum == figNum && p.sourceScript == null,
+        );
       }
-      
+
       String title = 'Figure ${figNum ?? (_generatedPlots.length + 1)}';
       if (scriptPath != null) {
         title += ' (${p.basename(scriptPath)})';
@@ -954,7 +1063,7 @@ class AppProvider with ChangeNotifier {
         _generatedPlots.add(newPlot);
       }
     }
-    
+
     onPlotsUpdated?.call(List.from(_generatedPlots));
     if (_plotsWindowId != null) {
       try {
@@ -1019,11 +1128,19 @@ class AppProvider with ChangeNotifier {
     if (command.isEmpty) return;
 
     // Ensure session is ready
-    if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
-      _addConsoleMessage('Backend not ready. Attempting to reconnect...', ConsoleMessageType.warning);
+    if (_backendStatus != BackendStatus.connected ||
+        UniLabBridge.instance.sessionId == null) {
+      _addConsoleMessage(
+        'Backend not ready. Attempting to reconnect...',
+        ConsoleMessageType.warning,
+      );
       await _initBridge();
-      if (_backendStatus != BackendStatus.connected || UniLabBridge.instance.sessionId == null) {
-        _addConsoleMessage('Failed to connect to backend.', ConsoleMessageType.error);
+      if (_backendStatus != BackendStatus.connected ||
+          UniLabBridge.instance.sessionId == null) {
+        _addConsoleMessage(
+          'Failed to connect to backend.',
+          ConsoleMessageType.error,
+        );
         return;
       }
     }
@@ -1040,23 +1157,26 @@ class AppProvider with ChangeNotifier {
       source: 'System',
     );
     try {
-      final timeout = _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
+      final timeout =
+          _settingsProvider?.settings.executionTimeout.toDouble() ?? 300.0;
       final result = await UniLabBridge.instance.execute(
         command,
         timeout: timeout,
       );
-      if (result.stdout.isNotEmpty)
+      if (result.stdout.isNotEmpty) {
         _addConsoleMessage(
           result.stdout,
           ConsoleMessageType.output,
           source: 'Script',
         );
-      if (result.stderr.isNotEmpty)
+      }
+      if (result.stderr.isNotEmpty) {
         _addConsoleMessage(
           result.stderr,
           ConsoleMessageType.error,
           source: 'Error',
         );
+      }
       _updateVariablesFromResult(result);
       _updatePlotsFromResult(result);
     } catch (e) {
@@ -1194,18 +1314,21 @@ class AppProvider with ChangeNotifier {
     };
 
     void traverse(hl.Node node, PdfColor? parentColor) {
-      final nodeColor = colorMap[node.className] ?? parentColor ?? PdfColors.black;
-      
+      final nodeColor =
+          colorMap[node.className] ?? parentColor ?? PdfColors.black;
+
       if (node.value != null) {
         final parts = node.value!.split('\n');
         for (int i = 0; i < parts.length; i++) {
           if (parts[i].isNotEmpty) {
-            lines.last.add(pw.TextSpan(
-              text: parts[i],
-              style: pw.TextStyle(font: font, color: nodeColor, fontSize: 9),
-            ));
+            lines.last.add(
+              pw.TextSpan(
+                text: parts[i],
+                style: pw.TextStyle(font: font, color: nodeColor, fontSize: 9),
+              ),
+            );
           }
-          
+
           if (i < parts.length - 1) {
             lines.add([]);
           }
@@ -1225,8 +1348,16 @@ class AppProvider with ChangeNotifier {
       }
     }
 
-    return lines.map((lineSpans) => pw.RichText(
-      text: pw.TextSpan(children: lineSpans.isEmpty ? [pw.TextSpan(text: ' ')] : lineSpans),
-    )).toList();
+    return lines
+        .map(
+          (lineSpans) => pw.RichText(
+            text: pw.TextSpan(
+              children: lineSpans.isEmpty
+                  ? [pw.TextSpan(text: ' ')]
+                  : lineSpans,
+            ),
+          ),
+        )
+        .toList();
   }
 }

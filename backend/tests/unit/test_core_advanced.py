@@ -2,7 +2,6 @@ import pytest
 import asyncio
 import pathlib
 import shutil
-import time
 from backend.core.unilab_core import UniLabCore, BackendConfig
 
 @pytest.fixture

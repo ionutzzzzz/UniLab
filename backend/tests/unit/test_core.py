@@ -1,8 +1,6 @@
 import unittest
-import asyncio
 import pathlib
 import shutil
-import os
 from backend.core.unilab_core import UniLabCore, BackendConfig
 from backend.core.models import SessionInfo, ExecutionResult
 

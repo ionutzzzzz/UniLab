@@ -1,6 +1,5 @@
 import sys
 import base64
-import os
 
 if __name__ == "__main__":
     from PIL import Image

@@ -288,6 +288,18 @@ class _ConsoleViewState extends State<_ConsoleView> {
     _lastAutocompleteOffset = start + completion.length;
   }
 
+  int _lastMessageCount = 0;
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
@@ -296,11 +308,10 @@ class _ConsoleViewState extends State<_ConsoleView> {
     final settings = settingsProvider.settings;
     final messages = appProvider.consoleMessages;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    });
+    if (messages.length != _lastMessageCount) {
+      _lastMessageCount = messages.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
 
     return Listener(
       onPointerSignal: (pointerSignal) {

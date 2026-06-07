@@ -5,18 +5,19 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
 import 'title_strip.dart';
 import 'split_shell.dart';
-import '../theme/ui_theme.dart';
-import '../features/status_bar/ui/status_bar.dart';
-import '../features/editor/ui/editor_stack.dart';
-import '../features/ribbon/ui/app_ribbon.dart';
-import '../features/workspace/ui/workspace_panel.dart';
-import '../features/console/ui/console_dock.dart';
-import '../features/explorer/ui/explorer_panel.dart';
-import '../widgets/command_palette/command_palette.dart';
-import '../core/layout/shell_breakpoints.dart';
-import '../core/layout/shell_layout_state.dart';
-import '../providers/settings_provider.dart';
-import '../providers/app_provider.dart';
+import 'package:unilab/theme/ui_theme.dart';
+import 'package:unilab/features/status_bar/ui/status_bar.dart';
+import 'package:unilab/features/editor/ui/editor_stack.dart';
+import 'package:unilab/features/ribbon/ui/app_ribbon.dart';
+import 'package:unilab/features/workspace/ui/workspace_panel.dart';
+import 'package:unilab/features/console/ui/console_dock.dart';
+import 'package:unilab/features/explorer/ui/explorer_panel.dart';
+import 'package:unilab/widgets/command_palette/command_palette.dart';
+import 'package:unilab/core/layout/shell_layout_state.dart';
+import 'package:unilab/providers/settings_provider.dart';
+import 'package:unilab/providers/app_provider.dart';
+import 'package:unilab/models/models.dart';
+import 'package:unilab/features/welcome/ui/welcome_screen.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key});
@@ -24,8 +25,14 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ui = UiTheme.of(context);
-    final settings = p.Provider.of<SettingsProvider>(context).settings;
-    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final settings = context.select<SettingsProvider, UserSettings>((s) => s.settings);
+    final isWelcomeMode = context.select<AppProvider, bool>((p) => p.isWelcomeMode);
+
+    if (isWelcomeMode) {
+      return const WelcomeScreen();
+    }
+    
+    final appProvider = context.read<AppProvider>();
 
     return CallbackShortcuts(
       bindings: {
@@ -65,8 +72,6 @@ class MainShell extends ConsumerWidget {
           backgroundColor: ui.colors.panel,
           body: LayoutBuilder(
             builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              
               // Determine visibility based on user preference and active layout state
               final layoutState = ref.watch(shellLayoutProvider);
               final bool showLeft = layoutState.showLeftPanel;

@@ -222,7 +222,7 @@ class _FigureViewState extends State<FigureView> {
             fit: BoxFit.contain,
             gaplessPlayback: true,
             filterQuality: FilterQuality.low,
-            errorBuilder: (_, e, __) => Center(
+            errorBuilder: (_, e, _) => Center(
               child: UiText(text: 'Image error: $e', color: ui.colors.danger),
             ),
           ),

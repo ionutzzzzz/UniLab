@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart' as p;
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart' as p_provider;
 import 'package:window_manager/window_manager.dart';
 import 'package:context_menus/context_menus.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
@@ -40,13 +42,13 @@ void main(List<String> args) async {
   if (windowType == 'simulation') {
     runApp(
       ProviderScope(
-        child: p.MultiProvider(
+        child: p_provider.MultiProvider(
           providers: [
-            p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+            p_provider.ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ],
           child: Consumer(
             builder: (context, ref, child) {
-              final settingsProvider = p.Provider.of<SettingsProvider>(context);
+              final settingsProvider = p_provider.Provider.of<SettingsProvider>(context);
               final settings = settingsProvider.settings;
               final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
               final lightTheme = AppTheme.createTheme(
@@ -78,13 +80,13 @@ void main(List<String> args) async {
   if (windowType == 'plots') {
     runApp(
       ProviderScope(
-        child: p.MultiProvider(
+        child: p_provider.MultiProvider(
           providers: [
-            p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+            p_provider.ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ],
           child: Consumer(
             builder: (context, ref, child) {
-              final settingsProvider = p.Provider.of<SettingsProvider>(context);
+              final settingsProvider = p_provider.Provider.of<SettingsProvider>(context);
               final settings = settingsProvider.settings;
               final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
               final lightTheme = AppTheme.createTheme(
@@ -129,6 +131,24 @@ void main(List<String> args) async {
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
+      
+      // Set the window icon
+      if (!kIsWeb) {
+        if (Platform.isWindows) {
+          await windowManager.setIcon('windows/runner/resources/app_icon.ico');
+        } else if (Platform.isLinux) {
+          try {
+            final exePath = File(Platform.resolvedExecutable).resolveSymbolicLinksSync();
+            final exeDir = File(exePath).parent.path;
+            final iconPath = p.join(exeDir, 'data', 'flutter_assets', 'assets', 'logo.png');
+            if (await File(iconPath).exists()) {
+              await windowManager.setIcon(iconPath);
+            }
+          } catch (e) {
+            debugPrint('Error setting window icon: $e');
+          }
+        }
+      }
     });
   }
 
@@ -136,10 +156,10 @@ void main(List<String> args) async {
     ProviderScope(
       child: Consumer(
         builder: (context, ref, child) {
-          return p.MultiProvider(
+          return p_provider.MultiProvider(
             providers: [
-              p.ChangeNotifierProvider(create: (_) => SettingsProvider()),
-              p.ChangeNotifierProxyProvider<SettingsProvider, AppProvider>(
+              p_provider.ChangeNotifierProvider(create: (_) => SettingsProvider()),
+              p_provider.ChangeNotifierProxyProvider<SettingsProvider, AppProvider>(
                 create: (_) => AppProvider(
                   onVariablesUpdated: (vars) {
                     ref
@@ -169,7 +189,7 @@ class UniLabApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = p.Provider.of<SettingsProvider>(context);
+    final settingsProvider = p_provider.Provider.of<SettingsProvider>(context);
     final settings = settingsProvider.settings;
 
     final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
