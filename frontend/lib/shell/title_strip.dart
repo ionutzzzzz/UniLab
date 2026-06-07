@@ -65,7 +65,7 @@ class TitleStrip extends StatelessWidget {
               Container(width: 1, height: 10, color: ui.colors.divider),
               const SizedBox(width: 8),
               UiText(
-                text: 'v1.3.4',
+                text: 'v1.5.2',
                 variant: UiTextVariant.label,
                 color: ui.colors.accent,
                 fontWeight: FontWeight.w800,
@@ -79,11 +79,15 @@ class TitleStrip extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.terminal, size: 12, color: ui.colors.textSecondary),
+            Icon(
+              LucideIcons.terminal,
+              size: 12,
+              color: ui.colors.textSecondary,
+            ),
             const SizedBox(width: 8),
             UiText(
-              text: appProvider.projectRoot != null 
-                  ? 'unilab_workspaces/${p.basename(appProvider.projectRoot!)}' 
+              text: appProvider.projectRoot != null
+                  ? 'unilab_workspaces/${p.basename(appProvider.projectRoot!)}'
                   : 'unilab_workspaces/none',
               variant: UiTextVariant.label,
               color: ui.colors.textSecondary,
@@ -225,10 +229,7 @@ class _WindowButtonState extends State<_WindowButton> {
     );
 
     if (widget.tooltip != null) {
-      button = Tooltip(
-        message: widget.tooltip!,
-        child: button,
-      );
+      button = Tooltip(message: widget.tooltip!, child: button);
     }
 
     return button;
