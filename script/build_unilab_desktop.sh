@@ -18,13 +18,13 @@ echo "🦀 Building Rust Core Bridge..."
 
 # 3. Bundle Backend code into assets
 echo "📂 Bundling backend source and samples into assets..."
-rm -rf frontend/assets/backend
-rm -rf frontend/assets/samples
+rm -rf frontend/assets/backend || true
+rm -rf frontend/assets/samples || true
 mkdir -p frontend/assets/backend/backend
 mkdir -p frontend/assets/samples
 
 # Explicitly copy each directory to ensure nothing is missed
-for dir in core api utils stdlib packages; do
+for dir in core api utils stdlib; do
     cp -r "backend/$dir" frontend/assets/backend/backend/
 done
 
@@ -42,7 +42,11 @@ echo "💙 Packaging Flutter App..."
 cd frontend
 
 # Ensure Dart global binaries are in PATH
-export PATH="$PATH":"$HOME/.pub-cache/bin"
+if [ "$PLATFORM" == "windows" ]; then
+    export PATH="$PATH:$(cygpath "$LOCALAPPDATA")/Pub/Cache/bin"
+else
+    export PATH="$PATH":"$HOME/.pub-cache/bin"
+fi
 
 # Check for flutter_distributor
 if ! command -v flutter_distributor &> /dev/null; then
@@ -64,7 +68,11 @@ elif [ "$PLATFORM" == "windows" ]; then
 fi
 
 # Use flutter_distributor to create the installer
-flutter_distributor package --platform $PLATFORM --targets $TARGETS
+if [ "$PLATFORM" == "windows" ]; then
+    flutter_distributor.bat package --platform $PLATFORM --targets $TARGETS
+else
+    flutter_distributor package --platform $PLATFORM --targets $TARGETS
+fi
 
 # Final sync: for Linux .deb/AppImage we sometimes need samples in a specific place
 # This is a bit of a hack because distributor runs its own build

@@ -210,10 +210,8 @@ class AppProvider with ChangeNotifier {
           UniLabBridge.instance.sessionId == null) {
         UniLabBridge.resetInstance();
       }
-      final backendPath = await UniLabBridge.findBackendPath();
-      // _addConsoleMessage('Connecting to backend at $backendPath...', ConsoleMessageType.output);
-
-      await UniLabBridge.instance.initialize(backendPath);
+      
+      await UniLabBridge.instance.initialize();
       await UniLabBridge.instance.createSession('gui_user');
       _backendStatus = BackendStatus.connected;
       _serverInfo = await UniLabBridge.instance.getInfo();
@@ -253,6 +251,7 @@ class AppProvider with ChangeNotifier {
       _syncSimWindow();
     } else if (type == 'GRAPHICAL_PLOT') {
       _handleSimPlot(data);
+      _updateWorkspacePlotsFromSimEvent(data);
       _syncSimWindow();
     } else if (type == 'SIM_STOPPED') {
       _isSimulationActive = false;
@@ -277,6 +276,41 @@ class AppProvider with ChangeNotifier {
     } else {
       _simulationPlots.add(plotData);
     }
+  }
+
+  void _updateWorkspacePlotsFromSimEvent(Map<String, dynamic> data) {
+    final figNum = data['fig'];
+    final scriptPath = data['script'];
+    final imageDataUri = data['data'];
+
+    int existingIndex = _generatedPlots.indexWhere(
+      (p) => p.figNum == figNum.toString() && p.sourceScript == scriptPath,
+    );
+
+    String title = 'Figure $figNum';
+    if (scriptPath != null) {
+      title += ' (${p.basename(scriptPath)})';
+    }
+
+    final newPlot = PlotData(
+      id: existingIndex != -1 ? _generatedPlots[existingIndex].id : null,
+      title: title,
+      type: 'image',
+      xData: [],
+      yData: [],
+      imageDataUri: imageDataUri,
+      sourceScript: scriptPath,
+      figNum: figNum.toString(),
+      createdAt: DateTime.now(),
+    );
+
+    if (existingIndex != -1) {
+      _generatedPlots[existingIndex] = newPlot;
+    } else {
+      _generatedPlots.add(newPlot);
+    }
+
+    onPlotsUpdated?.call(List.from(_generatedPlots));
   }
 
   Future<void> sendSimControlUpdate(String id, dynamic value) async {

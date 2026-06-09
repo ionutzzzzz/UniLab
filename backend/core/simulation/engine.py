@@ -2,55 +2,48 @@ import sys
 import threading
 import queue
 import time
-import numpy as np
-from scipy import signal
+try:
+    import numpy as np
+except ImportError:
+    np = None
 import os
 import json
 from collections import Counter
 
-# Fix for Qt stability on some Linux distros
-os.environ['GTK_MODULES'] = ''
-os.environ['QT_QPA_PLATFORMTHEME'] = ''
-os.environ['QT_STYLE_OVERRIDE'] = 'Fusion'
-
-# Headless environment detection
-IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
-if IS_HEADLESS:
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-
+# Guard Matplotlib
 try:
-    import matplotlib    # Try to be more flexible with the backend
-    if 'matplotlib.backends' not in sys.modules:
-        try:
-            if IS_HEADLESS:
-                matplotlib.use('Agg')
-            else:
-                matplotlib.use('Qt5Agg')
-        except:
-            try: matplotlib.use('QtAgg')
-            except: pass
-except Exception:
-    pass
-
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-import matplotlib.patches
-
-try:
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    import matplotlib
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    import matplotlib.patches
 except ImportError:
-    try:
-        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-    except ImportError:
-        FigureCanvas = None
+    matplotlib = None
+    plt = None
+    Figure = None
 
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                             QWidget, QLabel, QSlider, QPushButton, QComboBox, 
-                             QProgressBar, QAction, QTabWidget, QGroupBox, QFormLayout,
-                             QCheckBox, QLineEdit, QDialog, QColorDialog, QSpinBox, QDoubleSpinBox, QFileDialog,
-                             QScrollArea, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QEventLoop
-from PyQt5.QtGui import QPalette, QColor
+# Provision a mock plt if missing
+if plt is None:
+    class MockPlt:
+        def __getattr__(self, name): return lambda *args, **kwargs: None
+        def gcf(self): return self
+        def gca(self, **kwargs): return self
+        def figure(self, **kwargs): return self
+        def subplot(self, *args, **kwargs): return self
+        def add_subplot(self, *args, **kwargs): return self
+    plt = MockPlt()
+
+# Guard PyQt5
+try:
+    from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
+                                 QWidget, QLabel, QSlider, QPushButton, QComboBox, 
+                                 QProgressBar, QAction, QTabWidget, QGroupBox, QFormLayout,
+                                 QCheckBox, QLineEdit, QDialog, QColorDialog, QSpinBox, QDoubleSpinBox, QFileDialog,
+                                 QScrollArea, QMessageBox)
+    from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QEventLoop
+    from PyQt5.QtGui import QPalette, QColor
+    HAS_PYQT = True
+except ImportError:
+    HAS_PYQT = False
 
 # Try importing ML package
 try:

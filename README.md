@@ -122,10 +122,15 @@ docker-compose -f docker/docker-compose.yml run unilab-core /samples/test.m
 ### 📦 Native Build
 
 ```bash
-# Build both versions
+# Build both versions (Linux/macOS)
 ./script/build_unilab.sh
+
+# Build both versions (Windows)
+./script/build_unilab_win.sh  # Using Git Bash
+# OR
+.\script\build_unilab.ps1      # Using PowerShell
 ```
-Outputs will be in `./release/Unilab` and `./release/Unilab-core`.
+Outputs will be in `./release` (Linux) or `./release-windows` (Windows).
 
 ---
 

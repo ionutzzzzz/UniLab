@@ -1,15 +1,40 @@
-import numpy as np
-import matplotlib.pyplot as plt
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    # Ensure Agg backend is used for headless environments (like our GUI)
+    plt.use('Agg')
+except ImportError:
+    plt = None
+    Figure = None
+
 import os
 import time
 import pathlib
 import builtins
 import inspect
 import math
-import scipy.signal as signal
+
+try:
+    import scipy.signal as signal
+    from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
+except ImportError:
+    signal = None
+    scipy_fft = scipy_ifft = scipy_fftshift = scipy_ifftshift = None
+
 from contextvars import ContextVar
-from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
-from backend.core.simulation.engine import unilab_simulate as simulate  # noqa: F401
+# Delay simulation import to avoid circular dependency and handle missing PyQt
+def simulate(*args, **kwargs):
+    try:
+        from backend.core.simulation.engine import unilab_simulate
+        return unilab_simulate(*args, **kwargs)
+    except ImportError:
+        print("Simulation engine unavailable (missing dependencies)")
+        return None
 
 # ContextVar for thread-safe session workspace path
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
@@ -2906,6 +2931,7 @@ def _unilab_refresh_graph():
     global _unilab_plot_counter
     try:
         import json
+        import base64
         fig = plt.gcf()
         ax = plt.gca()
         if ax is None: return
@@ -2922,96 +2948,54 @@ def _unilab_refresh_graph():
         _unilab_plot_counter += 1
         plot_id = _unilab_plot_counter
         ws_path = unilab_workspace_ctx.get()
-        prefix = pathlib.Path(ws_path).name.split('_')[-1][:6] + "_" if ws_path else ""
+
+        # Cross-platform path handling
+        if ws_path:
+            ws_dir = pathlib.Path(ws_path)
+            ws_dir.mkdir(parents=True, exist_ok=True)
+            prefix = ws_dir.name.split('_')[-1][:6] + "_"
+        else:
+            ws_dir = pathlib.Path(".")
+            prefix = ""
+
         plot_type_marker = "3d_" if ax.name == '3d' else ""
         filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.png"
-        meta_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.json"
-        save_path = pathlib.Path(ws_path) / filename if ws_path else pathlib.Path(filename)
-        save_meta_path = pathlib.Path(ws_path) / meta_filename if ws_path else pathlib.Path(meta_filename)
-        
-        if ws_path:
-            pathlib.Path(ws_path).mkdir(parents=True, exist_ok=True)
-            
-        with open(str(save_meta_path), "w") as f:
-            json.dump(meta, f)
-        num_axes = len(fig.axes)
-        if num_axes > 1:
-            rows, cols = 1, 1
-            try:
-                for ax_item in fig.axes:
-                    if hasattr(ax_item, 'get_subplotspec'):
-                        spec = ax_item.get_subplotspec()
-                        if spec:
-                            gs = spec.get_gridspec()
-                            rows = builtins.max(rows, gs.nrows)
-                            cols = builtins.max(cols, gs.ncols)
-            except: 
-                rows = (num_axes // 2 + num_axes % 2)
-                cols = 2 if num_axes >= 2 else 1
-            fig.set_size_inches(builtins.max(14, 9 * cols), builtins.max(10, 7 * rows))
-        else:
-            fig.set_size_inches(8, 5)
+        save_path = ws_dir / filename
+
+        # Styling for consistent look
         fig.set_facecolor('#121212')
         fig.patch.set_facecolor('#121212')
-        fig.patch.set_alpha(1.0)
-        for leg in fig.legends:
-            leg.get_frame().set_facecolor('#1e1e1e')
-            leg.get_frame().set_edgecolor('#444444')
-            for text_item in leg.get_texts():
-                text_item.set_color('#e0e0e0')
         for ax_item in fig.axes:
             ax_item.set_facecolor('#121212')
-            ax_item.patch.set_facecolor('#121212')
-        try:
-            has_3d = builtins.any(builtins.getattr(a, 'name', '') == '3d' for a in fig.axes)
-            if not has_3d:
-                fig.tight_layout(pad=3.0)
-            else:
-                fig.subplots_adjust(hspace=0.4, wspace=0.4, left=0.1, right=0.9, top=0.9, bottom=0.1)
-        except Exception:
-            try: fig.subplots_adjust(hspace=0.5, wspace=0.4)
-            except: pass
-        if ax.name == '3d':
-            try:
-                ax.xaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.yaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.zaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.xaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
-                ax.yaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
-            except: pass
+
         plt.draw()
-        fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', edgecolor='#121212', transparent=False, bbox_inches='tight', pad_inches=0.1)
-        fig_num = fig.number
-        fig_ver = _unilab_fig_versions.get(fig_num, 1)
-        script_path = unilab_script_ctx.get()
+        fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', transparent=False)
 
-        # Bridge emission
-        import base64
-        try:
-            with open(str(save_path), 'rb') as img_file:
-                b64_data = base64.b64encode(img_file.read()).decode('utf-8')
-                data_uri = f'data:image/png;base64,{b64_data}'
-                
-            cb = unilab_event_ctx.get()
-            if cb:
-                cb('GRAPHICAL_PLOT', json.dumps({
-                    'filename': filename,
-                    'fig': fig_num,
-                    'ver': fig_ver,
-                    'script': script_path,
-                    'data': data_uri,
-                    'meta': meta
-                }))
-        except Exception as e:
-            print(f'Error emitting plot event: {e}')
+        # Bridge emission (Base64)
+        with open(str(save_path), 'rb') as img_file:
+            b64_data = base64.b64encode(img_file.read()).decode('utf-8')
+            data_uri = f'data:image/png;base64,{b64_data}'
 
-        marker = f'::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}'
-        if script_path:
-            marker += f'::SCRIPT::{script_path}'
-        print(marker)
+        cb = unilab_event_ctx.get()
+        if cb:
+            cb('GRAPHICAL_PLOT', json.dumps({
+                'filename': filename,
+                'fig': fig.number,
+                'ver': _unilab_fig_versions.get(fig.number, 1),
+                'script': unilab_script_ctx.get(),
+                'data': data_uri,
+                'meta': meta
+            }))
+
+        # Clean up local file in bridge mode to avoid clutter
+        # But only if NOT in web mode, as web mode needs the file to encode it into the result
+        if os.environ.get('UNILAB_BRIDGE_MODE') == '1' and os.environ.get('UNILAB_WEB_MODE') != '1':
+            try: save_path.unlink()
+            except: pass
+
+        print(f'::GRAPHICAL_PLOT::{filename}::FIG::{fig.number}')
     except Exception as e:
         print(f"Error saving graph: {e}")
-
 _unilab_hold = False
 
 def clf():

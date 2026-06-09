@@ -319,3 +319,18 @@ ipython_config.py
 
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/
+
+# UniLab specific ignores
+*.zip
+temp_python/
+release-windows/
+dist/
+backend/target/
+frontend/build/
+frontend/dist/
+frontend/.dart_tool/
+frontend/.idea/
+frontend/.metadata
+frontend/pubspec.lock
+*.iml
+.idea/

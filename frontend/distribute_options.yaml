@@ -6,7 +6,14 @@ targets:
   - name: windows
     package:
       - name: exe
+        app_id: 28B7A494-0E33-4B9D-9F6D-29A8C5B3D4A8
+        display_name: UniLab
+        publisher_name: UniLab Team
       - name: msix
+        display_name: UniLab
+        publisher_name: UniLab Team
+        publisher: CN=UniLab, O=UniLab, L=Bucharest, C=RO
+        identity_name: com.unilab.app
   - name: linux
     package:
       - name: appimage

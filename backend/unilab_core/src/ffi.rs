@@ -34,6 +34,11 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
     if backend_path.is_null() {
         return -1;
     }
+    
+    // Set bridge mode by default for FFI initialization
+    unsafe {
+        std::env::set_var("UNILAB_BRIDGE_MODE", "1");
+    }
 
     #[cfg(target_os = "linux")]
     unsafe {
@@ -79,12 +84,6 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
             // 1. Add the directory containing 'backend/'
             pypath.call_method1("insert", (0, &abs_path_str))?;
             
-            // 2. Add 'backend/' itself so 'import core' works
-            let backend_dir = abs_backend_parent.join("backend");
-            if let Some(b_str) = backend_dir.to_str() {
-                let _ = pypath.call_method1("insert", (0, b_str));
-            }
-            
             // Debug: print sys.path
             if let Ok(path_list) = pypath.extract::<Vec<String>>() {
                 println!("[UniLab-Rust] Python sys.path: {:?}", path_list);
@@ -106,13 +105,16 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
 fn import_module<'py>(py: Python<'py>, module_name: &str) -> PyResult<Bound<'py, PyModule>> {
     match py.import(module_name) {
         Ok(m) => Ok(m),
-        Err(_) => {
+        Err(original_err) => {
             let relative_name = if module_name.starts_with("backend.") {
                 &module_name[8..]
             } else {
                 module_name
             };
-            py.import(relative_name)
+            match py.import(relative_name) {
+                Ok(m) => Ok(m),
+                Err(_) => Err(original_err),
+            }
         }
     }
 }
