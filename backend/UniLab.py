@@ -79,6 +79,153 @@ def print_warning(msg: str):
     """Prints a message in pastel yellow to stdout."""
     print(f"\x1b[38;2;253;253;150mWarning: {msg}\x1b[0m")
 
+def render_ascii_plots():
+    """Renders all current matplotlib figures as ASCII art in the terminal."""
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.patches
+        import numpy as np
+        import shutil
+        
+        # Access runtime for its ASCII plotting utilities
+        try:
+            from core import runtime
+        except ImportError:
+            try:
+                from backend.core import runtime
+            except ImportError:
+                return
+
+        fignums = plt.get_fignums()
+        if not fignums:
+            return
+
+        # Get terminal size for responsive plotting
+        term_size = shutil.get_terminal_size((80, 24))
+        # Use ~80% of width, max 100
+        width = min(term_size.columns - 15, 100)
+        # Height about 1/3 of width
+        height = max(15, width // 3)
+
+        for fig_num in fignums:
+            fig = plt.figure(fig_num)
+            for ax in fig.get_axes():
+                title = ax.get_title()
+                if title:
+                    print(f"\n\x1b[1;36m{title}\x1b[0m")
+                else:
+                    print(f"\n\x1b[1;36mFigure {fig_num}\x1b[0m")
+                
+                # Check for images (heatmaps) - Heatmaps usually take over the whole axes
+                images = ax.get_images()
+                if images:
+                    for img in images:
+                        data = img.get_array()
+                        # Bigger heatmap
+                        print(runtime.unilab_ascii_heatmap(data, height=height, width=width))
+                    continue
+
+                # For standard plots, we want to combine all elements on one canvas
+                xmin, xmax = ax.get_xlim()
+                ymin, ymax = ax.get_ylim()
+                
+                canvas = [[' ' for _ in range(width)] for _ in range(height)]
+                
+                def set_pixel(cx, cy, char):
+                    if 0 <= cx < width and 0 <= cy < height:
+                        # Priority: '*' > 'o' > '.'
+                        current = canvas[cy][cx]
+                        if char == '*' or current == ' ':
+                            canvas[cy][cx] = char
+
+                # 1. Draw Lines
+                for line in ax.get_lines():
+                    xdata = line.get_xdata()
+                    ydata = line.get_ydata()
+                    
+                    plot_type = 'line'
+                    if line.get_linestyle() in ('None', '', None):
+                        if line.get_marker() not in ('None', '', None):
+                            plot_type = 'scatter'
+                    
+                    for i in range(len(xdata)):
+                        px = int((xdata[i] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
+                        py = int((ydata[i] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0
+                        py = height - 1 - py
+                        
+                        if plot_type == 'line' and i > 0:
+                            prev_px = int((xdata[i-1] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
+                            prev_py = height - 1 - (int((ydata[i-1] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
+                            
+                            # Bresenham's line algorithm
+                            dx, dy = abs(px - prev_px), abs(py - prev_py)
+                            sx, sy = (1 if prev_px < px else -1), (1 if prev_py < py else -1)
+                            err = dx - dy
+                            cx, cy = prev_px, prev_py
+                            while True:
+                                set_pixel(cx, cy, '*')
+                                if cx == px and cy == py: break
+                                e2 = 2 * err
+                                if e2 > -dy: err -= dy; cx += sx
+                                if e2 < dx: err += dx; cy += sy
+                        else:
+                            char = 'o' if plot_type == 'scatter' else '*'
+                            set_pixel(px, py, char)
+
+                # 2. Draw Collections (Scatter)
+                for coll in ax.collections:
+                    if hasattr(coll, 'get_offsets'):
+                        offsets = coll.get_offsets()
+                        for off in offsets:
+                            px = int((off[0] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
+                            py = int((off[1] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0
+                            py = height - 1 - py
+                            set_pixel(px, py, 'o')
+
+                # 3. Draw Patches (Bars)
+                for patch in ax.patches:
+                    if isinstance(patch, matplotlib.patches.Rectangle):
+                        # Simple bar representation
+                        bx = patch.get_x() + patch.get_width()/2
+                        by = patch.get_height()
+                        px = int((bx - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
+                        
+                        bar_top = height - 1 - (int((by - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
+                        # Assume baseline is 0
+                        zero_y = height - 1 - (int((0 - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
+                        zero_y = max(0, min(height - 1, zero_y))
+                        
+                        start_y, end_y = min(bar_top, zero_y), max(bar_top, zero_y)
+                        for sy in range(start_y, end_y + 1):
+                            set_pixel(px, sy, '#')
+
+                # Print the canvas
+                res = [f" {ymax:8.2f} |" + "".join(canvas[0]) + "|"]
+                for i in range(1, height - 1):
+                    res.append("          |" + "".join(canvas[i]) + "|")
+                res.append(f" {ymin:8.2f} |" + "".join(canvas[height-1]) + "|")
+                res.append("           +" + "-" * width + "+")
+                xmin_str, xmax_str = f"{xmin:.2f}", f"{xmax:.2f}"
+                res.append("            " + xmin_str + " " * (width - len(xmin_str) - len(xmax_str)) + xmax_str)
+                print("\n".join(res))
+
+            plt.close(fig)
+    except Exception:
+        pass
+
+def show_plots():
+    """Decides whether to show plots in a window or as ASCII in terminal."""
+    try:
+        import matplotlib
+        import matplotlib.pyplot as plt
+        if plt.get_fignums():
+            if matplotlib.get_backend().lower() == 'agg':
+                render_ascii_plots()
+            else:
+                plt.show()
+    except Exception:
+        pass
+
 def update_m_file_cache():
     global _m_file_cache, _last_cache_update
     now = time.time()
@@ -223,9 +370,7 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         print(f"\n{'='*60}\n")
         
         try:
-            import matplotlib.pyplot as plt
-            if plt.get_fignums():
-                plt.show()
+            show_plots()
         except Exception:
             pass
                 
@@ -375,9 +520,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                                     print(f"Error: {result.stderr.rstrip()}", file=sys.stderr)
                                     
                                 try:
-                                    import matplotlib.pyplot as plt
-                                    if plt.get_fignums():
-                                        plt.show()
+                                    show_plots()
                                 except Exception:
                                     pass
                             except UnicodeDecodeError:
@@ -459,9 +602,7 @@ async def run_console(engine_name: str = "transpiler", command: Optional[str] = 
                             print("")
                             
                     try:
-                        import matplotlib.pyplot as plt
-                        if plt.get_fignums():
-                            plt.show()
+                        show_plots()
                     except Exception:
                         pass
                 except asyncio.TimeoutError:
