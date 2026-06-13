@@ -775,4 +775,9 @@ class UniLabTranspiler:
             
             self._cache[code_hash] = transpiled
             return transpiled
-        except Exception as e: raise Exception(f"Transpilation Error: {str(e)}")
+        except Exception as e:
+            # Re-raise without adding "Transpilation Error" prefix here, 
+            # let the engine handle the prefixing if needed.
+            # But we must NOT use Exception(f"...") because that includes the traceback if caught elsewhere.
+            # Actually, str(e) from Lark is already quite good and includes the arrow.
+            raise e

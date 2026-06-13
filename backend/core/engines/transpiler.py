@@ -390,6 +390,7 @@ class TranspilerEngine(BaseEngine):
                     if '\n' not in stripped_code and not any(c in stripped_code for c in '()[]{}='):
                         try:
                             # Use shlex to safely split, check if first part is an executable
+                            import shlex
                             test_parts = shlex.split(stripped_code)
                             if test_parts:
                                 import shutil
@@ -398,7 +399,12 @@ class TranspilerEngine(BaseEngine):
                                     return ExecutionResult(proc.returncode == 0, proc.stdout, proc.stderr, proc.returncode, time.time()-start_ts, self._get_variables(), [])
                         except:
                             pass
-                    raise te
+                    
+                    # Return a clean transpilation error result without traceback
+                    err_msg = str(te)
+                    if "Transpilation Error:" in err_msg:
+                        err_msg = err_msg.replace("Transpilation Error:", "").strip()
+                    return ExecutionResult(False, "", f"Syntax Error: {err_msg}", 1, time.time() - start_ts, self._get_variables(), [])
 
                 # Temporary add paths for resolution (from addpath calls in the code)
                 for ap in added_paths:
@@ -441,11 +447,42 @@ class TranspilerEngine(BaseEngine):
                     success = False
                     var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
                     err.write(f"Could not recognise command or function '{var_name}'")
-                except Exception:
+                except Exception as e:
                     success = False
-                    # For other errors, show a cleaner message if possible, or the last line of traceback
                     import traceback
-                    err.write(traceback.format_exc())
+                    import sys
+                    
+                    # Extract traceback and filter it
+                    etype, evalue, tb = sys.exc_info()
+                    stack = traceback.extract_tb(tb)
+                    
+                    # Filter out internal frames (like this engine's exec call and runtime internals)
+                    filtered_stack = []
+                    for frame in stack:
+                        # Skip engine internals and runtime dispatchers
+                        if 'backend/core/engines/transpiler.py' in frame.filename:
+                            continue
+                        if 'backend/core/runtime.py' in frame.filename and frame.name in ('unilab_call', 'unilab_call_nargout'):
+                            continue
+                        # Keep everything else (user code, library functions, etc.)
+                        filtered_stack.append(frame)
+                    
+                    if filtered_stack:
+                        # Show where the error happened in user code or library
+                        last_frame = filtered_stack[-1]
+                        fname = os.path.basename(last_frame.filename)
+                        if fname == '<unilab_script>':
+                            err.write(f"Error on line {last_frame.lineno}:\n")
+                        else:
+                            err.write(f"Error in {fname} (line {last_frame.lineno}):\n")
+                    
+                    # Write the final error message
+                    err_msg = str(e)
+                    if err_msg:
+                        # Strip redundant "Error in 'func':" if we already wrote "Error in func (line X):"
+                        err.write(f"{err_msg}")
+                    else:
+                        err.write(f"{type(e).__name__}")
                 
                 duration = time.time() - start_ts
                 stdout = out.getvalue()
@@ -532,7 +569,6 @@ class TranspilerEngine(BaseEngine):
                     for idx in plot_indices:
                         if idx in final_render_indices and render_func and os.environ.get('UNILAB_WEB_MODE') != '1':
                             # In CLI mode, we don't delete yet because render_func might need it
-                            # Actually, render_func usually prints to terminal.
                             pass
                         stdout_lines[idx] = ""
 
@@ -552,11 +588,12 @@ class TranspilerEngine(BaseEngine):
                     }
                 )
             except Exception as e:
-                import traceback
-                traceback.print_exc()
-                return ExecutionResult(False, "", f"Transpilation Error: {str(e)}\n{traceback.format_exc()}", 1, time.time() - start_ts, self._get_variables(), [])
+                # Log the internal error for developers but don't show to user
+                logger.error(f"Internal Engine Error: {e}", exc_info=True)
+                return ExecutionResult(False, "", f"System Error: An internal error occurred during processing. {str(e)}", 1, time.time() - start_ts, self._get_variables(), [])
         except Exception as e:
-            return ExecutionResult(False, "", f"Outer Error: {str(e)}", 1, time.time() - start_ts, self._get_variables(), [])
+            logger.error(f"Outer Engine Error: {e}", exc_info=True)
+            return ExecutionResult(False, "", f"Platform Error: {str(e)}", 1, time.time() - start_ts, self._get_variables(), [])
 
         finally:
             os.chdir(old_cwd)

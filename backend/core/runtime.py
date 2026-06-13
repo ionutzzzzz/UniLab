@@ -174,10 +174,18 @@ def unilab_ellip(*args, **kwargs):
     kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
     return signal.ellip(*args, **kwargs)
 
-def unilab_tf(num, den=None): 
-    if den is None:
+def unilab_tf(num=None, den=None): 
+    # Handle tf() or tf([], [])
+    if num is None or (hasattr(num, '__len__') and len(num) == 0):
+        if den is None or (hasattr(den, '__len__') and len(den) == 0):
+            # Return a default or raise a better error
+            raise ValueError("Error in 'tf': Missing numerator coefficients.")
+        num = [1]
+        
+    if den is None or (hasattr(den, '__len__') and len(den) == 0):
         if isinstance(num, signal.lti): return num.to_tf()
         return signal.TransferFunction(_unilab_vec(num), [1])
+        
     return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
 
 # --- Standard UniLab Constants ---
@@ -465,15 +473,57 @@ def unilab_step(sys, T=None):
     return t, y
 
 def unilab_impulse(sys, T=None): 
-    if T is not None:
+    # Handle empty T arrays - scipy.impulse requires None or non-empty array
+    if T is not None and isinstance(T, np.ndarray) and T.size == 0:
+        T = None
+    elif T is not None and isinstance(T, list) and len(T) == 0:
+        T = None
+    elif T is not None:
         if isinstance(T, (int, float, np.integer, np.floating)):
             T = np.linspace(0, T, 1000)
         T = _unilab_vec(T)
     t, y = signal.impulse(sys, T=T)
     return t, y
 
-def unilab_lsim(sys, U, T): 
-    t, y, x = signal.lsim(sys, _unilab_vec(U), _unilab_vec(T))
+def unilab_lsim(sys, U, T):
+    # Handle empty T
+    if T is not None and ( (isinstance(T, np.ndarray) and T.size == 0) or (isinstance(T, list) and len(T) == 0) ):
+        T = None
+    
+    if T is None:
+        T = np.linspace(0, 10, 1000)
+    
+    T_vec = _unilab_vec(T)
+    U_vec = _unilab_vec(U)
+    
+    # Handle symbolic U
+    if hasattr(U_vec, 'free_symbols'):
+        import sympy
+        free_symbols = U_vec.free_symbols
+        if free_symbols:
+            # Prefer 't', then 's', then whatever else
+            sym_names = [s.name for s in free_symbols]
+            if 't' in sym_names:
+                var = sympy.Symbol('t')
+            elif 's' in sym_names:
+                var = sympy.Symbol('s')
+            else:
+                var = sorted(list(free_symbols), key=lambda x: x.name)[0]
+            
+            f_u = sympy.lambdify(var, U_vec, 'numpy')
+            try:
+                U_vec = f_u(T_vec)
+                # If U_vec is a scalar (e.g. U = 1), broadcast it
+                if np.isscalar(U_vec):
+                    U_vec = np.full_like(T_vec, U_vec)
+            except Exception:
+                pass
+    
+    # Ensure U_vec is an array of same length as T_vec
+    if np.isscalar(U_vec):
+        U_vec = np.full_like(T_vec, U_vec)
+    
+    t, y, x = signal.lsim(sys, U_vec, T_vec)
     return t, y
 
 def unilab_bode(sys, w=None): 
@@ -615,13 +665,24 @@ def unilab_acker(A, B, p):
     return K
 
 def unilab_initial(sys, x0, T=None):
+    # Handle empty T arrays
+    if T is not None and isinstance(T, np.ndarray) and T.size == 0:
+        T = None
+    elif T is not None and isinstance(T, list) and len(T) == 0:
+        T = None
+        
+    # Handle empty x0
+    x0_vec = _unilab_vec(x0)
+    if x0_vec is not None and hasattr(x0_vec, '__len__') and len(x0_vec) == 0:
+        x0_vec = None
+        
     if not isinstance(sys, signal.StateSpace):
         sys = sys.to_ss()
     if T is None: T = np.linspace(0, 10, 1000)
     elif isinstance(T, (int, float, np.integer, np.floating)): T = np.linspace(0, T, 1000)
     T = _unilab_vec(T)
     U = np.zeros_like(T)
-    t, y, x = signal.lsim(sys, U, T, X0=_unilab_vec(x0))
+    t, y, x = signal.lsim(sys, U, T, X0=x0_vec)
     return t, y, x
 
 def unilab_stepinfo(sys):
@@ -1226,8 +1287,32 @@ def unilab_call_nargout(nargout, obj, *args, **kwargs):
                 elif name == 'imag': res = np.imag(*args, **kwargs)
                 else:
                     res = obj(*args, **kwargs)
-            except:
-                res = obj(*args, **kwargs)
+            except Exception as e:
+                # If it's already a UniLab error or we want to pass it up with more info
+                if hasattr(obj, '__name__'):
+                    func_name = obj.__name__
+                elif hasattr(obj, '__class__'):
+                    func_name = obj.__class__.__name__
+                else:
+                    func_name = "unknown function"
+                
+                # Check for common Scipy/Numpy errors and give better hints
+                err_msg = str(e)
+                if "T must be a rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Time vector T must be a 1D array (vector).") from e
+                if "Denominator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Denominator must be a vector of coefficients.") from e
+                if "Numerator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Numerator must be a vector of coefficients.") from e
+                if "must be at least as long as the numerator" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': System must be proper (denominator degree >= numerator degree).") from e
+                if "takes" in err_msg and "positional argument" in err_msg:
+                    raise TypeError(f"Error in '{func_name}': Incorrect number of arguments. {err_msg}") from e
+                
+                # Re-raise with function name context if not already present
+                if func_name not in err_msg:
+                    raise type(e)(f"Error in '{func_name}': {err_msg}") from e
+                raise
         finally:
             _unilab_nargout_ctx.reset(token)
             
@@ -1273,23 +1358,46 @@ def unilab_call(obj, *args, **kwargs):
             # Check by name and identity to be absolutely sure
             try:
                 name = getattr(obj, '__name__', None)
-                if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
-                if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
-                if name == 'min' or obj == builtins.min: return unilab_min(*args, **kwargs)
-                if name == 'max' or obj == builtins.max: return unilab_max(*args, **kwargs)
-                if name == 'sum' or obj == builtins.sum: return unilab_sum(*args, **kwargs)
-                if name == 'any' or obj == builtins.any: return unilab_any(*args, **kwargs)
-                if name == 'all' or obj == builtins.all: return unilab_all(*args, **kwargs)
-                if name == 'real' or obj == builtins.real: return real(*args, **kwargs)
-                if name == 'imag' or obj == builtins.imag: return imag(*args, **kwargs)
-            except: pass
-
-            res = obj(*args, **kwargs)
-            if isinstance(res, tuple) and len(res) > 0:
-                return res[0]
-            return res
+                if name == 'abs' or obj == builtins.abs: res = unilab_abs(*args, **kwargs)
+                elif name == 'round' or obj == builtins.round: res = round(*args, **kwargs)
+                elif name == 'min' or obj == builtins.min: res = unilab_min(*args, **kwargs)
+                elif name == 'max' or obj == builtins.max: res = unilab_max(*args, **kwargs)
+                elif name == 'sum' or obj == builtins.sum: res = unilab_sum(*args, **kwargs)
+                elif name == 'any' or obj == builtins.any: res = unilab_any(*args, **kwargs)
+                elif name == 'all' or obj == builtins.all: res = unilab_all(*args, **kwargs)
+                elif name == 'real': res = np.real(*args, **kwargs)
+                elif name == 'imag': res = np.imag(*args, **kwargs)
+                else:
+                    res = obj(*args, **kwargs)
+            except Exception as e:
+                if hasattr(obj, '__name__'):
+                    func_name = obj.__name__
+                elif hasattr(obj, '__class__'):
+                    func_name = obj.__class__.__name__
+                else:
+                    func_name = "unknown function"
+                
+                err_msg = str(e)
+                if "T must be a rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Time vector T must be a 1D array (vector).") from e
+                if "Denominator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Denominator must be a vector of coefficients.") from e
+                if "Numerator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Numerator must be a vector of coefficients.") from e
+                if "must be at least as long as the numerator" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': System must be proper (denominator degree >= numerator degree).") from e
+                if "takes" in err_msg and "positional argument" in err_msg:
+                    raise TypeError(f"Error in '{func_name}': Incorrect number of arguments. {err_msg}") from e
+                
+                if func_name not in err_msg:
+                    raise type(e)(f"Error in '{func_name}': {err_msg}") from e
+                raise
         finally:
             _unilab_nargout_ctx.reset(token)
+            
+        if isinstance(res, tuple) and len(res) > 0:
+            return res[0]
+        return res
     
     # If not callable but called with no args, it might be a variable being accessed like a func (MATLAB style)
     if len(args) == 0 and len(kwargs) == 0: return obj
