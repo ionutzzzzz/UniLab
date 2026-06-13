@@ -1,6 +1,8 @@
 function [model, estim_params] = estimate(model, data)
     % ESTIMATE Simplified parameter estimation
     
+    if nargin < 1, model = []; end
+    if nargin < 2, data = []; end
     fprintf('Estimating parameters for %s model...\n', model.Type);
     % Mock estimation: sets parameters to some dummy values
     if strcmp(model.Type, 'VAR')

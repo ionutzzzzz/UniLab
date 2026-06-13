@@ -1,5 +1,6 @@
 function [Q, R] = gram_schmidt(A)
     % GRAM_SCHMIDT Classical Gram-Schmidt process
+    if nargin < 1, A = []; end
     [m, n] = size(A);
     Q = zeros(m, n);
     R = zeros(n, n);

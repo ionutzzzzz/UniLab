@@ -2,24 +2,47 @@ import sys
 import threading
 import queue
 import time
-try:
-    import numpy as np
-except ImportError:
-    np = None
+import numpy as np
+from scipy import signal
 import os
 import json
 from collections import Counter
 
-# Guard Matplotlib
+# Fix for Qt stability on some Linux distros
+os.environ['GTK_MODULES'] = ''
+os.environ['QT_QPA_PLATFORMTHEME'] = ''
+os.environ['QT_STYLE_OVERRIDE'] = 'Fusion'
+
+# Headless environment detection
+IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
+if IS_HEADLESS:
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
 try:
-    import matplotlib
-    import matplotlib.pyplot as plt
-    from matplotlib.figure import Figure
-    import matplotlib.patches
+    import matplotlib    # Try to be more flexible with the backend
+    if 'matplotlib.backends' not in sys.modules:
+        try:
+            if IS_HEADLESS:
+                matplotlib.use('Agg')
+            else:
+                matplotlib.use('Qt5Agg')
+        except:
+            try: matplotlib.use('QtAgg')
+            except: pass
+except Exception:
+    pass
+
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+import matplotlib.patches
+
+try:
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:
-    matplotlib = None
-    plt = None
-    Figure = None
+    try:
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    except ImportError:
+        FigureCanvas = None
 
 # Provision a mock plt if missing
 if plt is None:

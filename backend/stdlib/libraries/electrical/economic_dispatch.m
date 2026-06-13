@@ -4,6 +4,10 @@ function [P_gen] = economic_dispatch(costs, P_min, P_max, P_demand)
     % P_min, P_max: generation limits
     % P_demand: total system demand
     
+    if nargin < 1, costs = []; end
+    if nargin < 2, P_min = []; end
+    if nargin < 3, P_max = []; end
+    if nargin < 4, P_demand = []; end
     num_units = size(costs, 1);
     
     % Lambda iteration method (Simplified)

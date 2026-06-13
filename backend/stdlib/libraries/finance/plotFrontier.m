@@ -1,6 +1,7 @@
 function plotFrontier(obj)
     % PLOTFRONTIER Mock - print values of frontier
     
+    if nargin < 1, obj = []; end
     fprintf('Plotting Efficient Frontier for Portfolio...\n');
     if isempty(obj.AssetMean)
         fprintf('No assets defined in portfolio.\n');

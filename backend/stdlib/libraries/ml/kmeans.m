@@ -2,6 +2,8 @@ function [centroids, idx] = kmeans(X, K, max_iters, init_method)
     % KMEANS K-means clustering algorithm
     % [centroids, idx] = kmeans(X, K, max_iters, init_method)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, K = []; end
     if nargin < 4, init_method = 'random'; end
     if nargin < 3, max_iters = 100; end
     

@@ -1,5 +1,9 @@
 function x = brent_method_root(f, a, b, tol)
     % BRENT_METHOD_ROOT Brent's root finding
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, tol = []; end
     fa = f(a); fb = f(b);
     if fa * fb > 0
         error('Root must be bracketed');

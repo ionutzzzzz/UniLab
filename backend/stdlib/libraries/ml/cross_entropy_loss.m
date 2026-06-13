@@ -3,6 +3,8 @@ function [loss] = cross_entropy_loss(y_true, y_pred)
     % loss = -sum(y_true * log(y_pred))
     
     % Avoid log(0)
+    if nargin < 1, y_true = []; end
+    if nargin < 2, y_pred = []; end
     eps = 1e-15;
     y_pred = max(min(y_pred, 1 - eps), eps);
     

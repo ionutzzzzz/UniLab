@@ -1,4 +1,5 @@
 function [y, t] = impulse(sys, T)
+    if nargin < 1, sys = []; end
     if nargin < 2, T = []; end
     [t, y] = unilab_impulse(sys, T);
     plot(t, y);

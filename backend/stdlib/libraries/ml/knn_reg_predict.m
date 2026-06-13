@@ -1,6 +1,9 @@
 function [y_pred] = knn_reg_predict(X_train, y_train, X_test, K)
     % KNN_REG_PREDICT K-Nearest Neighbors regression
     
+    if nargin < 1, X_train = []; end
+    if nargin < 2, y_train = []; end
+    if nargin < 3, X_test = []; end
     if nargin < 4, K = 3; end
     
     m_test = size(X_test, 1);

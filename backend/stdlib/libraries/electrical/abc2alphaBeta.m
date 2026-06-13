@@ -2,6 +2,7 @@ function [ab0] = abc2alphaBeta(abc)
     % ABC2ALPHABETA Performs Clarke transformation (abc to alpha-beta-0)
     % ab0 = abc2alphaBeta(abc)
     
+    if nargin < 1, abc = []; end
     if size(abc, 2) ~= 3
         abc = abc';
     end

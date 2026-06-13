@@ -1,5 +1,6 @@
 function b = isdiag(A)
     % ISDIAG Determine if matrix is diagonal
+    if nargin < 1, A = []; end
     if size(A, 1) ~= size(A, 2)
         b = false;
         return;

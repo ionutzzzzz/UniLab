@@ -2,6 +2,7 @@ function [Q, R] = qr_decomposition(A)
     % QR_DECOMPOSITION QR decomposition using Gram-Schmidt process
     % A = Q * R
     
+    if nargin < 1, A = []; end
     [m, n] = size(A);
     Q = zeros(m, n);
     R = zeros(n, n);

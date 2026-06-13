@@ -1,6 +1,9 @@
 function [M] = mandelbrot(h, w, max_iter)
     % MANDELBROT Generate a Mandelbrot set visualization grid
     
+    if nargin < 1, h = []; end
+    if nargin < 2, w = []; end
+    if nargin < 3, max_iter = []; end
     M = zeros(h, w);
     for i = 1:h
         for j = 1:w

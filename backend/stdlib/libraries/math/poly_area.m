@@ -2,6 +2,8 @@ function [area] = poly_area(x, y)
     % POLY_AREA Calculate area of a polygon using the Shoelace formula
     % [area] = poly_area(x, y)
     
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
     n = length(x);
     area = 0;
     for i = 1:n

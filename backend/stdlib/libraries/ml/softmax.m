@@ -3,6 +3,7 @@ function [y] = softmax(x)
     % y = exp(x) / sum(exp(x))
     
     % Subtract max for numerical stability
+    if nargin < 1, x = []; end
     e_x = exp(x - max(x));
     y = e_x ./ sum(e_x, 1);
 end

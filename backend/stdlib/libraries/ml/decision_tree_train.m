@@ -2,6 +2,8 @@ function [tree] = decision_tree_train(X, y, max_depth, min_samples_split, max_fe
     % DECISION_TREE_TRAIN Train a simple classification/regression tree
     % tree = decision_tree_train(X, y, max_depth, min_samples_split, max_features, min_impurity_decrease)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 6, min_impurity_decrease = 0; end
     if nargin < 5, max_features = size(X, 2); end
     if nargin < 4, min_samples_split = 2; end
@@ -95,6 +97,8 @@ function [tree] = decision_tree_train(X, y, max_depth, min_samples_split, max_fe
 end
 
 function [counts] = histcounts(y, bins)
+    if nargin < 1, y = []; end
+    if nargin < 2, bins = []; end
     counts = zeros(1, length(bins));
     for i = 1:length(bins)
         counts(i) = sum(y == bins(i));

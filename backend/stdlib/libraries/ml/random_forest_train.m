@@ -1,6 +1,8 @@
 function [forest] = random_forest_train(X, y, n_trees, max_depth, min_samples_split, max_features, bootstrap)
     % RANDOM_FOREST_TRAIN Train a simple random forest classifier
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 7, bootstrap = 1; end
     if nargin < 6, max_features = floor(sqrt(size(X, 2))); end
     if nargin < 5, min_samples_split = 2; end

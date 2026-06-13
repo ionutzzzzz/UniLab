@@ -2,6 +2,9 @@ function x = secant_method(f, x0, x1, tol, max_iter)
     % SECANT_METHOD Find root of f(x) = 0 using the secant method
     % x = secant_method(f, x0, x1, tol, max_iter)
     
+    if nargin < 1, f = []; end
+    if nargin < 2, x0 = []; end
+    if nargin < 3, x1 = []; end
     if nargin < 4, tol = 1e-6; end
     if nargin < 5, max_iter = 100; end
     

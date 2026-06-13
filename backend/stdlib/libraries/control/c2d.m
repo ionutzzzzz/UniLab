@@ -2,6 +2,8 @@ function [sysd] = c2d(sys, dt, method)
     % C2D Convert continuous-time system to discrete-time
     % sysd = c2d(sys, dt, method)
     % method defaults to 'zoh'
+    if nargin < 1, sys = []; end
+    if nargin < 2, dt = []; end
     if nargin < 3, method = 'zoh'; end
     res = unilab_c2d(sys, dt, method);
     % Reconstruct appropriate system type based on res

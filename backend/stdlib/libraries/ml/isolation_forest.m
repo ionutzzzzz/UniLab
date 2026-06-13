@@ -1,6 +1,7 @@
 function [scores] = isolation_forest(X, n_estimators, max_samples)
     % ISOLATION_FOREST Simple anomaly detection using Isolation Forest principle
     
+    if nargin < 1, X = []; end
     if nargin < 3, max_samples = 256; end
     if nargin < 2, n_estimators = 100; end
     

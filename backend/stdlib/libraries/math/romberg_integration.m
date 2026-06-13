@@ -1,5 +1,9 @@
 function R = romberg_integration(f, a, b, tol)
     % ROMBERG_INTEGRATION Romberg integration
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, tol = []; end
     h = b - a;
     R = zeros(10, 10);
     R(1,1) = h/2 * (f(a) + f(b));

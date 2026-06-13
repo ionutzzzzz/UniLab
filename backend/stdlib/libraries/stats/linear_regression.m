@@ -2,6 +2,8 @@ function [slope, intercept, r2] = linear_regression(x, y)
     % Performs simple linear regression
     % [slope, intercept, r2] = linear_regression(x, y)
 
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
     x = x(:);
     y = y(:);
     n = length(x);

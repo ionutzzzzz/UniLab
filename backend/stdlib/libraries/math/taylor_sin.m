@@ -1,6 +1,9 @@
 function [y] = taylor_sin(x, a, n)
     % TAYLOR_SIN Taylor series approximation for sin(x) around point a up to degree n
     
+    if nargin < 1, x = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, n = []; end
     y = zeros(size(x));
     
     for k = 0:n

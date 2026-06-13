@@ -1,6 +1,9 @@
 function [root] = bisection_method(f, a, b, tol, max_iters)
     % BISECTION_METHOD Find root of f(x) = 0 in the interval [a, b]
     
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
     if nargin < 4, tol = 1e-6; end
     if nargin < 5, max_iters = 100; end
     

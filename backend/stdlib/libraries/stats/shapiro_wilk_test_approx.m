@@ -1,5 +1,6 @@
 function [W, p_val] = shapiro_wilk_test_approx(x)
     % SHAPIRO_WILK_TEST_APPROX Simplified Shapiro-Wilk test for normality
+    if nargin < 1, x = []; end
     n = length(x);
     x = sort(x);
     m = mean(x);

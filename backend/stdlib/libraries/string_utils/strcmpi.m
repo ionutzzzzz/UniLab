@@ -3,6 +3,8 @@ function b = strcmpi(s1, s2)
     %   B = STRCMPI(S1, S2) returns true if S1 and S2 are identical,
     %   ignoring case differences.
 
+    if nargin < 1, s1 = []; end
+    if nargin < 2, s2 = []; end
     if ischar(s1) && ischar(s2)
         b = strcmp(lower(s1), lower(s2));
     elseif iscell(s1) || iscell(s2)

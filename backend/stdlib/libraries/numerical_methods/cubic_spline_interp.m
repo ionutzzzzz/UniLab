@@ -1,5 +1,8 @@
 function [yi, a, b, c, d] = cubic_spline_interp(x, y, xi)
     % CUBIC_SPLINE_INTERP Natural cubic spline interpolation
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
+    if nargin < 3, xi = []; end
     n = length(x) - 1;
     h = diff(x);
     

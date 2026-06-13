@@ -1,5 +1,6 @@
 function D = floyd_warshall(A)
     % FLOYD_WARSHALL All-pairs shortest paths
+    if nargin < 1, A = []; end
     n = size(A, 1);
     D = A;
     D(D == 0) = inf;

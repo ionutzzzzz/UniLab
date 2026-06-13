@@ -1,5 +1,6 @@
 function [] = bar_plot(y, labels)
     % BAR_PLOT Create an ASCII bar chart
+    if nargin < 1, y = []; end
     if nargin < 2
         labels = {};
     end

@@ -1,5 +1,8 @@
 function [sig_x, sig_p, check] = uncertainty_principle_check(psi, X, P, hbar)
     % UNCERTAINTY_PRINCIPLE_CHECK Verify sigma_x * sigma_p >= hbar/2
+    if nargin < 1, psi = []; end
+    if nargin < 2, X = []; end
+    if nargin < 3, P = []; end
     if nargin < 4, hbar = 1; end
     
     ex = expectation_value_calc(psi, X);

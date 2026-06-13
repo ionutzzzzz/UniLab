@@ -1,4 +1,5 @@
 function out = edge_detect_sobel_y(img)
+    if nargin < 1, img = []; end
     [rows, cols] = size(img);
     out = zeros(rows, cols);
     kernel = [-1 -2 -1; 0 0 0; 1 2 1];

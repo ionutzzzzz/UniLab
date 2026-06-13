@@ -1,5 +1,6 @@
 function b = is_orthogonal(A)
     % IS_ORTHOGONAL norm(A'*A - I) < tol
+    if nargin < 1, A = []; end
     [m, n] = size(A);
     if m ~= n
         b = false;

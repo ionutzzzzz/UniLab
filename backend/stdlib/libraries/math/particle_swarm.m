@@ -2,6 +2,11 @@ function [g_best, f_g_best] = particle_swarm(f, n_particles, dim, n_iters, bound
     % PARTICLE_SWARM Particle Swarm Optimization
     
     % bounds is [min, max]
+    if nargin < 1, f = []; end
+    if nargin < 2, n_particles = []; end
+    if nargin < 3, dim = []; end
+    if nargin < 4, n_iters = []; end
+    if nargin < 5, bounds = []; end
     low = bounds(1);
     high = bounds(2);
     

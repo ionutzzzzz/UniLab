@@ -3,6 +3,9 @@ function [R_delta] = wye_to_delta(Ra, Rb, Rc)
     % Ra, Rb, Rc are resistances from center to nodes
     % Returns [R12, R23, R31]
     
+    if nargin < 1, Ra = []; end
+    if nargin < 2, Rb = []; end
+    if nargin < 3, Rc = []; end
     sum_prod = Ra*Rb + Rb*Rc + Rc*Ra;
     R12 = sum_prod / Rc;
     R23 = sum_prod / Ra;
@@ -15,6 +18,9 @@ function [R_wye] = delta_to_wye(R12, R23, R31)
     % DELTA_TO_WYE Convert Delta (Δ) resistance network to Wye (Y)
     % Returns [Ra, Rb, Rc]
     
+    if nargin < 1, R12 = []; end
+    if nargin < 2, R23 = []; end
+    if nargin < 3, R31 = []; end
     sum_r = R12 + R23 + R31;
     Ra = (R12 * R31) / sum_r;
     Rb = (R12 * R23) / sum_r;

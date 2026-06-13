@@ -3,6 +3,8 @@ function [Y] = power_analyze(nodes, branches)
     % Returns Y-Bus matrix for a given set of branches
     % branches: [from, to, R, L, C] matrix
     
+    if nargin < 1, nodes = []; end
+    if nargin < 2, branches = []; end
     num_nodes = max(max(branches(:, 1:2)));
     Y = zeros(num_nodes, num_nodes);
     

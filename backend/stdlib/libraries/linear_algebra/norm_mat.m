@@ -1,5 +1,6 @@
 function n = norm_mat(A, type)
     % NORM_MAT Matrix norm
+    if nargin < 1, A = []; end
     if nargin < 2, type = 2; end
     if ischar(type)
         if strcmp(type, 'fro')

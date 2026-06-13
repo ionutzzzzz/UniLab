@@ -1,5 +1,11 @@
 function price = binprice(S, K, T, r, sigma, steps, type, american)
     % BINPRICE Option price using Cox-Ross-Rubinstein binomial model
+    if nargin < 1, S = []; end
+    if nargin < 2, K = []; end
+    if nargin < 3, T = []; end
+    if nargin < 4, r = []; end
+    if nargin < 5, sigma = []; end
+    if nargin < 6, steps = []; end
     if nargin < 7, type = 'call'; end
     if nargin < 8, american = false; end
     

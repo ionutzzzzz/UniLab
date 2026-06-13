@@ -1,5 +1,9 @@
 function [x] = brent_method_root(f, a, b, tol)
     % BRENT_METHOD_ROOT Robust root finding
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, tol = []; end
     fa = unilab_call(f, a);
     fb = unilab_call(f, b);
     if fa * fb > 0, error('f(a) and f(b) must have opposite signs'); end

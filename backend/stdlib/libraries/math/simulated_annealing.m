@@ -1,6 +1,11 @@
 function [x_best, f_best] = simulated_annealing(f, x0, T0, alpha, n_iters)
     % SIMULATED_ANNEALING Global optimization algorithm
     
+    if nargin < 1, f = []; end
+    if nargin < 2, x0 = []; end
+    if nargin < 3, T0 = []; end
+    if nargin < 4, alpha = []; end
+    if nargin < 5, n_iters = []; end
     x = x0;
     f_current = unilab_call(f, x);
     x_best = x;

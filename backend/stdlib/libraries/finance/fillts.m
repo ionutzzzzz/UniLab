@@ -1,6 +1,7 @@
 function obj = fillts(obj, method)
     % FILLTS Handles NaNs in the data
     
+    if nargin < 1, obj = []; end
     if nargin < 2
         method = 'linear';
     end

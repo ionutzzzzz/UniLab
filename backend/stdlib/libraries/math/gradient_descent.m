@@ -2,6 +2,8 @@ function [x, f_val] = gradient_descent(f, x0, alpha, num_iters)
     % GRADIENT_DESCENT Generic gradient descent optimization
     % [x, f_val] = gradient_descent(f, x0, alpha, num_iters)
     
+    if nargin < 1, f = []; end
+    if nargin < 2, x0 = []; end
     if nargin < 4, num_iters = 1000; end
     if nargin < 3, alpha = 0.01; end
     

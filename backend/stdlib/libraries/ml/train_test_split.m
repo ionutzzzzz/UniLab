@@ -2,6 +2,8 @@ function [X_train, X_test, y_train, y_test] = train_test_split(X, y, test_size)
     % TRAIN_TEST_SPLIT Split data into training and testing sets
     % [X_train, X_test, y_train, y_test] = train_test_split(X, y, test_size)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 3, test_size = 0.2; end
     
     n = size(X, 1);

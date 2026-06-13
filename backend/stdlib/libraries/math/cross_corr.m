@@ -1,6 +1,8 @@
 function [c] = cross_corr(x, y)
     % CROSS_CORR Circular cross-correlation of two signals
     
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
     n = length(x);
     c = zeros(n, 1);
     for k = 1:n

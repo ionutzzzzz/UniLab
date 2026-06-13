@@ -1,5 +1,10 @@
 function [v, lambda] = inverse_power_iteration(A, x0, mu, tol, max_iters)
     % INVERSE_POWER_ITERATION Find eigenvalue closest to mu
+    if nargin < 1, A = []; end
+    if nargin < 2, x0 = []; end
+    if nargin < 3, mu = []; end
+    if nargin < 4, tol = []; end
+    if nargin < 5, max_iters = []; end
     n = size(A, 1);
     I = eye(n);
     B = A - mu * I;

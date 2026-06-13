@@ -3,6 +3,8 @@ function [log_priors, log_likelihoods, classes] = multinomial_naive_bayes_train(
     % Useful for discrete counts (e.g., text classification)
     % alpha is the smoothing parameter (Laplace smoothing if alpha=1)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 3, alpha = 1; end
     
     [m, n] = size(X);

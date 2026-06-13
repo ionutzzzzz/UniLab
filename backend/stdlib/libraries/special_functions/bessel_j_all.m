@@ -1,5 +1,7 @@
 function y = bessel_j_all(n, x)
     % BESSEL_J_ALL Bessel function J_n(x) for integer n
+    if nargin < 1, n = []; end
+    if nargin < 2, x = []; end
     if n == 0
         y = bessel_j0_approx(x, 10);
     elseif n == 1

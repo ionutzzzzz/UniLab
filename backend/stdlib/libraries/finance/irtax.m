@@ -3,6 +3,8 @@ function output = irtax(yields, tax_rate)
     % If tax_rate is provided, returns after-tax yields.
     % If two yields are provided (taxable, tax_exempt), returns implied tax rate.
     
+    if nargin < 1, yields = []; end
+    if nargin < 2, tax_rate = []; end
     if nargin == 2
         output = yields .* (1 - tax_rate);
     else

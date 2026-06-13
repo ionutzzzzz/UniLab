@@ -1,5 +1,8 @@
 function y = incomplete_beta_function(x, a, b, n_terms)
     % INCOMPLETE_BETA_FUNCTION Incomplete beta function B(x; a, b)
+    if nargin < 1, x = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
     if nargin < 4, n_terms = 50; end
     sum_val = 0;
     for k = 0:n_terms

@@ -3,6 +3,7 @@ function p = nprime(n)
 %
 %   p = function p = nprime(n)
 
+    if nargin < 1, n = []; end
     validateattributes(n, {'numeric'}, ...
         {'scalar','integer','positive','finite'});
 

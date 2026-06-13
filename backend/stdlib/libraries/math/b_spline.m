@@ -1,6 +1,9 @@
 function [B] = b_spline(P, t, degree)
     % B_SPLINE Simplified B-spline calculation (uniform knots)
     
+    if nargin < 1, P = []; end
+    if nargin < 2, t = []; end
+    if nargin < 3, degree = []; end
     n = size(P, 1);
     m = length(t);
     B = zeros(m, size(P, 2));

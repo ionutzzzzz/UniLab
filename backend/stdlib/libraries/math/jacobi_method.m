@@ -1,6 +1,11 @@
 function [x] = jacobi_method(A, b, x0, tol, max_iters)
     % JACOBI_METHOD Iterative solver for linear systems Ax = b
     
+    if nargin < 1, A = []; end
+    if nargin < 2, b = []; end
+    if nargin < 3, x0 = []; end
+    if nargin < 4, tol = []; end
+    if nargin < 5, max_iters = []; end
     n = length(b);
     x = x0;
     D = diag(diag(A));

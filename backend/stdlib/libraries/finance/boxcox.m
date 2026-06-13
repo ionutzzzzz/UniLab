@@ -1,6 +1,7 @@
 function [trans_data, lambda] = boxcox(data, lambda)
     % BOXCOX Box-Cox transformation
     
+    if nargin < 1, data = []; end
     if nargin < 2
         lambda = 0.5;
     end

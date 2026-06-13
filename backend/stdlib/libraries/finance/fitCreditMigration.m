@@ -1,6 +1,7 @@
 function trans_matrix = fitCreditMigration(data)
     % FITCREDITMIGRATION Generates transition matrices
     % data: N x 2 matrix of [start_rating, end_rating]
+    if nargin < 1, data = []; end
     num_ratings = max(max(data));
     trans_matrix = zeros(num_ratings, num_ratings);
     

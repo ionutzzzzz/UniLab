@@ -1,5 +1,6 @@
 function c = closeness_centrality(A)
     % CLOSENESS_CENTRALITY C(u) = (n-1) / sum(dist(u, v))
+    if nargin < 1, A = []; end
     n = size(A, 1);
     D = floyd_warshall(A);
     c = zeros(n, 1);

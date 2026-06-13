@@ -2,6 +2,8 @@ function [p] = hermite_poly(n, x)
     % HERMITE_POLY Calculate the n-th degree physicist's Hermite polynomial
     % H_n(x) uses recursion
     
+    if nargin < 1, n = []; end
+    if nargin < 2, x = []; end
     if n == 0
         p = ones(size(x));
         return;

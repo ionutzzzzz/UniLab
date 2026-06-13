@@ -1,5 +1,9 @@
 function p = bond_price_calc(par, coupon_rate, ytm, years, freq)
     % BOND_PRICE_CALC Price of a coupon bond
+    if nargin < 1, par = []; end
+    if nargin < 2, coupon_rate = []; end
+    if nargin < 3, ytm = []; end
+    if nargin < 4, years = []; end
     if nargin < 5, freq = 2; end
     c = par * coupon_rate / freq;
     r = ytm / freq;

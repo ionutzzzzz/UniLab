@@ -1,5 +1,7 @@
 function [order, parent] = bfs_search(A, start_node)
     % BFS_SEARCH Breadth-First Search traversal
+    if nargin < 1, A = []; end
+    if nargin < 2, start_node = []; end
     n = size(A, 1);
     visited = false(1, n);
     order = [];

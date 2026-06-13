@@ -1,5 +1,7 @@
 function [prec] = precision_score(y_true, y_pred)
     % PRECISION_SCORE Calculate precision for binary classification (class 1)
+    if nargin < 1, y_true = []; end
+    if nargin < 2, y_pred = []; end
     y_true = y_true(:);
     y_pred = y_pred(:);
     tp = sum((y_true == 1) & (y_pred == 1));

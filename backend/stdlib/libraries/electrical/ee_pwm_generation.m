@@ -3,6 +3,9 @@ function [pulses, carrier] = ee_pwm_generation(v_ref, fs, f_carrier, type)
     % [pulses, carrier] = ee_pwm_generation(v_ref, fs, f_carrier, type)
     % type: 'sawtooth' or 'triangle'
     
+    if nargin < 1, v_ref = []; end
+    if nargin < 2, fs = []; end
+    if nargin < 3, f_carrier = []; end
     if nargin < 4, type = 'triangle'; end
     
     t = (0:length(v_ref)-1) / fs;

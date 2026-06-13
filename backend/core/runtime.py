@@ -4,10 +4,10 @@ except ImportError:
     np = None
 
 try:
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
-    # Ensure Agg backend is used for headless environments (like our GUI)
-    plt.use('Agg')
 except ImportError:
     plt = None
     Figure = None
@@ -18,6 +18,9 @@ import pathlib
 import builtins
 import inspect
 import math
+import sys
+
+IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
 
 try:
     import scipy.signal as signal

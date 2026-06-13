@@ -2,6 +2,9 @@ function [eff_map] = ee_motor_efficiency_map(T_range, w_range, P_loss_func)
     % EE_MOTOR_EFFICIENCY_MAP Generates a motor efficiency map
     % T_range: torque vector, w_range: speed vector
     
+    if nargin < 1, T_range = []; end
+    if nargin < 2, w_range = []; end
+    if nargin < 3, P_loss_func = []; end
     [T, W] = meshgrid(T_range, w_range);
     P_out = T .* W;
     

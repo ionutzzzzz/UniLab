@@ -1,5 +1,6 @@
 function A_pinv = pseudoinverse_approx(A)
     % PSEUDOINVERSE_APPROX Moore-Penrose pseudoinverse using SVD
+    if nargin < 1, A = []; end
     [U, S, V] = svd(A);
     s = diag(S);
     tol = max(size(A)) * eps(max(s));

@@ -1,5 +1,6 @@
 function [pks, locs] = find_peaks(x, min_height)
     % FIND_PEAKS Find local maxima peaks and their indices
+    if nargin < 1, x = []; end
     if nargin < 2, min_height = -inf; end
     
     n = length(x);

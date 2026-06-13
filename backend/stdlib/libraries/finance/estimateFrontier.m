@@ -1,6 +1,7 @@
 function [weights, buy_sell] = estimateFrontier(obj, num_ports)
     % ESTIMATEFRONTIER Simple implementation of efficient frontier estimation
     
+    if nargin < 1, obj = []; end
     if nargin < 2
         num_ports = 10;
     end

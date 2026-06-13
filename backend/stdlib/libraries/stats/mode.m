@@ -1,6 +1,7 @@
 function [m, f] = mode(x)
     % MODE Find most frequent values in an array
     
+    if nargin < 1, x = []; end
     x = x(:);
     u = unique(x);
     counts = zeros(size(u));

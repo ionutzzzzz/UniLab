@@ -3,6 +3,9 @@ function [v_interp] = interp1_custom(x, v, x_interp, method)
     % [v_interp] = interp1_custom(x, v, x_interp, method)
     % methods: 'linear' (default), 'lagrange'
     
+    if nargin < 1, x = []; end
+    if nargin < 2, v = []; end
+    if nargin < 3, x_interp = []; end
     if nargin < 4, method = 'linear'; end
     
     if strcmp(method, 'linear')

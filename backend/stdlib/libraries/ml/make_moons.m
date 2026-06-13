@@ -2,6 +2,7 @@ function [X, y] = make_moons(n_samples, noise)
     % MAKE_MOONS Generate two interleaving half circles
     % [X, y] = make_moons(n_samples, noise)
     
+    if nargin < 1, n_samples = []; end
     if nargin < 2, noise = 0.1; end
     
     n_samples_out = floor(n_samples / 2);

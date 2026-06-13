@@ -1,5 +1,7 @@
 function I = simpson(y, x)
     % SIMPSON Simpson's rule
+    if nargin < 1, y = []; end
+    if nargin < 2, x = []; end
     n = length(x) - 1;
     if mod(n, 2) ~= 0
         error('Number of intervals must be even');

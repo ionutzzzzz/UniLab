@@ -1,4 +1,6 @@
 function [dist, path] = dijkstra(A, start_node)
+    if nargin < 1, A = []; end
+    if nargin < 2, start_node = []; end
     n = size(A, 1);
     dist = inf(1, n);
     visited = false(1, n);

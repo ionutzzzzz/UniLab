@@ -1,5 +1,8 @@
 function [cf, times] = cfamounts(par, coupon_rate, years, freq)
     % CFAMOUNTS Calculate cash flow amounts
+    if nargin < 1, par = []; end
+    if nargin < 2, coupon_rate = []; end
+    if nargin < 3, years = []; end
     if nargin < 4, freq = 2; end
     n = ceil(years * freq);
     cf = ones(1, n) * (par * coupon_rate / freq);

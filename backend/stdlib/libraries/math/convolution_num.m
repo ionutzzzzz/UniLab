@@ -2,6 +2,9 @@ function [c] = convolution_num(f, g, h)
     % CONVOLUTION_NUM Numerical convolution of two signals
     % (f * g)(t) = integral f(tau) g(t - tau) d tau
     
+    if nargin < 1, f = []; end
+    if nargin < 2, g = []; end
+    if nargin < 3, h = []; end
     n_f = length(f);
     n_g = length(g);
     n_c = n_f + n_g - 1;

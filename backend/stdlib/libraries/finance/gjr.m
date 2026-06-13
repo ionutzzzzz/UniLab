@@ -1,6 +1,8 @@
 function model = gjr(p, q)
     % GJR Returns a GJR-GARCH model struct
     
+    if nargin < 1, p = []; end
+    if nargin < 2, q = []; end
     model.Type = 'GJR';
     model.P = p;
     model.Q = q;

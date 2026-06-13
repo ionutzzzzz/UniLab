@@ -2,6 +2,8 @@ function [y_pred] = logistic_regression_predict(X, theta)
     % LOGISTIC_REGRESSION_PREDICT Predict using logistic regression
     % [y_pred] = logistic_regression_predict(X, theta)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, theta = []; end
     m = size(X, 1);
     X = [ones(m, 1), X]; % Add bias term
     z = X * theta;

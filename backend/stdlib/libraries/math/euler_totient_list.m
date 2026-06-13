@@ -1,5 +1,6 @@
 function phi_list = euler_totient_list(n)
     % EULER_TOTIENT_LIST Calculate Euler's totient function for all numbers up to n
+    if nargin < 1, n = []; end
     phi_list = 1:n;
     for i = 2:n
         if phi_list(i) == i

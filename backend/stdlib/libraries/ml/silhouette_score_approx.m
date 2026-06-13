@@ -1,5 +1,7 @@
 function s = silhouette_score_approx(X, labels)
     % SILHOUETTE_SCORE_APPROX Mean silhouette coefficient
+    if nargin < 1, X = []; end
+    if nargin < 2, labels = []; end
     m = size(X, 1);
     unique_labels = unique(labels);
     K = length(unique_labels);

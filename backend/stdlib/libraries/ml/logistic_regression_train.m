@@ -2,6 +2,7 @@ function [theta] = logistic_regression_train(X, y, alpha, num_iters, lambda)
     % LOGISTIC_REGRESSION_TRAIN Train logistic regression using gradient descent
     % [theta] = logistic_regression_train(X, y, alpha, num_iters, lambda)
     
+    if nargin < 2, y = []; end
     if nargin < 5, lambda = 0; end
     if nargin < 4, num_iters = 1000; end
     if nargin < 3, alpha = 0.01; end

@@ -1,5 +1,9 @@
 function [v, lambda] = rayleigh_quotient_iteration(A, x0, tol, max_iters)
     % RAYLEIGH_QUOTIENT_ITERATION Rapid convergence to nearest eigenvalue
+    if nargin < 1, A = []; end
+    if nargin < 2, x0 = []; end
+    if nargin < 3, tol = []; end
+    if nargin < 4, max_iters = []; end
     v = x0(:) / norm(x0);
     lambda = (v' * A * v);
     I = eye(size(A));

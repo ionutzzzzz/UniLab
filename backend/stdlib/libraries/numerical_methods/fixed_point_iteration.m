@@ -2,6 +2,8 @@ function x = fixed_point_iteration(g, x0, tol, max_iter)
     % FIXED_POINT_ITERATION Find fixed point of x = g(x)
     % x = fixed_point_iteration(g, x0, tol, max_iter)
     
+    if nargin < 1, g = []; end
+    if nargin < 2, x0 = []; end
     if nargin < 3, tol = 1e-6; end
     if nargin < 4, max_iter = 100; end
     

@@ -1,6 +1,7 @@
 function weights = estimateMinVariance(obj)
     % ESTIMATEMINVARIANCE Simplified optimization to minimize portfolio variance
     
+    if nargin < 1, obj = []; end
     if isempty(obj.AssetCovar)
         weights = [];
         return;

@@ -1,6 +1,7 @@
 function [labels] = agglomerative_clustering(X, n_clusters)
     % AGGLOMERATIVE_CLUSTERING Bottom-up hierarchical clustering
     
+    if nargin < 1, X = []; end
     if nargin < 2, n_clusters = 2; end
     
     m = size(X, 1);
@@ -39,6 +40,8 @@ function [labels] = agglomerative_clustering(X, n_clusters)
 end
 
 function [d] = compute_min_dist(C1, C2)
+    if nargin < 1, C1 = []; end
+    if nargin < 2, C2 = []; end
     m1 = size(C1, 1);
     m2 = size(C2, 1);
     d = 1e9;

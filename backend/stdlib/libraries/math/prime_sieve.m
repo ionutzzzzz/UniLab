@@ -1,6 +1,7 @@
 function [primes] = prime_sieve(n)
     % PRIME_SIEVE Sieve of Eratosthenes to find all primes up to n
     
+    if nargin < 1, n = []; end
     if n < 2
         primes = [];
         return;

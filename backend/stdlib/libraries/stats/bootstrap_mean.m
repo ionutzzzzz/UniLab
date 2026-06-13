@@ -1,5 +1,6 @@
 function [means, ci_low, ci_high] = bootstrap_mean(data, n_iterations)
     % Performs bootstrapping to estimate the distribution of the mean
+    if nargin < 1, data = []; end
     if nargin < 2, n_iterations = 1000; end
     
     n = length(data);

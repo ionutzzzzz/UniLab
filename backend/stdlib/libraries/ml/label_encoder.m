@@ -1,5 +1,6 @@
 function [encoded, classes] = label_encoder(labels)
     % LABEL_ENCODER Encode target labels with value between 1 and n_classes
+    if nargin < 1, labels = []; end
     classes = unique(labels);
     encoded = zeros(size(labels));
     for i = 1:length(classes)

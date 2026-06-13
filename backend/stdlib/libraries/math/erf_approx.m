@@ -2,6 +2,7 @@ function [y] = erf_approx(x)
     % ERF_APPROX Numerical approximation of the Error Function
     % Using the Abramowitz and Stegun approximation
     
+    if nargin < 1, x = []; end
     a1 =  0.254829592;
     a2 = -0.284496736;
     a3 =  1.421413741;

@@ -1,5 +1,6 @@
 function [Q, R] = modified_gram_schmidt(A)
     % MODIFIED_GRAM_SCHMIDT Numerically stable Gram-Schmidt
+    if nargin < 1, A = []; end
     [m, n] = size(A);
     Q = A;
     R = zeros(n, n);

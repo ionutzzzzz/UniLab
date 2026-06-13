@@ -2,6 +2,9 @@ function [y_interp] = linear_interp(x, y, x_interp)
     % LINEAR_INTERP Linear interpolation
     % [y_interp] = linear_interp(x, y, x_interp)
     
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
+    if nargin < 3, x_interp = []; end
     m = length(x_interp);
     y_interp = zeros(size(x_interp));
     

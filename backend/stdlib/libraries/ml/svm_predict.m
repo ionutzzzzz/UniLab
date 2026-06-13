@@ -1,6 +1,9 @@
 function [y_pred] = svm_predict(X, w, b)
     % SVM_PREDICT Predict using linear SVM
     
+    if nargin < 1, X = []; end
+    if nargin < 2, w = []; end
+    if nargin < 3, b = []; end
     m = size(X, 1);
     y_pred = zeros(m, 1);
     

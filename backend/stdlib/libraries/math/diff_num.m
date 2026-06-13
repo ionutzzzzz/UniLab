@@ -3,6 +3,8 @@ function [dy] = diff_num(y, x)
     % Uses central differences for interior points and forward/backward for edges
     % [dy] = diff_num(y, x)
     
+    if nargin < 1, y = []; end
+    if nargin < 2, x = []; end
     n = length(y);
     dy = zeros(size(y));
     

@@ -2,6 +2,8 @@ function [X, y] = make_blobs(n_samples, n_features, centers, cluster_std)
     % MAKE_BLOBS Generate isotropic Gaussian blobs for clustering
     % [X, y] = make_blobs(n_samples, n_features, centers, cluster_std)
     
+    if nargin < 1, n_samples = []; end
+    if nargin < 2, n_features = []; end
     if nargin < 4, cluster_std = 1.0; end
     if nargin < 3, centers = 3; end
     

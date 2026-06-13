@@ -2,6 +2,8 @@ function [p] = legendre_poly(n, x)
     % LEGENDRE_POLY Calculate the n-th degree Legendre polynomial at x
     % Uses the Bonnet's recursion formula
     
+    if nargin < 1, n = []; end
+    if nargin < 2, x = []; end
     if n == 0
         p = ones(size(x));
         return;

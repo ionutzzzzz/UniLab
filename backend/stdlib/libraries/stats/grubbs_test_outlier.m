@@ -1,5 +1,6 @@
 function [G, is_outlier] = grubbs_test_outlier(x, alpha)
     % GRUBBS_TEST_OUTLIER Detect a single outlier in a univariate dataset
+    if nargin < 1, x = []; end
     if nargin < 2, alpha = 0.05; end
     n = length(x);
     m = mean(x);
