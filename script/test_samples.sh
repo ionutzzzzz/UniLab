@@ -42,7 +42,7 @@ for sample in $SAMPLES; do
     # Redirecting output to a temporary file to keep the console clean
     output_file=$(mktemp)
     
-    timeout 60s cargo run --quiet --manifest-path "$MANIFEST_PATH" --bin unilab_cli -- "$sample" > "$output_file" 2>&1
+    timeout 60s env PYTHONPATH="$PROJECT_ROOT/backend" python3 "$PROJECT_ROOT/backend/UniLab.py" run "$sample" > "$output_file" 2>&1
     exit_code=$?
     
     if [ $exit_code -eq 0 ]; then

@@ -1254,6 +1254,12 @@ def angle(x):
 _unilab_nargout_ctx = ContextVar('unilab_nargout', default=None)
 
 def unilab_call(obj, *args, **kwargs):
+    if obj is None:
+        if len(args) > 0 or len(kwargs) > 0:
+            # We don't have the variable name here easily, but we can try to be helpful
+            raise NameError("Attempted to call an undefined variable or function")
+        return None
+        
     if callable(obj):
         # Avoid auto-calling handles if no args given
         if len(args) == 0 and len(kwargs) == 0 and isinstance(obj, UnilabHandle):
@@ -1285,6 +1291,7 @@ def unilab_call(obj, *args, **kwargs):
         finally:
             _unilab_nargout_ctx.reset(token)
     
+    # If not callable but called with no args, it might be a variable being accessed like a func (MATLAB style)
     if len(args) == 0 and len(kwargs) == 0: return obj
     
     # Handle array/list/string indexing
@@ -1670,15 +1677,21 @@ def unilab_set_attr(obj, attr, val, globals_dict=None):
     return obj
 
 def unilab_get(obj, attr):
+    if obj is None:
+        return None
     if isinstance(obj, dict):
-        if attr in obj: return obj[attr]
-        # For dictionaries, return None but try to be helpful if it's a common attribute
         return obj.get(attr)
+    
+    # Handle UnilabStruct explicitly
+    if isinstance(obj, UnilabStruct):
+        return getattr(obj, attr, None)
+
     try:
         return getattr(obj, attr)
     except AttributeError:
-        # If attribute doesn't exist, return None instead of crashing
-        # This matches MATLAB's behavior for some objects
+        # Check if it's a common property we want to support
+        if attr == 'shape' and isinstance(obj, (list, tuple)):
+            return (1, len(obj))
         return None
 
 def contour(*args, **kwargs):
@@ -3350,7 +3363,7 @@ def figure(*args, **kwargs):
 def subplot(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    res = plt.subplot(*p_args, **kwargs); _unilab_refresh_graph(); return res
+    res = plt.subplot(*p_args, **kwargs); return res
 
 def hold(*args):
     global _unilab_hold

@@ -384,7 +384,7 @@ class UniLabToPython(Transformer):
                 match = re.match(r"unilab_call\(([^,]+)(?:,\s*(.*))?\)", str(lhs))
                 if match:
                     obj, args = match.group(1), match.group(2)
-                    stmt = f"{obj} = unilab_set({obj}, {expr}{', ' + args if args else ''})"
+                    stmt = f"{obj} = unilab_set({obj} if '{obj}' in locals() else globals().get('{obj}', None), {expr}{', ' + args if args else ''})"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
             
             if "unilab_get" in str(lhs):
@@ -395,7 +395,7 @@ class UniLabToPython(Transformer):
                     attr = match.group(3)
                     self.variables.add(obj)
                     # We need to check if obj exists or use get_undefined again if it's nested
-                    stmt = f"{obj} = unilab_set_attr(globals().get('{obj}', None), '{attr}', {expr}, globals())"
+                    stmt = f"{obj} = unilab_set_attr({obj} if '{obj}' in locals() else globals().get('{obj}', None), '{attr}', {expr}, globals())"
                     return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
 
         self.variables.add(str(lhs))

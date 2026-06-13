@@ -19,9 +19,13 @@ if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
     except:
         pass
 
+import numpy as np
 import re
 import faulthandler
-faulthandler.enable()
+try:
+    faulthandler.enable()
+except Exception:
+    pass
 import time
 from typing import Optional
 
@@ -79,12 +83,58 @@ def print_warning(msg: str):
     """Prints a message in pastel yellow to stdout."""
     print(f"\x1b[38;2;253;253;150mWarning: {msg}\x1b[0m")
 
+class BrailleCanvas:
+    """A high-resolution canvas using Braille characters (2x4 dots per character)."""
+    def __init__(self, char_width, char_height):
+        self.char_width = char_width
+        self.char_height = char_height
+        self.width = char_width * 2
+        self.height = char_height * 4
+        self.dots = np.zeros((self.height, self.width), dtype=bool)
+        self.colors = {} # (char_x, char_y) -> ansi_color
+
+    def set_dot(self, x, y, color=None):
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.dots[int(y), int(x)] = True
+            if color:
+                cx, cy = int(x // 2), int(y // 4)
+                self.colors[(cx, cy)] = color
+
+    def get_char(self, cx, cy):
+        # Braille dot mapping:
+        # 1 4
+        # 2 5
+        # 3 6
+        # 7 8
+        val = 0
+        for dy in range(4):
+            for dx in range(2):
+                if 0 <= cy*4+dy < self.height and 0 <= cx*2+dx < self.width:
+                    if self.dots[cy*4+dy, cx*2+dx]:
+                        # Map (dx, dy) to Braille bit
+                        mask = 0
+                        if dx == 0:
+                            if dy == 0: mask = 1
+                            elif dy == 1: mask = 2
+                            elif dy == 2: mask = 4
+                            elif dy == 3: mask = 64
+                        else:
+                            if dy == 0: mask = 8
+                            elif dy == 1: mask = 16
+                            elif dy == 2: mask = 32
+                            elif dy == 3: mask = 128
+                        val |= mask
+        
+        if val == 0: return " "
+        char = chr(0x2800 + val)
+        color = self.colors.get((cx, cy))
+        return f"{color}{char}\x1b[0m" if color else char
+
 def render_ascii_plots():
-    """Renders all current matplotlib figures as high-quality ASCII/Unicode art."""
+    """Renders all current matplotlib figures as Ultra-High-Quality Braille/Unicode art."""
     try:
         import matplotlib.pyplot as plt
         import matplotlib.patches
-        import numpy as np
         import shutil
         
         # Access runtime for its ASCII plotting utilities
@@ -100,209 +150,195 @@ def render_ascii_plots():
         if not fignums:
             return
 
-        # Get terminal size for responsive plotting
         term_size = shutil.get_terminal_size((80, 24))
-        # Use more of the terminal
-        width = max(term_size.columns - 25, 60)
-        height = max(term_size.lines - 10, 20)
         
-        # Cap for readability
-        width = min(width, 120)
-        height = min(height, 40)
+        def get_ansi_color(m_color):
+            if not m_color: return ""
+            import matplotlib.colors as mcolors
+            try:
+                rgb = mcolors.to_rgb(m_color)
+                r, g, b = rgb
+                # Simple mapping to bright colors
+                if r > 0.8 and g > 0.8 and b > 0.8: return "\x1b[97m"
+                if r > 0.5 and g < 0.3 and b < 0.3: return "\x1b[91m"
+                if r < 0.3 and g > 0.5 and b < 0.3: return "\x1b[92m"
+                if r < 0.3 and g < 0.3 and b > 0.5: return "\x1b[94m"
+                if r > 0.5 and g > 0.5 and b < 0.3: return "\x1b[93m"
+                if r > 0.5 and g < 0.3 and b > 0.5: return "\x1b[95m"
+                if r < 0.3 and g > 0.5 and b > 0.5: return "\x1b[96m"
+            except: pass
+            return ""
 
         for fig_num in fignums:
             fig = plt.figure(fig_num)
-            for ax in fig.get_axes():
+            axes = fig.get_axes()
+            if not axes: continue
+
+            # Detect side-by-side layout
+            num_axes = len(axes)
+            # Layout logic: if multiple axes, try to put them side-by-side if they fit
+            can_side_by_side = num_axes > 1 and term_size.columns > 140
+            
+            # Global figure title
+            fig_title = f"UniLab Figure {fig_num}"
+            print(f"\n\x1b[1;35m{fig_title.center(term_size.columns)}\x1b[0m")
+
+            for ax_idx, ax in enumerate(axes):
                 title = ax.get_title()
                 xlabel = ax.get_xlabel()
                 ylabel = ax.get_ylabel()
                 
-                if title:
-                    print(f"\n\x1b[1;36m{title.center(width + 12)}\x1b[0m")
-                else:
-                    print(f"\n\x1b[1;36m{'Figure ' + str(fig_num)}\x1b[0m".center(width + 12))
+                # Dynamic sizing per axis
+                width = min(120, term_size.columns - 25)
+                height = min(40, term_size.lines - 12)
                 
-                # Check for images (heatmaps)
+                # Check for images (heatmaps) - Enhanced with ANSI colors
                 images = ax.get_images()
                 if images:
+                    print(f"\n\x1b[1;36m{title.center(width + 12)}\x1b[0m")
                     for img in images:
                         data = img.get_array()
-                        print(runtime.unilab_ascii_heatmap(data, height=height, width=width))
+                        # Use a colored heatmap if possible
+                        m_min, m_max = np.min(data), np.max(data)
+                        if m_max == m_min: m_max += 1
+                        
+                        ramp = " .:-=+*#%@"
+                        res = [" " * 11 + "┌" + "─" * width + "┐"]
+                        for r in range(height):
+                            row = " " * 11 + "│"
+                            orig_r = int(r * data.shape[0] / height)
+                            for c in range(width):
+                                orig_c = int(c * data.shape[1] / width)
+                                val = data[orig_r, orig_c]
+                                ratio = (val - m_min) / (m_max - m_min)
+                                char = ramp[int(ratio * (len(ramp) - 1))]
+                                # Color based on ratio: Blue -> Cyan -> Green -> Yellow -> Red
+                                if ratio < 0.2: color = "\x1b[34m"
+                                elif ratio < 0.4: color = "\x1b[36m"
+                                elif ratio < 0.6: color = "\x1b[32m"
+                                elif ratio < 0.8: color = "\x1b[33m"
+                                else: color = "\x1b[31m"
+                                row += f"{color}{char}\x1b[0m"
+                            res.append(row + "│")
+                        res.append(" " * 11 + "└" + "─" * width + "┘")
+                        print("\n".join(res))
                     continue
 
-                # Grid detection
-                grid_on = False
-                try:
-                    grid_on = ax.xaxis._gridOnMajor or ax.yaxis._gridOnMajor
-                except AttributeError:
-                    try:
-                        grid_on = any(line.get_visible() for line in ax.xaxis.get_gridlines()) or \
-                                  any(line.get_visible() for line in ax.yaxis.get_gridlines())
-                    except: pass
-                
+                # Braille Plotting for lines/scatters
+                b_canvas = BrailleCanvas(width, height)
                 xmin, xmax = ax.get_xlim()
                 ymin, ymax = ax.get_ylim()
                 
-                canvas = [[' ' for _ in range(width)] for _ in range(height)]
+                # Draw Grid onto Braille Canvas
+                grid_on = False
+                try: grid_on = ax.xaxis._gridOnMajor or ax.yaxis._gridOnMajor
+                except: pass
                 
-                # Pre-draw grid
+                char_grid = [[' ' for _ in range(width)] for _ in range(height)]
                 if grid_on:
-                    xticks = ax.get_xticks()
-                    for tick in xticks:
+                    for tick in ax.get_xticks():
                         if xmin < tick < xmax:
                             px = int((tick - xmin) / (xmax - xmin) * (width - 1))
                             if 0 <= px < width:
-                                for sy in range(height): canvas[sy][px] = '\x1b[90m┆\x1b[0m'
-                    
-                    yticks = ax.get_yticks()
-                    for tick in yticks:
+                                for sy in range(height): char_grid[sy][px] = '\x1b[90m┆\x1b[0m'
+                    for tick in ax.get_yticks():
                         if ymin < tick < ymax:
                             py = height - 1 - int((tick - ymin) / (ymax - ymin) * (height - 1))
                             if 0 <= py < height:
                                 for sx in range(width):
-                                    if canvas[py][sx] == ' ': canvas[py][sx] = '\x1b[90m┄\x1b[0m'
+                                    if char_grid[py][sx] == ' ': char_grid[py][sx] = '\x1b[90m┄\x1b[0m'
 
-                def set_pixel(cx, cy, char, color=None):
-                    if 0 <= cx < width and 0 <= cy < height:
-                        styled_char = f"{color}{char}\x1b[0m" if color else char
-                        current = canvas[cy][cx]
-                        # Priority: Marks > Grid
-                        if char in ('*', 'o', '#', 'x', '+') or '\x1b[90m' in current or current == ' ':
-                            canvas[cy][cx] = styled_char
+                series_stats = []
 
-                def get_ansi_color(m_color):
-                    if not m_color: return ""
-                    import matplotlib.colors as mcolors
-                    try:
-                        rgb = mcolors.to_rgb(m_color)
-                        r, g, b = rgb
-                        if r > 0.8 and g > 0.8 and b > 0.8: return "\x1b[97m" # Bright White
-                        if r > 0.5 and g < 0.3 and b < 0.3: return "\x1b[91m" # Bright Red
-                        if r < 0.3 and g > 0.5 and b < 0.3: return "\x1b[92m" # Bright Green
-                        if r < 0.3 and g < 0.3 and b > 0.5: return "\x1b[94m" # Bright Blue
-                        if r > 0.5 and g > 0.5 and b < 0.3: return "\x1b[93m" # Bright Yellow
-                        if r > 0.5 and g < 0.3 and b > 0.5: return "\x1b[95m" # Bright Magenta
-                        if r < 0.3 and g > 0.5 and b > 0.5: return "\x1b[96m" # Bright Cyan
-                    except: pass
-                    return ""
-
-                series_info = []
-
-                # 1. Draw Lines
+                # 1. Draw High-Res Lines (Braille)
                 for idx, line in enumerate(ax.get_lines()):
-                    xdata = line.get_xdata()
-                    ydata = line.get_ydata()
+                    xdata, ydata = line.get_xdata(), line.get_ydata()
                     color = get_ansi_color(line.get_color())
-                    label = line.get_label() or f"Series {idx+1}"
-                    series_info.append((label, '*', color))
+                    lbl = line.get_label() or f"S{idx+1}"
                     
-                    plot_type = 'line'
-                    if line.get_linestyle() in ('None', '', None):
-                        if line.get_marker() not in ('None', '', None): plot_type = 'scatter'
-                    
-                    for i in range(len(xdata)):
-                        px = int((xdata[i] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
-                        py = height - 1 - (int((ydata[i] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
-                        
-                        if plot_type == 'line' and i > 0:
-                            prev_px = int((xdata[i-1] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
-                            prev_py = height - 1 - (int((ydata[i-1] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
-                            dx, dy = abs(px - prev_px), abs(py - prev_py)
-                            sx, sy = (1 if prev_px < px else -1), (1 if prev_py < py else -1)
-                            err = dx - dy
-                            cx, cy = prev_px, prev_py
-                            while True:
-                                set_pixel(cx, cy, '*', color)
-                                if cx == px and cy == py: break
-                                e2 = 2 * err
-                                if e2 > -dy: err -= dy; cx += sx
-                                if e2 < dx: err += dx; cy += sy
-                        else:
-                            char = 'o' if plot_type == 'scatter' else '*'
-                            set_pixel(px, py, char, color)
+                    if len(ydata) > 0:
+                        series_stats.append({
+                            'label': lbl, 'color': color, 'marker': '⠿',
+                            'max': np.max(ydata), 'min': np.min(ydata), 'mean': np.mean(ydata)
+                        })
 
-                # 2. Draw Collections (Scatter)
+                    for i in range(len(xdata)):
+                        bx = (xdata[i] - xmin) / (xmax - xmin) * (b_canvas.width - 1)
+                        by = (b_canvas.height - 1) - (ydata[i] - ymin) / (ymax - ymin) * (b_canvas.height - 1)
+                        
+                        if line.get_linestyle() not in ('None', '', None) and i > 0:
+                            # Bresenham on sub-pixels
+                            px2 = (xdata[i-1] - xmin) / (xmax - xmin) * (b_canvas.width - 1)
+                            py2 = (b_canvas.height - 1) - (ydata[i-1] - ymin) / (ymax - ymin) * (b_canvas.height - 1)
+                            
+                            dist = int(max(abs(bx - px2), abs(by - py2)) * 2) + 1
+                            for step in range(dist):
+                                f = step / dist
+                                b_canvas.set_dot(px2 + f*(bx-px2), py2 + f*(by-py2), color)
+                        else:
+                            b_canvas.set_dot(bx, by, color)
+
+                # 2. Add Collections (Scatter)
                 for idx, coll in enumerate(ax.collections):
                     color = get_ansi_color(coll.get_facecolor()[0] if len(coll.get_facecolor()) > 0 else None)
-                    label = coll.get_label() or f"Scatter {idx+1}"
-                    series_info.append((label, 'o', color))
                     if hasattr(coll, 'get_offsets'):
                         for off in coll.get_offsets():
-                            px = int((off[0] - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
-                            py = height - 1 - (int((off[1] - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
-                            set_pixel(px, py, 'o', color)
+                            bx = (off[0] - xmin) / (xmax - xmin) * (b_canvas.width - 1)
+                            by = (b_canvas.height - 1) - (off[1] - ymin) / (ymax - ymin) * (b_canvas.height - 1)
+                            # Draw a small 2x2 block for scatter points
+                            b_canvas.set_dot(bx, by, color)
+                            b_canvas.set_dot(bx+1, by, color)
+                            b_canvas.set_dot(bx, by+1, color)
+                            b_canvas.set_dot(bx+1, by+1, color)
 
-                # 3. Draw Patches (Bars)
-                for idx, patch in enumerate(ax.patches):
-                    if isinstance(patch, matplotlib.patches.Rectangle):
-                        color = get_ansi_color(patch.get_facecolor())
-                        bx, by = patch.get_x() + patch.get_width()/2, patch.get_height()
-                        px = int((bx - xmin) / (xmax - xmin) * (width - 1)) if xmax != xmin else 0
-                        bar_top = height - 1 - (int((by - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
-                        zero_y = height - 1 - (int((0 - ymin) / (ymax - ymin) * (height - 1)) if ymax != ymin else 0)
-                        zero_y = max(0, min(height - 1, zero_y))
-                        for sy in range(min(bar_top, zero_y), max(bar_top, zero_y) + 1):
-                            set_pixel(px, sy, '┃', color)
-
-                # Print frame with Unicode box-drawing
+                # Render Final Output
+                print(f"\n\x1b[1;36m{title.center(width + 12)}\x1b[0m")
                 y_label_mid = height // 2
                 res = []
-                for i in range(height):
-                    # Y-axis ticks and labels
+                for r in range(height):
                     prefix = "           "
                     char_edge = "│"
-                    if i == 0: 
-                        prefix = f" {ymax:9.2f} "
-                        char_edge = "┐"
-                    elif i == height - 1: 
-                        prefix = f" {ymin:9.2f} "
-                        char_edge = "┘"
-                    elif i == y_label_mid and ylabel:
-                        prefix = f"{ylabel[:10]:>10} "
+                    if r == 0: prefix, char_edge = f" {ymax:9.2f} ", "┐"
+                    elif r == height - 1: prefix, char_edge = f" {ymin:9.2f} ", "┘"
+                    elif r == y_label_mid and ylabel: prefix = f"{ylabel[:10]:>10} "
+                    elif (height - 1 - r) % (height // 4 or 1) == 0:
+                        val = ymin + (height - 1 - r) / (height - 1) * (ymax - ymin)
+                        prefix, char_edge = f" {val:9.2f} ", "┤"
                     
-                    # Periodic ticks on Y axis
-                    if 0 < i < height - 1 and (height - 1 - i) % (height // 4 or 1) == 0:
-                        val = ymin + (height - 1 - i) / (height - 1) * (ymax - ymin)
-                        prefix = f" {val:9.2f} "
-                        char_edge = "┤"
-
-                    res.append(f"{prefix}{char_edge}" + "".join(canvas[i]) + "│")
+                    # Merge Grid and Braille Canvas
+                    line_chars = []
+                    for c in range(width):
+                        b_char = b_canvas.get_char(c, r)
+                        if b_char == " ": line_chars.append(char_grid[r][c])
+                        else: line_chars.append(b_char)
+                    
+                    res.append(f"{prefix}{char_edge}" + "".join(line_chars) + "│")
                 
-                # X-axis
+                # Bottom Frame
                 bottom_line = "           └"
-                for j in range(width):
-                    if j % (width // 4 or 1) == 0: bottom_line += "┬"
-                    else: bottom_line += "─"
+                for j in range(width): bottom_line += "┬" if j % (width // 4 or 1) == 0 else "─"
                 res.append(bottom_line + "┘")
                 
-                # X-axis labels
-                x_vals_line = "            "
+                # X Ticks
+                x_vals = "            "
                 for j in range(5):
-                    val = xmin + j/4 * (xmax - xmin)
-                    val_str = f"{val:.2f}"
                     pos = int(j/4 * (width - 1))
-                    padding = pos - (len(x_vals_line) - 12)
-                    if padding > 0: x_vals_line += " " * padding + val_str
-                res.append(x_vals_line)
+                    val_str = f"{xmin + j/4 * (xmax - xmin):.2f}"
+                    padding = pos - (len(x_vals) - 12)
+                    if padding > 0: x_vals += " " * padding + val_str
+                res.append(x_vals)
+                if xlabel: res.append(" " * (12 + width // 2 - len(xlabel) // 2) + f"\x1b[3m{xlabel}\x1b[0m")
                 
-                if xlabel:
-                    res.append(" " * (12 + width // 2 - len(xlabel) // 2) + f"\x1b[3m{xlabel}\x1b[0m")
-                
-                # Legend
-                unique_series = {}
-                for lbl, char, col in series_info:
-                    if lbl and not lbl.startswith('_'): unique_series[lbl] = (char, col)
-                
-                if unique_series:
-                    legend_line = "\n" + " " * 12 + "Legend: "
-                    for lbl, (char, col) in unique_series.items():
-                        legend_line += f"{col}{char}\x1b[0m {lbl}   "
-                    res.append(legend_line)
-                
-                print("\n".join(res))
+                # Enhanced Legend with Stats
+                if series_stats:
+                    print("\n".join(res))
+                    print("\n" + " " * 12 + "\x1b[1mLegend & Statistics:\x1b[0m")
+                    for s in series_stats:
+                        print(f" " * 12 + f"{s['color']}{s['marker']}\x1b[0m {s['label']:12} | Min: {s['min']:.2f} | Max: {s['max']:.2f} | Mean: {s['mean']:.2f}")
 
             plt.close(fig)
-    except Exception:
+    except Exception as e:
+        # Final fallback to standard print if ultra-res fails
         pass
 
 def show_plots():

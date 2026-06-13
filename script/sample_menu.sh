@@ -32,7 +32,7 @@ run_sample() {
     echo -e "🚀 ${C_BLUE}Executing Sample:${RESET} $(basename "$file")"
     echo -e "${C_BLUE}====================================================${RESET}"
     echo ""
-    cargo run --quiet --manifest-path "$MANIFEST_PATH" --bin unilab_cli -- "$file"
+    PYTHONPATH="$PROJECT_ROOT/backend" python3 "$PROJECT_ROOT/backend/UniLab.py" run "$file"
     pause
 }
 
@@ -45,7 +45,7 @@ run_test() {
     echo -e "🧪 ${C_PURPLE}Running Test Group:${RESET} $test_name"
     echo -e "${C_PURPLE}====================================================${RESET}"
     echo ""
-    python3 -m pytest "$test_file" -v
+    PYTHONPATH="$PROJECT_ROOT/backend" python3 -m pytest $test_file -v
     pause
 }
 
@@ -58,7 +58,7 @@ run_demo() {
     echo -e "🎨 ${C_YELLOW}Visual Demo:${RESET} $demo_name"
     echo -e "${C_YELLOW}====================================================${RESET}"
     echo ""
-    python3 "$demo_file"
+    PYTHONPATH="$PROJECT_ROOT/backend" python3 "$demo_file"
     pause
 }
 
@@ -128,8 +128,8 @@ while true; do
         
         # Operations
         [Aa])
-            if [ -f "./run_samples.sh" ]; then
-                ./run_samples.sh
+            if [ -f "$PROJECT_ROOT/script/test_samples.sh" ]; then
+                "$PROJECT_ROOT/script/test_samples.sh"
                 pause
             fi
             ;;

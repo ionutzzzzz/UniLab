@@ -66,11 +66,11 @@ disp('--- 3. Molecular Dynamics (Lennard-Jones Potential) ---');
 function s_nxt = lj_step(s_cur, p_par)
     s_nxt = s_cur;
     dt_step = 0.05;
-    r_val = s_cur.r; v_val = s_cur.v;
-    f_force = 48.0 * p_par.eps * (p_par.sigma^12 / r_val^13 - 0.5 * p_par.sigma^6 / r_val^7);
-    v_val = v_val + f_force * dt_step;
-    s_nxt.r = r_val + v_val * dt_step;
-    s_nxt.v = v_val;
+    % Using direct access to avoid transpiler issues with local re-assignment
+    f_force = 48.0 * p_par.eps * (p_par.sigma^12 / s_cur.r^13 - 0.5 * p_par.sigma^6 / s_cur.r^7);
+    v_new = s_cur.v + f_force * dt_step;
+    s_nxt.r = s_cur.r + v_new * dt_step;
+    s_nxt.v = v_new;
     s_nxt.h = [s_cur.h; s_nxt.r];
 end
 
@@ -81,6 +81,6 @@ function lj_draw(ax_obj, s_dyn)
 end
 
 % Simulating two atoms interaction
-simulate('algorithm', 'step', @lj_step, 'draw', @lj_draw, 'state', struct('r', 2.0, 'v', 0.0, 'h', []), 'eps', 1.0, 'sigma', 1.0);
+simulate('algorithm', 'step', @lj_step, 'draw', @lj_draw, 'state', struct('r', 2.0, 'v', 0.0, 'h', []), 'eps', 1.0, 'sigma', 1.0, 'max_steps', 20);
 
 disp('Computational Chemistry Lab Complete.');

@@ -75,6 +75,62 @@ except ImportError:
     ml = None
 
 
+class TerminalAlgorithmSimulator:
+    def __init__(self, step_f, draw_f, state, **kwargs):
+        self.step_f = step_f
+        self.draw_f = draw_f
+        self.state = state
+        self.params = DotDict()
+        
+        # Populate params
+        BASE_KWARGS = {'step', 'draw', 'state', 'on_event', 'delay', 'model_name', 'params', 'max_steps'}
+        for k, v in kwargs.items():
+            if k not in BASE_KWARGS:
+                self.params[k] = v
+        if 'params' in kwargs and isinstance(kwargs['params'], dict):
+            self.params.update(kwargs['params'])
+            
+        self.delay = float(kwargs.get('delay', 0.1))
+        self.max_steps = int(kwargs.get('max_steps', 100)) # Prevent infinite loops in terminal
+        self.is_running = True
+
+    def run(self):
+        print("\x1b[?25l") # Hide cursor
+        try:
+            from backend.UniLab import show_plots
+            step_count = 0
+            while self.is_running and step_count < self.max_steps:
+                # Clear previous plot area if possible, or just print
+                # For simplicity in terminal, we'll just let it scroll or use clc
+                
+                # Execute step
+                self.state = self.step_f(self.state, self.params)
+                
+                # Setup figure
+                plt.clf()
+                ax = plt.gca()
+                
+                # Draw
+                self.draw_f(ax, self.state)
+                
+                # Render to terminal
+                print("\033[H\033[J") # Clear screen and home cursor
+                print(f"\x1b[1;33mUniLab Terminal Simulation - Step {step_count+1}/{self.max_steps}\x1b[0m")
+                show_plots()
+                
+                time.sleep(self.delay)
+                step_count += 1
+            
+            print(f"\nSimulation completed ({step_count} steps).")
+        except KeyboardInterrupt:
+            print("\nSimulation interrupted by user.")
+        except Exception as e:
+            print(f"\nSimulation Error: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            print("\x1b[?25h") # Show cursor
+
 class BridgeSimulator:
     def __init__(self, **kwargs):
         self.params = DotDict(kwargs.get('params', {}))
@@ -130,6 +186,13 @@ class BridgeSimulator:
 class BridgeAlgorithmSimulator(BridgeSimulator):
     def __init__(self, step_f, draw_f, state, **kwargs):
         super().__init__(model_name='algorithm', **kwargs)
+        
+        # Populate params from kwargs for bridge mode too
+        BASE_KWARGS = {'step', 'draw', 'state', 'on_event', 'delay', 'model_name', 'params'}
+        for k, v in kwargs.items():
+            if k not in BASE_KWARGS:
+                self.params[k] = v
+        
         self.step_f = step_f
         self.draw_f = draw_f
         self.state = state
@@ -168,11 +231,16 @@ def push_sim_event(event_data):
 class DotDict(dict):
     """A dictionary that allows dot notation access."""
     def __getattr__(self, attr):
-        return self.get(attr)
+        if attr in self:
+            return self[attr]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
     def __setattr__(self, attr, value):
         self[attr] = value
     def __delattr__(self, attr):
-        del self[attr]
+        if attr in self:
+            del self[attr]
+        else:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
 class SimConfig:
     def __init__(self):
@@ -431,6 +499,16 @@ class BaseSimulator(QMainWindow):
     def __init__(self, **kwargs):
         super().__init__()
         self.params = DotDict()
+        
+        # Populate params from kwargs, avoiding base class specific ones
+        BASE_KWARGS = {'tunables', 'on_init', 'on_event', 'delay', 'model_name', 't_range', 'y_range', 'is_ode', 'y0', 'input', 'time', 'kp', 'ki', 'kd', 'X', 'y', 'epochs', 'lr', 'l1', 'l2', 'degree', 'model', 'controls'}
+        for k, v in kwargs.items():
+            if k not in BASE_KWARGS:
+                self.params[k] = v
+        
+        if 'params' in kwargs and isinstance(kwargs['params'], dict):
+            self.params.update(kwargs['params'])
+            
         self.custom_controls = {}
         
         # Central widget and main layout
@@ -1021,7 +1099,7 @@ class PhysicsSimulator(BaseSimulator):
     def __init__(self, model, **kwargs):
         self.model_name = model
         super().__init__(**kwargs)
-        self.params.update(kwargs)
+        # self.params already populated in BaseSimulator.__init__
         self.t_range = kwargs.get('t_range', kwargs.get('time', None))
         self.init_defaults()
         self.animation_timer = QTimer(self); self.animation_timer.timeout.connect(self.animate_step)
@@ -1702,7 +1780,7 @@ class AlgorithmSimulator(BaseSimulator):
     def __init__(self, step_func, draw_func, initial_state, **kwargs):
         self.step_f, self.draw_f, self.state = step_func, draw_func, initial_state
         super().__init__(**kwargs)
-        self.params.update(kwargs)
+        # self.params already updated in BaseSimulator.__init__
         self.timer = QTimer(self); self.timer.timeout.connect(self.step_algo); self.delay = 100; self.initUI()
     def initUI(self):
         self.setWindowTitle('UniLab Algorithm Simulator'); self.setGeometry(100, 100, 1100, 800)
@@ -1826,18 +1904,32 @@ class SimulatorEngine:
 
 def unilab_simulate(model, *args):
     is_bridge = os.environ.get('UNILAB_BRIDGE_MODE') == '1'
+    
+    kwargs = {}
+    i = 0
+    while i < len(args):
+        if isinstance(args[i], str) and i + 1 < len(args):
+            kwargs[args[i]] = args[i+1]
+            i += 2
+        else:
+            i += 1
+            
+    from backend.core.runtime import unilab_event_ctx
+    kwargs['on_event'] = unilab_event_ctx.get()
+
     if (os.environ.get('UNILAB_WEB_MODE') == '1' or IS_HEADLESS) and not is_bridge:
+        if model == 'algorithm':
+            # Run terminal simulation
+            step_f = kwargs.pop('step', None)
+            draw_f = kwargs.pop('draw', None)
+            state = kwargs.pop('state', None)
+            if step_f and draw_f:
+                sim = TerminalAlgorithmSimulator(step_f, draw_f, state, **kwargs)
+                sim.run()
+                return
 
         msg = "[ Interactive simulation window skipped in web mode ]" if os.environ.get('UNILAB_WEB_MODE') == '1' else "[ Interactive simulation window skipped in headless mode ]"
         print(f"\n\x1b[38;2;253;253;150m{msg}\x1b[0m")
         return
-
-    kwargs = {}
-    if len(args) % 2 == 0:
-        for i in range(0, len(args), 2):
-            if isinstance(args[i], str): kwargs[args[i]] = args[i+1]
-            
-    from backend.core.runtime import unilab_event_ctx
-    kwargs['on_event'] = unilab_event_ctx.get()
     
     SimulatorEngine.simulate(model, **kwargs)
