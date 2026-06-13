@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'dart:io';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/app_provider.dart';

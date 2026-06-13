@@ -171,8 +171,9 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> _addToRecentFiles(String path) async {
-    if (path.isEmpty || path.startsWith('unilab://') || path.startsWith('web/'))
+    if (path.isEmpty || path.startsWith('unilab://') || path.startsWith('web/')) {
       return;
+    }
     _recentFiles.remove(path);
     _recentFiles.insert(0, path);
     if (_recentFiles.length > 20) _recentFiles.removeLast();

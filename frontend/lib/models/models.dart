@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'editor_models.dart';
 
 class UserSettings {
   final ThemeMode? _themeMode;
@@ -190,7 +191,7 @@ class ExecutionResult {
   final String stdout;
   final String stderr;
   final Map<String, dynamic> variables;
-  final List<String> plots;
+  final List<PlotData> plots;
   final Map<String, dynamic> extra;
 
   ExecutionResult({
@@ -203,13 +204,39 @@ class ExecutionResult {
   });
 
   factory ExecutionResult.fromJson(Map<String, dynamic> json) {
+    final extra = Map<String, dynamic>.from(json['extra'] ?? {});
+    final plotDataB64 = extra['plot_data_b64'] as List? ?? [];
+    final plotScripts = extra['plot_scripts'] as List? ?? [];
+    final plotFigures = extra['plot_figures'] as List? ?? [];
+    
+    final plots = <PlotData>[];
+    final plotFiles = json['plots'] as List? ?? [];
+    
+    for (int i = 0; i < plotFiles.length; i++) {
+      final fileName = plotFiles[i] as String;
+      final imageDataUri = i < plotDataB64.length ? plotDataB64[i] as String? : null;
+      final sourceScript = i < plotScripts.length ? plotScripts[i] as String? : null;
+      final figNum = i < plotFigures.length ? plotFigures[i] as String? : null;
+      
+      plots.add(PlotData(
+        title: 'Figure ${figNum ?? i}',
+        type: 'image',
+        xData: [],
+        yData: [],
+        fileName: fileName,
+        imageDataUri: imageDataUri,
+        sourceScript: sourceScript,
+        figNum: figNum,
+      ));
+    }
+
     return ExecutionResult(
       success: json['success'] ?? false,
       stdout: json['stdout'] ?? '',
       stderr: json['stderr'] ?? '',
       variables: json['variables_snapshot'] ?? {},
-      plots: List<String>.from(json['plots'] ?? []),
-      extra: Map<String, dynamic>.from(json['extra'] ?? {}),
+      plots: plots,
+      extra: extra,
     );
   }
 }

@@ -153,10 +153,10 @@ class PlotData {
   factory PlotData.fromJson(Map<String, dynamic> json) {
     return PlotData(
       id: json['id'] as String?,
-      title: json['title'] as String? ?? 'Figure',
-      type: json['type'] as String? ?? 'line',
-      xData: (json['xData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
-      yData: (json['yData'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
+      title: (json['title'] ?? json['name']) as String? ?? 'Figure',
+      type: (json['type'] ?? json['plot_type']) as String? ?? 'line',
+      xData: (json['xData'] ?? json['x'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
+      yData: (json['yData'] ?? json['y'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
       imageDataUri: json['imageDataUri'] as String?,
       sourceScript: json['sourceScript'] as String?,
       figNum: json['figNum'] as String?,

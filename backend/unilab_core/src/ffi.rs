@@ -546,6 +546,16 @@ pub extern "C" fn unilab_create_file(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn unilab_ping() -> i32 {
+    Python::with_gil(|py| {
+        match py.import("sys") {
+            Ok(_) => 0,
+            Err(_) => -1,
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn unilab_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
