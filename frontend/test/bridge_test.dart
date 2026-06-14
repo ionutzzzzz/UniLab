@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unilab/bridge/unilab_bridge.dart';
-import 'package:unilab/models/models.dart';
-import 'dart:io';
 
 void main() {
   // This test requires the native library to be built and accessible.

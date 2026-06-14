@@ -12,6 +12,7 @@ unilab_workspaces
 graph*.png
 graph*.json
 *.pyc
+build_deb
 
 # Prerequisites
 *.d
