@@ -1,15 +1,48 @@
-import numpy as np
-import matplotlib.pyplot as plt
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+except ImportError:
+    plt = None
+    Figure = None
+
 import os
 import time
 import pathlib
 import builtins
 import inspect
 import math
-import scipy.signal as signal
+import sys
+import warnings
+
+# Suppress harmless Matplotlib warning when clearing figures with log-scaled axes
+warnings.filterwarnings("ignore", category=UserWarning, message=".*non-positive xlim.*")
+
+
+IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
+
+try:
+    import scipy.signal as signal
+    from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
+except ImportError:
+    signal = None
+    scipy_fft = scipy_ifft = scipy_fftshift = scipy_ifftshift = None
+
 from contextvars import ContextVar
-from scipy.fft import fft as scipy_fft, ifft as scipy_ifft, fftshift as scipy_fftshift, ifftshift as scipy_ifftshift
-from backend.core.simulation.engine import unilab_simulate as simulate  # noqa: F401
+# Delay simulation import to avoid circular dependency and handle missing PyQt
+def simulate(*args, **kwargs):
+    try:
+        from backend.core.simulation.engine import unilab_simulate
+        return unilab_simulate(*args, **kwargs)
+    except ImportError:
+        print("Simulation engine unavailable (missing dependencies)")
+        return None
 
 # ContextVar for thread-safe session workspace path
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
@@ -146,10 +179,18 @@ def unilab_ellip(*args, **kwargs):
     kwargs = {k: _unilab_vec(v) for k, v in kwargs.items()}
     return signal.ellip(*args, **kwargs)
 
-def unilab_tf(num, den=None): 
-    if den is None:
+def unilab_tf(num=None, den=None): 
+    # Handle tf() or tf([], [])
+    if num is None or (hasattr(num, '__len__') and len(num) == 0):
+        if den is None or (hasattr(den, '__len__') and len(den) == 0):
+            # Return a default or raise a better error
+            raise ValueError("Error in 'tf': Missing numerator coefficients.")
+        num = [1]
+        
+    if den is None or (hasattr(den, '__len__') and len(den) == 0):
         if isinstance(num, signal.lti): return num.to_tf()
         return signal.TransferFunction(_unilab_vec(num), [1])
+        
     return signal.TransferFunction(_unilab_vec(num), _unilab_vec(den))
 
 # --- Standard UniLab Constants ---
@@ -437,15 +478,57 @@ def unilab_step(sys, T=None):
     return t, y
 
 def unilab_impulse(sys, T=None): 
-    if T is not None:
+    # Handle empty T arrays - scipy.impulse requires None or non-empty array
+    if T is not None and isinstance(T, np.ndarray) and T.size == 0:
+        T = None
+    elif T is not None and isinstance(T, list) and len(T) == 0:
+        T = None
+    elif T is not None:
         if isinstance(T, (int, float, np.integer, np.floating)):
             T = np.linspace(0, T, 1000)
         T = _unilab_vec(T)
     t, y = signal.impulse(sys, T=T)
     return t, y
 
-def unilab_lsim(sys, U, T): 
-    t, y, x = signal.lsim(sys, _unilab_vec(U), _unilab_vec(T))
+def unilab_lsim(sys, U, T):
+    # Handle empty T
+    if T is not None and ( (isinstance(T, np.ndarray) and T.size == 0) or (isinstance(T, list) and len(T) == 0) ):
+        T = None
+    
+    if T is None:
+        T = np.linspace(0, 10, 1000)
+    
+    T_vec = _unilab_vec(T)
+    U_vec = _unilab_vec(U)
+    
+    # Handle symbolic U
+    if hasattr(U_vec, 'free_symbols'):
+        import sympy
+        free_symbols = U_vec.free_symbols
+        if free_symbols:
+            # Prefer 't', then 's', then whatever else
+            sym_names = [s.name for s in free_symbols]
+            if 't' in sym_names:
+                var = sympy.Symbol('t')
+            elif 's' in sym_names:
+                var = sympy.Symbol('s')
+            else:
+                var = sorted(list(free_symbols), key=lambda x: x.name)[0]
+            
+            f_u = sympy.lambdify(var, U_vec, 'numpy')
+            try:
+                U_vec = f_u(T_vec)
+                # If U_vec is a scalar (e.g. U = 1), broadcast it
+                if np.isscalar(U_vec):
+                    U_vec = np.full_like(T_vec, U_vec)
+            except Exception:
+                pass
+    
+    # Ensure U_vec is an array of same length as T_vec
+    if np.isscalar(U_vec):
+        U_vec = np.full_like(T_vec, U_vec)
+    
+    t, y, x = signal.lsim(sys, U_vec, T_vec)
     return t, y
 
 def unilab_bode(sys, w=None): 
@@ -587,13 +670,24 @@ def unilab_acker(A, B, p):
     return K
 
 def unilab_initial(sys, x0, T=None):
+    # Handle empty T arrays
+    if T is not None and isinstance(T, np.ndarray) and T.size == 0:
+        T = None
+    elif T is not None and isinstance(T, list) and len(T) == 0:
+        T = None
+        
+    # Handle empty x0
+    x0_vec = _unilab_vec(x0)
+    if x0_vec is not None and hasattr(x0_vec, '__len__') and len(x0_vec) == 0:
+        x0_vec = None
+        
     if not isinstance(sys, signal.StateSpace):
         sys = sys.to_ss()
     if T is None: T = np.linspace(0, 10, 1000)
     elif isinstance(T, (int, float, np.integer, np.floating)): T = np.linspace(0, T, 1000)
     T = _unilab_vec(T)
     U = np.zeros_like(T)
-    t, y, x = signal.lsim(sys, U, T, X0=_unilab_vec(x0))
+    t, y, x = signal.lsim(sys, U, T, X0=x0_vec)
     return t, y, x
 
 def unilab_stepinfo(sys):
@@ -1198,8 +1292,32 @@ def unilab_call_nargout(nargout, obj, *args, **kwargs):
                 elif name == 'imag': res = np.imag(*args, **kwargs)
                 else:
                     res = obj(*args, **kwargs)
-            except:
-                res = obj(*args, **kwargs)
+            except Exception as e:
+                # If it's already a UniLab error or we want to pass it up with more info
+                if hasattr(obj, '__name__'):
+                    func_name = obj.__name__
+                elif hasattr(obj, '__class__'):
+                    func_name = obj.__class__.__name__
+                else:
+                    func_name = "unknown function"
+                
+                # Check for common Scipy/Numpy errors and give better hints
+                err_msg = str(e)
+                if "T must be a rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Time vector T must be a 1D array (vector).") from e
+                if "Denominator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Denominator must be a vector of coefficients.") from e
+                if "Numerator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Numerator must be a vector of coefficients.") from e
+                if "must be at least as long as the numerator" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': System must be proper (denominator degree >= numerator degree).") from e
+                if "takes" in err_msg and "positional argument" in err_msg:
+                    raise TypeError(f"Error in '{func_name}': Incorrect number of arguments. {err_msg}") from e
+                
+                # Re-raise with function name context if not already present
+                if func_name not in err_msg:
+                    raise type(e)(f"Error in '{func_name}': {err_msg}") from e
+                raise
         finally:
             _unilab_nargout_ctx.reset(token)
             
@@ -1226,6 +1344,12 @@ def angle(x):
 _unilab_nargout_ctx = ContextVar('unilab_nargout', default=None)
 
 def unilab_call(obj, *args, **kwargs):
+    if obj is None:
+        if len(args) > 0 or len(kwargs) > 0:
+            # We don't have the variable name here easily, but we can try to be helpful
+            raise NameError("Attempted to call an undefined variable or function")
+        return None
+        
     if callable(obj):
         # Avoid auto-calling handles if no args given
         if len(args) == 0 and len(kwargs) == 0 and isinstance(obj, UnilabHandle):
@@ -1239,24 +1363,48 @@ def unilab_call(obj, *args, **kwargs):
             # Check by name and identity to be absolutely sure
             try:
                 name = getattr(obj, '__name__', None)
-                if name == 'abs' or obj == builtins.abs: return unilab_abs(*args, **kwargs)
-                if name == 'round' or obj == builtins.round: return round(*args, **kwargs)
-                if name == 'min' or obj == builtins.min: return unilab_min(*args, **kwargs)
-                if name == 'max' or obj == builtins.max: return unilab_max(*args, **kwargs)
-                if name == 'sum' or obj == builtins.sum: return unilab_sum(*args, **kwargs)
-                if name == 'any' or obj == builtins.any: return unilab_any(*args, **kwargs)
-                if name == 'all' or obj == builtins.all: return unilab_all(*args, **kwargs)
-                if name == 'real' or obj == builtins.real: return real(*args, **kwargs)
-                if name == 'imag' or obj == builtins.imag: return imag(*args, **kwargs)
-            except: pass
-
-            res = obj(*args, **kwargs)
-            if isinstance(res, tuple) and len(res) > 0:
-                return res[0]
-            return res
+                if name == 'abs' or obj == builtins.abs: res = unilab_abs(*args, **kwargs)
+                elif name == 'round' or obj == builtins.round: res = round(*args, **kwargs)
+                elif name == 'min' or obj == builtins.min: res = unilab_min(*args, **kwargs)
+                elif name == 'max' or obj == builtins.max: res = unilab_max(*args, **kwargs)
+                elif name == 'sum' or obj == builtins.sum: res = unilab_sum(*args, **kwargs)
+                elif name == 'any' or obj == builtins.any: res = unilab_any(*args, **kwargs)
+                elif name == 'all' or obj == builtins.all: res = unilab_all(*args, **kwargs)
+                elif name == 'real': res = np.real(*args, **kwargs)
+                elif name == 'imag': res = np.imag(*args, **kwargs)
+                else:
+                    res = obj(*args, **kwargs)
+            except Exception as e:
+                if hasattr(obj, '__name__'):
+                    func_name = obj.__name__
+                elif hasattr(obj, '__class__'):
+                    func_name = obj.__class__.__name__
+                else:
+                    func_name = "unknown function"
+                
+                err_msg = str(e)
+                if "T must be a rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Time vector T must be a 1D array (vector).") from e
+                if "Denominator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Denominator must be a vector of coefficients.") from e
+                if "Numerator polynomial must be rank-1 array" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': Numerator must be a vector of coefficients.") from e
+                if "must be at least as long as the numerator" in err_msg:
+                    raise ValueError(f"Error in '{func_name}': System must be proper (denominator degree >= numerator degree).") from e
+                if "takes" in err_msg and "positional argument" in err_msg:
+                    raise TypeError(f"Error in '{func_name}': Incorrect number of arguments. {err_msg}") from e
+                
+                if func_name not in err_msg:
+                    raise type(e)(f"Error in '{func_name}': {err_msg}") from e
+                raise
         finally:
             _unilab_nargout_ctx.reset(token)
+            
+        if isinstance(res, tuple) and len(res) > 0:
+            return res[0]
+        return res
     
+    # If not callable but called with no args, it might be a variable being accessed like a func (MATLAB style)
     if len(args) == 0 and len(kwargs) == 0: return obj
     
     # Handle array/list/string indexing
@@ -1642,15 +1790,21 @@ def unilab_set_attr(obj, attr, val, globals_dict=None):
     return obj
 
 def unilab_get(obj, attr):
+    if obj is None:
+        return None
     if isinstance(obj, dict):
-        if attr in obj: return obj[attr]
-        # For dictionaries, return None but try to be helpful if it's a common attribute
         return obj.get(attr)
+    
+    # Handle UnilabStruct explicitly
+    if isinstance(obj, UnilabStruct):
+        return getattr(obj, attr, None)
+
     try:
         return getattr(obj, attr)
     except AttributeError:
-        # If attribute doesn't exist, return None instead of crashing
-        # This matches MATLAB's behavior for some objects
+        # Check if it's a common property we want to support
+        if attr == 'shape' and isinstance(obj, (list, tuple)):
+            return (1, len(obj))
         return None
 
 def contour(*args, **kwargs):
@@ -2226,7 +2380,40 @@ def subs(expr, *args):
 def diff(x, *args, **kwargs):
     if hasattr(x, 'diff') or isinstance(x, sympy.Basic):
         return sympy.diff(x, *args, **kwargs)
-    return np.diff(x, *args, **kwargs)
+    
+    x_arr = np.asanyarray(x)
+    if x_arr.ndim == 0:
+        return np.array([], dtype=x_arr.dtype)
+        
+    n = 1
+    axis = None
+    
+    # MATLAB: Y = diff(X)
+    # MATLAB: Y = diff(X, n)
+    # MATLAB: Y = diff(X, n, dim)
+    if len(args) > 0:
+        n = int(args[0])
+    if len(args) > 1:
+        axis = int(args[1]) - 1
+        
+    if 'dim' in kwargs:
+        axis = int(kwargs.pop('dim')) - 1
+    if 'axis' in kwargs:
+        axis = int(kwargs.pop('axis'))
+        
+    if axis is None:
+        if x_arr.ndim <= 1:
+            axis = 0
+        else:
+            # Find first dimension > 1
+            axis = 0
+            for idx, dim in enumerate(x_arr.shape):
+                if dim > 1:
+                    axis = idx
+                    break
+                    
+    n = int(n)
+    return np.diff(x_arr, n=n, axis=axis, *args[2:], **kwargs)
 
 def unilab_int(expr, *args):
     import sympy
@@ -2906,6 +3093,7 @@ def _unilab_refresh_graph():
     global _unilab_plot_counter
     try:
         import json
+        import base64
         fig = plt.gcf()
         ax = plt.gca()
         if ax is None: return
@@ -2922,96 +3110,54 @@ def _unilab_refresh_graph():
         _unilab_plot_counter += 1
         plot_id = _unilab_plot_counter
         ws_path = unilab_workspace_ctx.get()
-        prefix = pathlib.Path(ws_path).name.split('_')[-1][:6] + "_" if ws_path else ""
+
+        # Cross-platform path handling
+        if ws_path:
+            ws_dir = pathlib.Path(ws_path)
+            ws_dir.mkdir(parents=True, exist_ok=True)
+            prefix = ws_dir.name.split('_')[-1][:6] + "_"
+        else:
+            ws_dir = pathlib.Path(".")
+            prefix = ""
+
         plot_type_marker = "3d_" if ax.name == '3d' else ""
         filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.png"
-        meta_filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.json"
-        save_path = pathlib.Path(ws_path) / filename if ws_path else pathlib.Path(filename)
-        save_meta_path = pathlib.Path(ws_path) / meta_filename if ws_path else pathlib.Path(meta_filename)
-        
-        if ws_path:
-            pathlib.Path(ws_path).mkdir(parents=True, exist_ok=True)
-            
-        with open(str(save_meta_path), "w") as f:
-            json.dump(meta, f)
-        num_axes = len(fig.axes)
-        if num_axes > 1:
-            rows, cols = 1, 1
-            try:
-                for ax_item in fig.axes:
-                    if hasattr(ax_item, 'get_subplotspec'):
-                        spec = ax_item.get_subplotspec()
-                        if spec:
-                            gs = spec.get_gridspec()
-                            rows = builtins.max(rows, gs.nrows)
-                            cols = builtins.max(cols, gs.ncols)
-            except: 
-                rows = (num_axes // 2 + num_axes % 2)
-                cols = 2 if num_axes >= 2 else 1
-            fig.set_size_inches(builtins.max(14, 9 * cols), builtins.max(10, 7 * rows))
-        else:
-            fig.set_size_inches(8, 5)
+        save_path = ws_dir / filename
+
+        # Styling for consistent look
         fig.set_facecolor('#121212')
         fig.patch.set_facecolor('#121212')
-        fig.patch.set_alpha(1.0)
-        for leg in fig.legends:
-            leg.get_frame().set_facecolor('#1e1e1e')
-            leg.get_frame().set_edgecolor('#444444')
-            for text_item in leg.get_texts():
-                text_item.set_color('#e0e0e0')
         for ax_item in fig.axes:
             ax_item.set_facecolor('#121212')
-            ax_item.patch.set_facecolor('#121212')
-        try:
-            has_3d = builtins.any(builtins.getattr(a, 'name', '') == '3d' for a in fig.axes)
-            if not has_3d:
-                fig.tight_layout(pad=3.0)
-            else:
-                fig.subplots_adjust(hspace=0.4, wspace=0.4, left=0.1, right=0.9, top=0.9, bottom=0.1)
-        except Exception:
-            try: fig.subplots_adjust(hspace=0.5, wspace=0.4)
-            except: pass
-        if ax.name == '3d':
-            try:
-                ax.xaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.yaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.zaxis.set_pane_color((0.07, 0.07, 0.07, 1.0))
-                ax.xaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
-                ax.yaxis._axinfo["grid"]['color'] = (0.2, 0.2, 0.2, 1.0)
-            except: pass
+
         plt.draw()
-        fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', edgecolor='#121212', transparent=False, bbox_inches='tight', pad_inches=0.1)
-        fig_num = fig.number
-        fig_ver = _unilab_fig_versions.get(fig_num, 1)
-        script_path = unilab_script_ctx.get()
+        fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', transparent=False)
 
-        # Bridge emission
-        import base64
-        try:
-            with open(str(save_path), 'rb') as img_file:
-                b64_data = base64.b64encode(img_file.read()).decode('utf-8')
-                data_uri = f'data:image/png;base64,{b64_data}'
-                
-            cb = unilab_event_ctx.get()
-            if cb:
-                cb('GRAPHICAL_PLOT', json.dumps({
-                    'filename': filename,
-                    'fig': fig_num,
-                    'ver': fig_ver,
-                    'script': script_path,
-                    'data': data_uri,
-                    'meta': meta
-                }))
-        except Exception as e:
-            print(f'Error emitting plot event: {e}')
+        # Bridge emission (Base64)
+        with open(str(save_path), 'rb') as img_file:
+            b64_data = base64.b64encode(img_file.read()).decode('utf-8')
+            data_uri = f'data:image/png;base64,{b64_data}'
 
-        marker = f'::GRAPHICAL_PLOT::{filename}::FIG::{fig_num}::VER::{fig_ver}'
-        if script_path:
-            marker += f'::SCRIPT::{script_path}'
-        print(marker)
+        cb = unilab_event_ctx.get()
+        if cb:
+            cb('GRAPHICAL_PLOT', json.dumps({
+                'filename': filename,
+                'fig': fig.number,
+                'ver': _unilab_fig_versions.get(fig.number, 1),
+                'script': unilab_script_ctx.get(),
+                'data': data_uri,
+                'meta': meta
+            }))
+
+        # Clean up local file in bridge mode to avoid clutter
+        # But only if NOT in web mode, as web mode needs the file to encode it into the result
+        if os.environ.get('UNILAB_BRIDGE_MODE') == '1' and os.environ.get('UNILAB_WEB_MODE') != '1':
+            try: save_path.unlink()
+            except: pass
+
+        print(f'::GRAPHICAL_PLOT::{filename}::FIG::{fig.number}')
     except Exception as e:
         print(f"Error saving graph: {e}")
-
 _unilab_hold = False
 
 def clf():
@@ -3363,7 +3509,7 @@ def figure(*args, **kwargs):
 def subplot(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    res = plt.subplot(*p_args, **kwargs); _unilab_refresh_graph(); return res
+    res = plt.subplot(*p_args, **kwargs); return res
 
 def hold(*args):
     global _unilab_hold

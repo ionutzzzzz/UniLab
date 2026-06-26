@@ -19,6 +19,11 @@ import builtins
 import inspect
 import math
 import sys
+import warnings
+
+# Suppress harmless Matplotlib warning when clearing figures with log-scaled axes
+warnings.filterwarnings("ignore", category=UserWarning, message=".*non-positive xlim.*")
+
 
 IS_HEADLESS = sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
 
@@ -2375,7 +2380,40 @@ def subs(expr, *args):
 def diff(x, *args, **kwargs):
     if hasattr(x, 'diff') or isinstance(x, sympy.Basic):
         return sympy.diff(x, *args, **kwargs)
-    return np.diff(x, *args, **kwargs)
+    
+    x_arr = np.asanyarray(x)
+    if x_arr.ndim == 0:
+        return np.array([], dtype=x_arr.dtype)
+        
+    n = 1
+    axis = None
+    
+    # MATLAB: Y = diff(X)
+    # MATLAB: Y = diff(X, n)
+    # MATLAB: Y = diff(X, n, dim)
+    if len(args) > 0:
+        n = int(args[0])
+    if len(args) > 1:
+        axis = int(args[1]) - 1
+        
+    if 'dim' in kwargs:
+        axis = int(kwargs.pop('dim')) - 1
+    if 'axis' in kwargs:
+        axis = int(kwargs.pop('axis'))
+        
+    if axis is None:
+        if x_arr.ndim <= 1:
+            axis = 0
+        else:
+            # Find first dimension > 1
+            axis = 0
+            for idx, dim in enumerate(x_arr.shape):
+                if dim > 1:
+                    axis = idx
+                    break
+                    
+    n = int(n)
+    return np.diff(x_arr, n=n, axis=axis, *args[2:], **kwargs)
 
 def unilab_int(expr, *args):
     import sympy
