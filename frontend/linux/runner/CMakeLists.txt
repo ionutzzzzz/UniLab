@@ -23,4 +23,9 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
+# Set RPATH to find libraries in the bundle.
+# The $ORIGIN token will be replaced by the runtime linker with the directory
+# containing the executable, allowing it to find libraries in the 'lib' sub-folder.
+target_link_options(${BINARY_NAME} PRIVATE "LINKER:-rpath,$ORIGIN/lib")
+
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

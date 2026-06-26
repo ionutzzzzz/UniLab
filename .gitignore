@@ -15,6 +15,7 @@ graph*.json
 build_deb
 *.deb
 test_python_standalone
+build_release
 
 # Prerequisites
 *.d

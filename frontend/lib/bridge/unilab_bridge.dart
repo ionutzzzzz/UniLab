@@ -95,16 +95,18 @@ class UniLabBridge {
   static DynamicLibrary _loadLibraryHandle(String backendPath) {
     String libName = Platform.isLinux ? 'libunilab_core.so' : (Platform.isMacOS ? 'libunilab_core.dylib' : 'unilab_core.dll');
     
+    // In a packaged build, the library will be in a known relative location.
+    final exeDir = Directory(Platform.resolvedExecutable).parent.path;
     final locations = [
-      // Dev paths (Rust Workspace)
-      p.join(backendPath, 'backend', 'target', 'release', libName),
-      p.join(backendPath, 'backend', 'target', 'debug', libName),
+      // Packaged paths
+      p.join(exeDir, 'lib', libName), 
+      p.join(exeDir, '..', 'Frameworks', libName), // macOS Frameworks dir
+      p.join(exeDir, libName),
+      // Path for bundled python dependencies
+      p.join(p.dirname(exeDir), 'python', 'lib', libName),
+      // Dev paths for local testing
       p.join(backendPath, 'target', 'release', libName),
       p.join(backendPath, 'target', 'debug', libName),
-      // Packaged paths
-      p.join(Directory(Platform.resolvedExecutable).parent.path, 'lib', libName), // Linux/Windows lib dir
-      p.join(Directory(Platform.resolvedExecutable).parent.path, '..', 'Frameworks', libName), // macOS Frameworks dir
-      p.join(Directory(Platform.resolvedExecutable).parent.path, libName), // Same dir as exe
       libName,
     ];
     
