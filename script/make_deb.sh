@@ -7,6 +7,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
 PKG_NAME="unilab-core"
 PKG_VERSION="0.1.0"
 PKG_ARCH=$(dpkg --print-architecture)
+DEB_HOST_MULTIARCH=$(dpkg-architecture -q DEB_HOST_MULTIARCH)
 BUILD_DIR="$PROJECT_ROOT/build_deb"
 INSTALL_DIR="$BUILD_DIR/opt/unilab"
 
@@ -29,7 +30,7 @@ cd "$PROJECT_ROOT"
 # 3. Copy Backend Files
 echo "📂 Copying backend files..."
 # Only copy necessary directories and files, excluding caches and build artifacts
-rsync -a --exclude="__pycache__" --exclude="target" \
+rsync -aL --exclude="__pycache__" --exclude="target" \
     "$PROJECT_ROOT/backend/core" \
     "$PROJECT_ROOT/backend/api" \
     "$PROJECT_ROOT/backend/utils" \
@@ -52,7 +53,7 @@ chmod +x "$INSTALL_DIR/python/bin/python3"
 # Copy standard library
 rsync -a --exclude="__pycache__" /usr/lib/python3.13/ "$INSTALL_DIR/python/lib/python3.13/"
 # Copy python shared library so PyO3 and other components can use it
-cp /usr/lib/aarch64-linux-gnu/libpython3.13.so.1.0 "$INSTALL_DIR/python/lib/"
+cp /usr/lib/$DEB_HOST_MULTIARCH/libpython3.13.so.1.0 "$INSTALL_DIR/python/lib/"
 
 echo "🐍 Creating virtualenv using bundled Python..."
 "$INSTALL_DIR/python/bin/python3" -m venv "$INSTALL_DIR/venv"
