@@ -71,7 +71,7 @@ class UniLabCLIApp(tk.Tk):
         # Async runner & core backend
         self.runner = AsyncRunner()
         cfg = BackendConfig(
-            workspace_root=pathlib.Path("./client_workspaces"),
+            workspace_root=pathlib.Path("./.console_workspaces/client_workspaces"),
             use_docker=False
         )
         self.core = UniLabCore(cfg)

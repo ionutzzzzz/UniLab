@@ -6,7 +6,7 @@ from backend.core.models import SessionInfo, ExecutionResult
 
 class TestUniLabCore(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.test_dir = pathlib.Path("./test_workspace")
+        self.test_dir = pathlib.Path("./.console_workspaces/test_workspace")
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
         self.test_dir.mkdir()

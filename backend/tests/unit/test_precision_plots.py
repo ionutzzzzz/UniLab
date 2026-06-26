@@ -12,7 +12,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 @pytest.mark.asyncio
 async def test_precision():
     print("Starting Precision Rendering Test...")
-    cfg = BackendConfig(workspace_root=pathlib.Path("./test_precision"))
+    cfg = BackendConfig(workspace_root=pathlib.Path("./.console_workspaces/test_precision"))
     core = UniLabCore(cfg)
     await core.start()
     
@@ -38,9 +38,9 @@ async def test_precision():
 
     finally:
         await core.stop()
-        if pathlib.Path("./test_precision").exists():
+        if pathlib.Path("./.console_workspaces/test_precision").exists():
             import shutil
-            shutil.rmtree("./test_precision")
+            shutil.rmtree("./.console_workspaces/test_precision")
 
 if __name__ == "__main__":
     asyncio.run(test_precision())

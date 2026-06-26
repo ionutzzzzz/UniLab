@@ -12,7 +12,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 @pytest.mark.asyncio
 async def test_ascii_labels():
     print("Starting ASCII Labels and Grid Tests...")
-    cfg = BackendConfig(workspace_root=pathlib.Path("./test_labels"))
+    cfg = BackendConfig(workspace_root=pathlib.Path("./.console_workspaces/test_labels"))
     core = UniLabCore(cfg)
     await core.start()
     
@@ -44,9 +44,9 @@ async def test_ascii_labels():
 
     finally:
         await core.stop()
-        if pathlib.Path("./test_labels").exists():
+        if pathlib.Path("./.console_workspaces/test_labels").exists():
             import shutil
-            shutil.rmtree("./test_labels")
+            shutil.rmtree("./.console_workspaces/test_labels")
 
 if __name__ == "__main__":
     asyncio.run(test_ascii_labels())

@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath('.'))
 from backend.core.unilab_core import UniLabCore, BackendConfig
 
 async def main():
-    cfg = BackendConfig(workspace_root=pathlib.Path('./console_workspaces').resolve())
+    cfg = BackendConfig(workspace_root=pathlib.Path('./.console_workspaces').resolve())
     core = UniLabCore(cfg)
     await core.start()
     session = await core.create_session("test_user", "transpiler")

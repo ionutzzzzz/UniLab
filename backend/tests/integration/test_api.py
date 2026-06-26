@@ -16,7 +16,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 class TestUniLabAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.test_dir = pathlib.Path("./api_test_workspace")
+        cls.test_dir = pathlib.Path("./.console_workspaces/api_test_workspace")
         if cls.test_dir.exists():
             shutil.rmtree(cls.test_dir)
         cls.test_dir.mkdir()

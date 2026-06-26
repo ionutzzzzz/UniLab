@@ -12,7 +12,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 @pytest.mark.asyncio
 async def test_all_plots():
     print("Starting Comprehensive Plot Tests...")
-    cfg = BackendConfig(workspace_root=pathlib.Path("./test_workspace_all"))
+    cfg = BackendConfig(workspace_root=pathlib.Path("./.console_workspaces/test_workspace_all"))
     core = UniLabCore(cfg)
     await core.start()
     
@@ -44,9 +44,9 @@ async def test_all_plots():
                 
     finally:
         await core.stop()
-        if pathlib.Path("./test_workspace_all").exists():
+        if pathlib.Path("./.console_workspaces/test_workspace_all").exists():
             import shutil
-            shutil.rmtree("./test_workspace_all")
+            shutil.rmtree("./.console_workspaces/test_workspace_all")
 
 if __name__ == "__main__":
     asyncio.run(test_all_plots())

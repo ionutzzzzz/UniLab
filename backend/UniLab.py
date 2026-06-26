@@ -439,7 +439,7 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
         print_error(f"Script '{script_path}' not found.")
         return
 
-    workspace_root = pathlib.Path("./test_runs").resolve()
+    workspace_root = pathlib.Path("./.console_workspaces/test_runs").resolve()
     try:
         workspace_root.mkdir(exist_ok=True)
     except OSError as e:
@@ -509,12 +509,20 @@ async def run_UniLab_script(script_path: str, engine_name: str = "transpiler"):
 
 async def run_console(engine_name: str = "transpiler", command: Optional[str] = None):
     global workspace_vars
-    workspace_root = pathlib.Path("./console_workspaces").resolve()
     try:
+        workspace_root = pathlib.Path("./.console_workspaces").resolve()
         workspace_root.mkdir(exist_ok=True)
-    except OSError as e:
-        print_error(f"Could not create console workspace: {e}")
-        return
+        # Verify write permission
+        test_file = workspace_root / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+    except (OSError, PermissionError):
+        workspace_root = (pathlib.Path.home() / ".unilab" / ".console_workspaces").resolve()
+        try:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            print_error(f"Could not create console workspace: {e}")
+            return
     
     history_file = workspace_root / ".unilab_history"
     if not command and readline:

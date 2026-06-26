@@ -87,8 +87,8 @@ class TitleStrip extends StatelessWidget {
             const SizedBox(width: 8),
             UiText(
               text: appProvider.projectRoot != null
-                  ? 'unilab_workspaces/${p.basename(appProvider.projectRoot!)}'
-                  : 'unilab_workspaces/none',
+                  ? '.console_workspaces/unilab_workspaces/${p.basename(appProvider.projectRoot!)}'
+                  : '.console_workspaces/unilab_workspaces/none',
               variant: UiTextVariant.label,
               color: ui.colors.textSecondary,
               letterSpacing: 0.1,

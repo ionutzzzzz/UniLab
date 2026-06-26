@@ -10,7 +10,7 @@ class EngineType(str, Enum):
 
 @dataclass
 class BackendConfig:
-    workspace_root: pathlib.Path = pathlib.Path("./unilab_workspaces")
+    workspace_root: pathlib.Path = pathlib.Path("./.console_workspaces/unilab_workspaces")
     use_docker: bool = False
     docker_image: str = "unilab:latest"
     port: int = 8000

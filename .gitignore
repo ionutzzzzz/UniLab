@@ -7,12 +7,14 @@ __pycache__
 test_runs
 test_workspace
 tmp_run
-console_workspaces
+.console_workspaces
 unilab_workspaces
 graph*.png
 graph*.json
 *.pyc
 build_deb
+*.deb
+test_python_standalone
 
 # Prerequisites
 *.d

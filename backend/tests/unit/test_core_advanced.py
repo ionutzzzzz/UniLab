@@ -6,7 +6,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 
 @pytest.fixture
 def workspace_root():
-    root = pathlib.Path("./test_core_adv")
+    root = pathlib.Path("./.console_workspaces/test_core_adv")
     if root.exists():
         shutil.rmtree(root)
     root.mkdir(parents=True, exist_ok=True)

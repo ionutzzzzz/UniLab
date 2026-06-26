@@ -530,3 +530,376 @@ def confusion_matrix(y_true=None, y_pred=None, num_classes=None):
     for i, c1 in enumerate(cl):
         for j, c2 in enumerate(cl): cm[i,j] = np.sum((y_t==c1)&(y_p==c2))
     return cm
+
+# --- Additional Model Algorithms ---
+
+class KNearestNeighborsClassifier:
+    def __init__(self, n_neighbors=5):
+        self.n_neighbors = n_neighbors
+        self.X_train = None
+        self.y_train = None
+        
+    def fit(self, X=None, y=None):
+        self.X_train = np.asarray(X)
+        self.y_train = np.asarray(y).flatten()
+        return self
+        
+    def predict(self, X=None):
+        X = np.asarray(X)
+        preds = []
+        for x in X:
+            dists = np.linalg.norm(self.X_train - x, axis=1)
+            k_indices = np.argsort(dists)[:self.n_neighbors]
+            k_labels = self.y_train[k_indices]
+            most_common = Counter(k_labels).most_common(1)[0][0]
+            preds.append(most_common)
+        return np.array(preds)
+
+class AdaBoostClassifier:
+    def __init__(self, n_estimators=50, lr=1.0):
+        self.n_estimators = int(n_estimators)
+        self.lr = float(lr)
+        self.estimators = []
+        self.estimator_weights = []
+        
+    def fit(self, X=None, y=None):
+        X = np.asarray(X)
+        y = np.asarray(y).flatten()
+        y_ = np.where(y <= 0, -1, 1)
+        n_samples, n_features = X.shape
+        w = np.full(n_samples, 1 / n_samples)
+        
+        self.estimators = []
+        self.estimator_weights = []
+        
+        for _ in range(self.n_estimators):
+            estimator = DecisionTree(max_depth=1, task='classification')
+            sample_indices = np.random.choice(n_samples, n_samples, replace=True, p=w)
+            estimator.fit(X[sample_indices], y_[sample_indices])
+            
+            predictions = estimator.predict(X)
+            predictions = np.where(predictions <= 0, -1, 1)
+            
+            error = np.sum(w[predictions != y_])
+            if error >= 0.5:
+                error = 0.499
+            if error <= 0:
+                error = 1e-10
+                
+            alpha = 0.5 * np.log((1 - error) / error) * self.lr
+            w *= np.exp(-alpha * y_ * predictions)
+            w /= np.sum(w)
+            
+            self.estimators.append(estimator)
+            self.estimator_weights.append(alpha)
+        return self
+        
+    def predict(self, X=None):
+        X = np.asarray(X)
+        predictions = np.zeros(len(X))
+        for alpha, estimator in zip(self.estimator_weights, self.estimators):
+            preds = estimator.predict(X)
+            preds = np.where(preds <= 0, -1, 1)
+            predictions += alpha * preds
+        return np.where(predictions >= 0, 1, 0)
+
+class LinearRegression:
+    def __init__(self, fit_intercept=True, l1_ratio=0.0, alpha=0.0):
+        self.fit_intercept = bool(fit_intercept)
+        self.l1_ratio = float(l1_ratio)
+        self.alpha = float(alpha)
+        self.coef_ = None
+        self.intercept_ = 0.0
+        self.theta = None
+        
+    def fit(self, X=None, y=None):
+        X = np.asarray(X)
+        if len(X.shape) == 1: X = X.reshape(-1, 1)
+        y = np.asarray(y).reshape(-1, 1)
+        if self.fit_intercept:
+            X_bias = np.c_[np.ones((len(X), 1)), X]
+        else:
+            X_bias = X
+            
+        n_samples, n_features = X_bias.shape
+        
+        if self.alpha == 0:
+            self.theta = np.linalg.pinv(X_bias.T.dot(X_bias)).dot(X_bias.T).dot(y)
+        else:
+            self.theta = np.zeros((n_features, 1))
+            lr = 0.01
+            for _ in range(1000):
+                h = X_bias.dot(self.theta)
+                reg_grad = np.zeros_like(self.theta)
+                reg_grad += (1 - self.l1_ratio) * self.alpha * self.theta
+                reg_grad += self.l1_ratio * self.alpha * np.sign(self.theta)
+                gradient = (X_bias.T.dot(h - y) + reg_grad) / n_samples
+                if self.fit_intercept:
+                    gradient[0] -= reg_grad[0] / n_samples
+                self.theta -= lr * gradient
+                
+        if self.fit_intercept:
+            self.intercept_ = float(self.theta[0, 0])
+            self.coef_ = self.theta[1:, 0]
+        else:
+            self.coef_ = self.theta[:, 0]
+        return self
+        
+    def predict(self, X=None):
+        X = np.asarray(X)
+        if len(X.shape) == 1: X = X.reshape(-1, 1)
+        if self.fit_intercept:
+            X_bias = np.c_[np.ones((len(X), 1)), X]
+        else:
+            X_bias = X
+        return X_bias.dot(self.theta).flatten()
+
+# --- AutoML Auto-Trainer ---
+
+def fitAutoML(X=None, y=None, task='classification', verbose=True):
+    """
+    Automatically trains and evaluates multiple machine learning models.
+    Selects the best performing model based on validation score.
+    """
+    X = np.asarray(X)
+    y = np.asarray(y).flatten()
+    
+    np.random.seed(42)
+    shuffled_indices = np.random.permutation(len(X))
+    split_idx = int(len(X) * 0.8)
+    train_idx, test_idx = shuffled_indices[:split_idx], shuffled_indices[split_idx:]
+    
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
+    
+    results = []
+    
+    if task == 'classification':
+        models = {
+            'LogisticRegression': LogisticRegression(lr=0.05, epochs=500),
+            'DecisionTree': DecisionTree(max_depth=5, task='classification'),
+            'RandomForest': RandomForest(n_trees=5, max_depth=5, task='classification'),
+            'SVM': SVM(epochs=500),
+            'KNN': KNearestNeighborsClassifier(n_neighbors=3),
+            'AdaBoost': AdaBoostClassifier(n_estimators=10)
+        }
+        
+        for name, model in models.items():
+            try:
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                acc = float(np.mean(preds == y_test))
+                results.append((name, model, acc))
+            except Exception as e:
+                if verbose: print(f"AutoML Warning: Model {name} training failed: {e}")
+                
+        results.sort(key=lambda x: x[2], reverse=True)
+        
+        if verbose:
+            print("\n🤖 --- UniLab AutoML Classification Leaderboard ---")
+            print(f"{'Model Name':22} | {'Validation Accuracy':20}")
+            print("-" * 47)
+            for name, _, acc in results:
+                print(f"{name:22} | {acc:.4f}")
+            print(f"🏆 Best Model: {results[0][0]} with {results[0][2]:.4f} accuracy.\n")
+            
+    else:  # regression
+        models = {
+            'LinearRegression': LinearRegression(alpha=0.0),
+            'RidgeRegression': LinearRegression(alpha=0.1, l1_ratio=0.0),
+            'LassoRegression': LinearRegression(alpha=0.1, l1_ratio=1.0),
+            'DecisionTreeRegressor': DecisionTree(max_depth=5, task='regression'),
+            'RandomForestRegressor': RandomForest(n_trees=5, max_depth=5, task='regression'),
+            'GaussianProcess': GaussianProcessRegressor()
+        }
+        
+        for name, model in models.items():
+            try:
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                mse = float(np.mean((preds - y_test)**2))
+                results.append((name, model, mse))
+            except Exception as e:
+                if verbose: print(f"AutoML Warning: Model {name} training failed: {e}")
+                
+        results.sort(key=lambda x: x[2])
+        
+        if verbose:
+            print("\n🤖 --- UniLab AutoML Regression Leaderboard ---")
+            print(f"{'Model Name':22} | {'Validation MSE':20}")
+            print("-" * 47)
+            for name, _, mse in results:
+                print(f"{name:22} | {mse:.6f}")
+            print(f"🏆 Best Model: {results[0][0]} with {results[0][2]:.6f} MSE.\n")
+            
+    return results[0][1]
+
+class PrincipalComponentAnalysis:
+    def __init__(self, n_components=2):
+        self.n_components = int(n_components)
+        self.components = None
+        self.mean = None
+        
+    def fit(self, X=None):
+        X = np.asarray(X)
+        self.mean = np.mean(X, axis=0)
+        X_centered = X - self.mean
+        cov = np.cov(X_centered, rowvar=False)
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        idx = np.argsort(eigenvalues)[::-1]
+        self.components = eigenvectors[:, idx][:, :self.n_components]
+        return self
+        
+    def transform(self, X=None):
+        X = np.asarray(X)
+        X_centered = X - self.mean
+        return np.dot(X_centered, self.components)
+        
+    def fit_transform(self, X=None):
+        return self.fit(X).transform(X)
+
+class DBSCAN:
+    def __init__(self, eps=0.5, min_samples=5):
+        self.eps = float(eps)
+        self.min_samples = int(min_samples)
+        
+    def fit_predict(self, X=None):
+        X = np.asarray(X)
+        n_samples = X.shape[0]
+        labels = np.full(n_samples, -1)
+        
+        visited = np.zeros(n_samples, dtype=bool)
+        cluster_id = 0
+        
+        for i in range(n_samples):
+            if visited[i]:
+                continue
+            visited[i] = True
+            
+            neighbors = self._get_neighbors(X, i)
+            if len(neighbors) < self.min_samples:
+                labels[i] = -1
+            else:
+                self._expand_cluster(X, labels, i, neighbors, cluster_id, visited)
+                cluster_id += 1
+                
+        return labels.tolist()
+        
+    def _expand_cluster(self, X, labels, node_idx, neighbors, cluster_id, visited):
+        labels[node_idx] = cluster_id
+        
+        i = 0
+        while i < len(neighbors):
+            neighbor_idx = neighbors[i]
+            if not visited[neighbor_idx]:
+                visited[neighbor_idx] = True
+                sub_neighbors = self._get_neighbors(X, neighbor_idx)
+                if len(sub_neighbors) >= self.min_samples:
+                    neighbors = np.unique(np.concatenate([neighbors, sub_neighbors])).astype(int)
+            if labels[neighbor_idx] == -1:
+                labels[neighbor_idx] = cluster_id
+            i += 1
+            
+    def _get_neighbors(self, X, node_idx):
+        dists = np.linalg.norm(X - X[node_idx], axis=1)
+        return np.where(dists <= self.eps)[0]
+
+class RNNCell:
+    def __init__(self, input_dim=2, hidden_dim=4):
+        self.input_dim = int(input_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.Wx = np.random.randn(self.input_dim, self.hidden_dim) * 0.1
+        self.Wh = np.random.randn(self.hidden_dim, self.hidden_dim) * 0.1
+        self.b = np.zeros((1, self.hidden_dim))
+        
+    def forward(self, x=None, h_prev=None):
+        """
+        x: Input vector of shape (batch_size, input_dim)
+        h_prev: Previous hidden state of shape (batch_size, hidden_dim)
+        """
+        x = np.asarray(x)
+        if len(x.shape) == 1: x = x.reshape(1, -1)
+        
+        if h_prev is None:
+            h_prev = np.zeros((x.shape[0], self.hidden_dim))
+        else:
+            h_prev = np.asarray(h_prev)
+            if len(h_prev.shape) == 1: h_prev = h_prev.reshape(1, -1)
+            
+        h_next = np.tanh(np.dot(x, self.Wx) + np.dot(h_prev, self.Wh) + self.b)
+        return h_next.tolist()
+
+def kmeans_elbow_score(X=None, max_k=8):
+    """
+    Computes sum of squared distances of samples to their closest cluster center (inertia)
+    for k in 1 to max_k to help find the optimal number of clusters (Elbow Method).
+    """
+    X = np.asarray(X)
+    max_k = int(max_k)
+    distortions = []
+    for k in range(1, max_k + 1):
+        kmeans = KMeans(k=k, max_iters=20)
+        kmeans.fit(X)
+        labels = kmeans.predict(X)
+        inertia = np.sum([np.sum((X[labels == j] - kmeans.centroids[j]) ** 2) for j in range(k) if np.any(labels == j)])
+        distortions.append(float(inertia))
+    return distortions
+
+class RobustScaler:
+    def __init__(self, with_centering=True, with_scaling=True):
+        self.with_centering = bool(with_centering)
+        self.with_scaling = bool(with_scaling)
+        self.center_ = None
+        self.scale_ = None
+        
+    def fit(self, X=None):
+        X = np.asarray(X)
+        if self.with_centering:
+            self.center_ = np.median(X, axis=0)
+        if self.with_scaling:
+            q75, q25 = np.percentile(X, [75, 25], axis=0)
+            self.scale_ = q75 - q25
+            if isinstance(self.scale_, np.ndarray):
+                self.scale_[self.scale_ == 0] = 1.0
+            elif self.scale_ == 0:
+                self.scale_ = 1.0
+        return self
+        
+    def transform(self, X=None):
+        X = np.asarray(X)
+        if self.with_centering:
+            X = X - self.center_
+        if self.with_scaling:
+            X = X / self.scale_
+        return X
+        
+    def fit_transform(self, X=None):
+        return self.fit(X).transform(X)
+
+def silhouette_score_approx(X=None, labels=None):
+    """
+    Computes approximation of silhouette coefficient.
+    """
+    X = np.asarray(X)
+    labels = np.asarray(labels)
+    unique_labels = np.unique(labels)
+    if len(unique_labels) < 2:
+        return 0.0
+    scores = []
+    for i in range(len(X)):
+        label_i = labels[i]
+        same_cluster = X[labels == label_i]
+        if len(same_cluster) <= 1:
+            scores.append(0.0)
+            continue
+        a = np.mean(np.linalg.norm(same_cluster - X[i], axis=1))
+        b = float('inf')
+        for label_j in unique_labels:
+            if label_j == label_i:
+                continue
+            other_cluster = X[labels == label_j]
+            mean_dist = np.mean(np.linalg.norm(other_cluster - X[i], axis=1))
+            if mean_dist < b:
+                b = mean_dist
+        scores.append((b - a) / max(a, b))
+    return float(np.mean(scores))

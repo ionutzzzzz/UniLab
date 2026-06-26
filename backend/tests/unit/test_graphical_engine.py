@@ -12,7 +12,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 @pytest.mark.asyncio
 async def test_graphical_engine():
     print("Starting Graphical Engine Tests...")
-    cfg = BackendConfig(workspace_root=pathlib.Path("./test_graphical"))
+    cfg = BackendConfig(workspace_root=pathlib.Path("./.console_workspaces/test_graphical"))
     core = UniLabCore(cfg)
     await core.start()
     
@@ -26,7 +26,7 @@ async def test_graphical_engine():
         res = await core.run_code(sid, "x = 0:0.1:10; y = sin(x); plot(x, y);")
         print(f"STDOUT:\n{res.stdout}")
         
-        graph_path = pathlib.Path("./test_graphical") / session.workspace_path.name / "graph.jpg"
+        graph_path = pathlib.Path("./.console_workspaces/test_graphical") / session.workspace_path.name / "graph.jpg"
         if graph_path.exists():
             print(f"✅ Success: graph.jpg created at {graph_path}")
         else:
@@ -44,9 +44,9 @@ async def test_graphical_engine():
 
     finally:
         await core.stop()
-        if pathlib.Path("./test_graphical").exists():
+        if pathlib.Path("./.console_workspaces/test_graphical").exists():
             import shutil
-            shutil.rmtree("./test_graphical")
+            shutil.rmtree("./.console_workspaces/test_graphical")
 
 if __name__ == "__main__":
     asyncio.run(test_graphical_engine())

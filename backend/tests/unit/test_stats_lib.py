@@ -5,7 +5,7 @@ from backend.core.unilab_core import UniLabCore, BackendConfig
 
 class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.test_dir = pathlib.Path("./test_stats_workspace")
+        self.test_dir = pathlib.Path("./.console_workspaces/test_stats_workspace")
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
         self.test_dir.mkdir()
