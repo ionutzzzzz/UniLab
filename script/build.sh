@@ -39,7 +39,11 @@ if [ "$PLATFORM" == "linux" ]; then
 
     # 2. Setup Standalone Python
     echo "📦 Downloading and bundling standalone Python interpreter..."
-    PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1+20240107-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    if [ "$PKG_ARCH" == "arm64" ] || [ "$(uname -m)" == "aarch64" ]; then
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1+20240107-aarch64-unknown-linux-gnu-install_only.tar.gz"
+    else
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1+20240107-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    fi
     mkdir -p "$BUILD_DIR/temp_python"
     wget -q -O "$BUILD_DIR/temp_python/python.tar.gz" "$PYTHON_URL"
     tar -xzf "$BUILD_DIR/temp_python/python.tar.gz" -C "$BUILD_DIR/opt/unilab/"
@@ -130,7 +134,12 @@ EOF
 
     echo "📂 Copying frontend files..."
     mkdir -p "$BUILD_DIR/opt/unilab/gui"
-    cp -r "$PROJECT_ROOT/frontend/build/linux/x64/release/bundle/"* "$BUILD_DIR/opt/unilab/gui/"
+    if [ -d "$PROJECT_ROOT/frontend/build/linux/arm64/release/bundle/" ]; then
+        FLUTTER_BUNDLE_DIR="$PROJECT_ROOT/frontend/build/linux/arm64/release/bundle/"
+    else
+        FLUTTER_BUNDLE_DIR="$PROJECT_ROOT/frontend/build/linux/x64/release/bundle/"
+    fi
+    cp -r "$FLUTTER_BUNDLE_DIR"* "$BUILD_DIR/opt/unilab/gui/"
 
     echo "✅ Frontend build complete."
 

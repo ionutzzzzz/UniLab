@@ -27,7 +27,10 @@ if [ -f "target/release/$SO_NAME" ]; then
     echo "✓ Bridge built and copied to: $DEST_DIR$SO_NAME"
 
     # Also try to copy to the active flutter build bundle if it exists
-    BUNDLE_DIR="../frontend/build/linux/x64/debug/bundle/lib/"
+    BUNDLE_DIR="../frontend/build/linux/arm64/debug/bundle/lib/"
+    if [ ! -d "$BUNDLE_DIR" ]; then
+        BUNDLE_DIR="../frontend/build/linux/x64/debug/bundle/lib/"
+    fi
     if [ -d "$BUNDLE_DIR" ]; then
         cp "target/release/$SO_NAME" "$BUNDLE_DIR"
         echo "✓ Synced to active bundle: $BUNDLE_DIR$SO_NAME"
