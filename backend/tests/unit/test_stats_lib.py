@@ -8,7 +8,7 @@ class TestStatsLibrary(unittest.IsolatedAsyncioTestCase):
         self.test_dir = pathlib.Path("./.console_workspaces/test_stats_workspace")
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
-        self.test_dir.mkdir()
+        self.test_dir.mkdir(parents=True, exist_ok=True)
         self.config = BackendConfig(workspace_root=self.test_dir, use_docker=False)
         self.core = UniLabCore(self.config)
         await self.core.start()

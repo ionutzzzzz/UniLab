@@ -8,6 +8,9 @@ test_runs
 test_workspace
 tmp_run
 .console_workspaces
+.console_workspace
+prod_workspaces
+prod_workspace
 unilab_workspaces
 graph*.png
 graph*.json
