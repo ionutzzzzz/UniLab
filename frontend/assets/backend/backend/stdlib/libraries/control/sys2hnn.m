@@ -1,4 +1,6 @@
 function H = sys2hnn(sys, N)
+    if nargin < 1, sys = []; end
+    if nargin < 2, N = []; end
     [A, B, C, ~] = ssdata(ss(sys));
     
     num_params = 2 * N - 1;

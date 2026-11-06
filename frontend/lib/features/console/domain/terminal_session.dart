@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:xterm/xterm.dart';
@@ -5,22 +6,25 @@ import 'package:xterm/xterm.dart';
 // Conditional imports for PTY
 import 'pty_stub.dart' if (dart.library.io) 'package:flutter_pty/flutter_pty.dart';
 // Conditional import for Platform info
-import 'dart:io' if (dart.library.html) 'pty_stub.dart' as platform_impl;
+import '../../../utils/platform_io.dart' as platform_impl;
 
 class TerminalSession {
   final String id;
   final String name;
   final Terminal terminal;
   final Pty pty;
+  final StreamSubscription<dynamic>? outputSubscription;
   
   TerminalSession({
     required this.id,
     required this.name,
     required this.terminal,
     required this.pty,
+    this.outputSubscription,
   });
 
   void dispose() {
+    outputSubscription?.cancel();
     pty.kill();
   }
 
@@ -35,15 +39,17 @@ class TerminalSession {
     }
   }
 
-  static TerminalSession create(String id, String name) {
+  static TerminalSession create(String id, String name, {String? workingDirectory}) {
     final terminal = Terminal(
       maxLines: 10000,
     );
 
     final shell = _shell;
+    final dir = workingDirectory ?? (kIsWeb ? null : platform_impl.Directory.current.path);
 
     final pty = Pty.start(
       shell,
+      workingDirectory: dir,
       columns: terminal.viewWidth,
       rows: terminal.viewHeight,
       environment: {
@@ -54,7 +60,7 @@ class TerminalSession {
     );
 
     // Use a stateful decoder to handle UTF-8 sequences correctly across chunks
-    pty.output
+    final subscription = pty.output
         .cast<List<int>>()
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen((data) {
@@ -74,6 +80,7 @@ class TerminalSession {
       name: name,
       terminal: terminal,
       pty: pty,
+      outputSubscription: subscription,
     );
   }
 }

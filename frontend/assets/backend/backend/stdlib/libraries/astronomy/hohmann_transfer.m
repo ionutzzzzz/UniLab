@@ -1,6 +1,9 @@
 function [dv1, dv2, total_dv] = hohmann_transfer(mu, r1, r2)
     % HOHMANN_TRANSFER Calculate delta-v for Hohmann transfer between circular orbits
     % mu: gravitational parameter (G*M)
+    if nargin < 1, mu = []; end
+    if nargin < 2, r1 = []; end
+    if nargin < 3, r2 = []; end
     v1 = sqrt(mu / r1);
     v2 = sqrt(mu / r2);
     

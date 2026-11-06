@@ -1,5 +1,6 @@
 function pr = page_rank_simple(A, d, max_iters)
     % PAGE_RANK_SIMPLE PageRank algorithm
+    if nargin < 1, A = []; end
     if nargin < 2, d = 0.85; end
     if nargin < 3, max_iters = 100; end
     

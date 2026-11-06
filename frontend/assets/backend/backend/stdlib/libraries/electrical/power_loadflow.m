@@ -2,6 +2,13 @@ function [V, delta, P, Q] = power_loadflow(Ybus, P_gen, Q_gen, P_load, Q_load, V
     % POWER_LOADFLOW Simplified Newton-Raphson Load Flow Solver
     % Returns Voltages and Angles for all buses
     
+    if nargin < 1, Ybus = []; end
+    if nargin < 2, P_gen = []; end
+    if nargin < 3, Q_gen = []; end
+    if nargin < 4, P_load = []; end
+    if nargin < 5, Q_load = []; end
+    if nargin < 6, V_init = []; end
+    if nargin < 7, delta_init = []; end
     if nargin < 8, max_iter = 10; end
     if nargin < 9, tol = 1e-4; end
     

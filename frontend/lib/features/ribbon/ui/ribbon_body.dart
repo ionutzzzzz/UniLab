@@ -27,21 +27,12 @@ class RibbonBody extends StatelessWidget {
         left: ui.spacing.sm,
         right: ui.spacing.sm,
       ),
-      child: Row(
-        children: [
-          for (int i = 0; i < groups.length; i++) ...[
-            if (i > 0)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
-                child: VerticalDivider(
-                  color: ui.colors.divider,
-                  width: ui.spacing.strokeHair,
-                  thickness: ui.spacing.strokeHair,
-                ),
-              ),
-            groups[i],
-          ]
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: groups,
+        ),
       ),
     );
   }

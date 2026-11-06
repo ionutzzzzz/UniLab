@@ -16,9 +16,9 @@ class UiTooltip extends StatelessWidget {
     final ui = UiTheme.of(context);
     return Tooltip(
       message: message,
-      textStyle: ui.typography.caption.copyWith(color: ui.colors.textInverse),
+      textStyle: ui.typography.caption.copyWith(color: ui.colors.textPrimary),
       decoration: BoxDecoration(
-        color: ui.colors.overlay,
+        color: ui.colors.panel,
         borderRadius: ui.spacing.radiusSm,
         border: Border.all(color: ui.colors.border, width: 1.0),
       ),

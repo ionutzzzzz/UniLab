@@ -1,5 +1,6 @@
 function stats = confusion_matrix_metrics(cm)
     % CONFUSION_MATRIX_METRICS Precision, Recall, F1 for each class from CM
+    if nargin < 1, cm = []; end
     K = size(cm, 1);
     stats = struct();
     stats.precision = zeros(K, 1);

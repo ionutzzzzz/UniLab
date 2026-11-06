@@ -143,6 +143,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setString('plotColormap', _settings.plotColormap);
     await prefs.setString('syntaxHighlightTheme', _settings.syntaxHighlightTheme);
     await prefs.setBool('showToolbar', _settings.showToolbar);
+    await prefs.setBool('showStatusBar', _settings.showStatusBar);
     
     // Save panel visibility
     for (final entry in _settings.panelVisibility.entries) {
@@ -156,8 +157,21 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> resetToDefaults() async {
+    final settingsKeys = [
+      'themeMode', 'fontSize', 'fontFamily', 'primaryColor', 'accentColor',
+      'editorTheme', 'uiScale', 'animationEnabled', 'rememberLayout', 'tabSize',
+      'showLineNumbers', 'wordWrap', 'showMinimap', 'autoSave', 'bracketMatching',
+      'showHiddenFiles', 'autoRefreshExplorer', 'realTimeInspector', 'restrictedExecution',
+      'networkAccess', 'telemetry', 'kernelAddress', 'connectionTimeout', 'executionTimeout',
+      'showWhitespace', 'enableAutocomplete', 'defaultProjectPath', 'plotColormap',
+      'syntaxHighlightTheme', 'showToolbar', 'showStatusBar',
+      'panel_fileExplorer', 'panel_workspace', 'panel_console',
+      'panelSize_left', 'panelSize_right',
+    ];
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    for (final key in settingsKeys) {
+      await prefs.remove(key);
+    }
     await _loadSettings();
   }
 }

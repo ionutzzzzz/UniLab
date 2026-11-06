@@ -2,6 +2,8 @@ function [f1] = f1_score(y_true, y_pred)
     % F1_SCORE Calculate the F1 score for binary classification
     % [f1] = f1_score(y_true, y_pred)
     
+    if nargin < 1, y_true = []; end
+    if nargin < 2, y_pred = []; end
     tp = sum((y_true == 1) & (y_pred == 1));
     fp = sum((y_true == 0) & (y_pred == 1));
     fn = sum((y_true == 1) & (y_pred == 0));

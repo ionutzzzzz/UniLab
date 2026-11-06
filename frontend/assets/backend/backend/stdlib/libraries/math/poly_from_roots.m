@@ -2,6 +2,7 @@ function [p] = poly_from_roots(r)
     % POLY_FROM_ROOTS Generate polynomial coefficients from roots
     % [p] = poly_from_roots([r1, r2, ...])
     
+    if nargin < 1, r = []; end
     n = length(r);
     p = [1];
     

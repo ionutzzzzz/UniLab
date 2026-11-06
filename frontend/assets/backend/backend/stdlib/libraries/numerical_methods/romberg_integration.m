@@ -2,6 +2,9 @@ function [R, iterations] = romberg_integration(f, a, b, tol, max_steps)
     % ROMBERG_INTEGRATION Numerical integration using Romberg's method
     % [R, iterations] = romberg_integration(f, a, b, tol, max_steps)
     
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
     if nargin < 4, tol = 1e-6; end
     if nargin < 5, max_steps = 10; end
     

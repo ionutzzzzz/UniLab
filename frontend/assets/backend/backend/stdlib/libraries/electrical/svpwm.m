@@ -2,6 +2,10 @@ function [pulses] = svpwm(v_alpha, v_beta, v_dc, fs)
     % SVPWM Space Vector Pulse Width Modulation
     % Simplified implementation returning duty cycles for three phases
     
+    if nargin < 1, v_alpha = []; end
+    if nargin < 2, v_beta = []; end
+    if nargin < 3, v_dc = []; end
+    if nargin < 4, fs = []; end
     v_ref = sqrt(v_alpha.^2 + v_beta.^2);
     theta = atan2(v_beta, v_alpha);
     % Wrap theta to 0-2pi

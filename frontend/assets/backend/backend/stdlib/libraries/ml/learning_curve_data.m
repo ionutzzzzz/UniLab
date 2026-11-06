@@ -1,5 +1,9 @@
 function [train_scores, test_scores] = learning_curve_data(X, y, train_sizes, model_type)
     % LEARNING_CURVE_DATA Generate data for a learning curve
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
+    if nargin < 3, train_sizes = []; end
+    if nargin < 4, model_type = []; end
     train_scores = zeros(length(train_sizes), 1);
     test_scores = zeros(length(train_sizes), 1);
     

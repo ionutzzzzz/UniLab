@@ -1,5 +1,6 @@
 function seq = collatz_sequence(n)
     % COLLATZ_SEQUENCE Generate the Collatz sequence starting from n
+    if nargin < 1, n = []; end
     seq = [n];
     while n > 1
         if mod(n, 2) == 0

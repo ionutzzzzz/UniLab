@@ -1,4 +1,6 @@
 function L = laguerre_poly_custom(n, x)
+    if nargin < 1, n = []; end
+    if nargin < 2, x = []; end
     if n == 0, L = ones(size(x)); return; end
     if n == 1, L = 1 - x; return; end
     L0 = ones(size(x)); L1 = 1 - x;

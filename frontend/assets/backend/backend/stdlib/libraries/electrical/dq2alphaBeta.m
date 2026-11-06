@@ -1,6 +1,8 @@
 function [ab0] = dq2alphaBeta(dq0, theta)
     % DQ2ALPHABETA Transforms variables from rotating to stationary frame
     
+    if nargin < 1, dq0 = []; end
+    if nargin < 2, theta = []; end
     if size(dq0, 2) ~= 3
         dq0 = dq0';
     end

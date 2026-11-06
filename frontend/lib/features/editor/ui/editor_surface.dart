@@ -204,28 +204,114 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
           child: Builder(
             builder: (context) {
               final viewportWidth = MediaQuery.of(context).size.width;
-              final codeField = CodeField(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                wrap: settings.wordWrap,
-                textStyle: ui.typography.codeBody.copyWith(
-                  color: editorFg,
-                  height: 1.5,
-                  fontSize: settings.fontSize,
-                  fontFamily: settings.fontFamily,
+              final codeField = ContextMenuRegion(
+                contextMenu: GenericContextMenu(
+                  buttonConfigs: [
+                    ContextMenuButtonConfig(
+                      'Cut',
+                      icon: const Icon(Icons.content_cut, size: 16),
+                      onPressed: () {
+                        final sel = widget.controller.selection;
+                        if (sel.isValid && !sel.isCollapsed) {
+                          final selectedText = widget.controller.text
+                              .substring(sel.start, sel.end);
+                          Clipboard.setData(ClipboardData(text: selectedText));
+                          final newText = widget.controller.text
+                              .replaceRange(sel.start, sel.end, '');
+                          widget.controller.text = newText;
+                          widget.controller.selection =
+                              TextSelection.collapsed(offset: sel.start);
+                        }
+                      },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Copy',
+                      icon: const Icon(Icons.content_copy, size: 16),
+                      onPressed: () {
+                        final sel = widget.controller.selection;
+                        if (sel.isValid && !sel.isCollapsed) {
+                          final selectedText = widget.controller.text
+                              .substring(sel.start, sel.end);
+                          Clipboard.setData(ClipboardData(text: selectedText));
+                        }
+                      },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Paste',
+                      icon: const Icon(Icons.content_paste, size: 16),
+                      onPressed: () async {
+                        final data =
+                            await Clipboard.getData(Clipboard.kTextPlain);
+                        if (data?.text != null) {
+                          final sel = widget.controller.selection;
+                          final pos = sel.isValid
+                              ? sel.start
+                              : widget.controller.text.length;
+                          final end = sel.isValid ? sel.end : pos;
+                          final newText = widget.controller.text
+                              .replaceRange(pos, end, data!.text!);
+                          widget.controller.text = newText;
+                          widget.controller.selection = TextSelection.collapsed(
+                            offset: pos + data.text!.length,
+                          );
+                        }
+                      },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Run Selection',
+                      icon: const Icon(Icons.play_arrow, size: 16),
+                      onPressed: () {
+                        final sel = widget.controller.selection;
+                        if (sel.isValid && !sel.isCollapsed) {
+                          final selectedText = widget.controller.text
+                              .substring(sel.start, sel.end);
+                          p.Provider.of<AppProvider>(
+                            context,
+                            listen: false,
+                          ).runConsoleCommand(selectedText);
+                        } else {
+                          p.Provider.of<AppProvider>(
+                            context,
+                            listen: false,
+                          ).runActiveFile();
+                        }
+                      },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Find',
+                      icon: const Icon(Icons.search, size: 16),
+                      onPressed: () {
+                        p.Provider.of<AppProvider>(
+                          context,
+                          listen: false,
+                        ).triggerEditorAction('editor.find');
+                      },
+                    ),
+                  ],
                 ),
-                background: editorBg,
-                cursorColor: colors[0],
-                gutterStyle: GutterStyle(
-                  showLineNumbers: settings.showLineNumbers,
-                  width: 80,
-                  margin: 20,
-                  textAlign: TextAlign.right,
-                  textStyle: ui.typography.label.copyWith(
-                    color: editorFg.withValues(alpha: 0.3),
-                    fontSize: 11,
+                child: CodeField(
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  wrap: settings.wordWrap,
+                  textStyle: ui.typography.codeBody.copyWith(
+                    color: editorFg,
                     height: 1.5,
+                    fontSize: settings.fontSize,
                     fontFamily: settings.fontFamily,
+                  ),
+                  background: editorBg,
+                  cursorColor: colors[0],
+                  gutterStyle: GutterStyle(
+                    showLineNumbers: settings.showLineNumbers,
+                    width: 80,
+                    margin: 20,
+                    textAlign: TextAlign.right,
+                    textStyle: ui.typography.label.copyWith(
+                      color: editorFg.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      height: 1.5,
+                      fontFamily: settings.fontFamily,
+                    ),
                   ),
                 ),
               );

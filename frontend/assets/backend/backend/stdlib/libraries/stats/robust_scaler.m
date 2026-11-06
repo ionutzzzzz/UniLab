@@ -2,6 +2,7 @@ function [scaled] = robust_scaler(data)
     % Scales data using median and interquartile range (IQR)
     % Robust to outliers
 
+    if nargin < 1, data = []; end
     data = data(:);
     med = median(data);
     q1 = quantile(data, 0.25);

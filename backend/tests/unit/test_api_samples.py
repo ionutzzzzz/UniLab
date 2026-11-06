@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 # Add the project root to sys.path
 current_dir = pathlib.Path(__file__).resolve().parent
-project_root = current_dir.resolve()
+project_root = current_dir.parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
@@ -14,6 +14,20 @@ from backend.api.main import app
 
 client = TestClient(app)
 
+SAMPLES = [
+    "51_electrical_grid_management.m",
+    "52_finance_portfolio_optimization.m",
+    "53_ml_random_forest_maintenance.m",
+    "54_numerical_ode_comparison.m",
+    "55_chemical_process_yield.m",
+    "56_graph_theory_social_analysis.m",
+    "57_astronomy_exoplanet_transit.m",
+    "58_control_lqr_pendulum.m",
+    "59_signal_radar_range.m",
+    "60_image_character_extraction.m"
+]
+
+@pytest.mark.parametrize("filename", SAMPLES)
 def test_sample(filename):
     print(f"\n--- Testing Sample: {filename} ---")
     

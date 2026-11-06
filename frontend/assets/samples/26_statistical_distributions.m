@@ -15,10 +15,8 @@ data_y = [50, 55, 52, 65, 75, 80, 72, 60, 58];
 var_x = variance_custom(data_x);
 cov_xy = covariance_custom(data_x, data_y);
 
-fprintf('Variance of Dataset X: %.2f
-', var_x);
-fprintf('Covariance between X and Y: %.2f
-', cov_xy);
+fprintf('Variance of Dataset X: %.2f\n', var_x);
+fprintf('Covariance between X and Y: %.2f\n', cov_xy);
 
 disp('--- 2. Probability Density Functions ---');
 x = linspace(-5, 5, 100);
@@ -44,5 +42,4 @@ title('Exponential PDF (\lambda=1.5)'); grid on;
 disp('--- 3. Discrete Distributions ---');
 % Poisson Distribution for rare events (e.g. server crashes)
 lambda_events = 3.5;
-fprintf('Probability of exactly 5 events when average is 3.5: %.4f
-', poisson_probability(lambda_events, 5));
+fprintf('Probability of exactly 5 events when average is 3.5: %.4f\n', poisson_probability(lambda_events, 5));

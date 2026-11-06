@@ -1,4 +1,5 @@
 function e = signal_energy(x)
     % SIGNAL_ENERGY Sum of squares of signal values
+    if nargin < 1, x = []; end
     e = sum(x.^2);
 end

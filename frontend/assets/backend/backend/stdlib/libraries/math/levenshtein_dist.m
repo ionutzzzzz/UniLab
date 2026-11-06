@@ -1,6 +1,8 @@
 function [d] = levenshtein_dist(s1, s2)
     % LEVENSHTEIN_DIST Edit distance between two strings
     
+    if nargin < 1, s1 = []; end
+    if nargin < 2, s2 = []; end
     n = length(s1);
     m = length(s2);
     D = zeros(n+1, m+1);

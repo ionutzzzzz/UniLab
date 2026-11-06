@@ -1,6 +1,8 @@
 function [x_min, f_min] = fminsearch_simple(f, x0, tol, max_iters)
     % FMINSEARCH_SIMPLE Simple Nelder-Mead-like optimization for 1D/small dim
     
+    if nargin < 1, f = []; end
+    if nargin < 2, x0 = []; end
     if nargin < 3, tol = 1e-6; end
     if nargin < 4, max_iters = 200; end
     

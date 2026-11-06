@@ -1,6 +1,7 @@
 function [q] = polyder_custom(p)
     % POLYDER_CUSTOM Differentiate polynomial p
     
+    if nargin < 1, p = []; end
     n = length(p);
     if n <= 1
         q = 0;

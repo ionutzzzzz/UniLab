@@ -412,7 +412,7 @@ class TranspilerEngine(BaseEngine):
                 
                 # Re-verify critical runtime functions and constants are in globals
                 for name in dir(runtime):
-                    if not name.startswith('_'):
+                    if not name.startswith('_') and name not in self.globals:
                         self.globals[name] = getattr(runtime, name)
                 
                 # Prepare execution environment

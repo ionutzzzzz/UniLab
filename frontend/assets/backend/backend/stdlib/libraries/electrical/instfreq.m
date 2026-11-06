@@ -2,6 +2,7 @@ function [f] = instfreq(x, fs)
     % INSTFREQ Estimates instantaneous frequency
     % Uses the derivative of the phase of the analytic signal
     
+    if nargin < 1, x = []; end
     if nargin < 2, fs = 1; end
     
     % Compute analytic signal via Hilbert transform (simplified FFT approach)

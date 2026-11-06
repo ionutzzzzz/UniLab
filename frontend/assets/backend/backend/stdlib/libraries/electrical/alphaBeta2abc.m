@@ -1,6 +1,7 @@
 function [abc] = alphaBeta2abc(ab0)
     % ALPHABETA2ABC Performs inverse Clarke transformation (alpha-beta-0 to abc)
     
+    if nargin < 1, ab0 = []; end
     if size(ab0, 2) ~= 3
         ab0 = ab0';
     end

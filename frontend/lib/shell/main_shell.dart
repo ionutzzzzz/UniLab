@@ -12,7 +12,8 @@ import 'package:unilab/features/ribbon/ui/app_ribbon.dart';
 import 'package:unilab/features/workspace/ui/workspace_panel.dart';
 import 'package:unilab/features/console/ui/console_dock.dart';
 import 'package:unilab/features/explorer/ui/explorer_panel.dart';
-import 'package:unilab/widgets/command_palette/command_palette.dart';
+import 'package:flutter/foundation.dart';
+import 'package:unilab/features/command_palette/ui/command_palette.dart';
 import 'package:unilab/core/layout/shell_layout_state.dart';
 import 'package:unilab/providers/settings_provider.dart';
 import 'package:unilab/providers/app_provider.dart';
@@ -33,39 +34,64 @@ class MainShell extends ConsumerWidget {
     }
     
     final appProvider = context.read<AppProvider>();
+    final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+    Map<ShortcutActivator, VoidCallback> shortcuts = {
+      // Command palette: Ctrl/Cmd+Shift+P and Ctrl/Cmd+K
+      SingleActivator(LogicalKeyboardKey.keyP, control: !isMac, meta: isMac, shift: true): () {
+        CommandPalette.show(context);
+      },
+      SingleActivator(LogicalKeyboardKey.keyK, control: !isMac, meta: isMac): () {
+        CommandPalette.show(context);
+      },
+      // Save: Ctrl/Cmd+S
+      SingleActivator(LogicalKeyboardKey.keyS, control: !isMac, meta: isMac): () {
+        appProvider.saveActiveFile();
+      },
+      // Save As: Ctrl/Cmd+Shift+S
+      SingleActivator(LogicalKeyboardKey.keyS, control: !isMac, meta: isMac, shift: true): () {
+        appProvider.triggerEditorAction('file.saveAs');
+      },
+      // New: Ctrl/Cmd+N
+      SingleActivator(LogicalKeyboardKey.keyN, control: !isMac, meta: isMac): () {
+        appProvider.addNewFile();
+      },
+      // Close tab: Ctrl/Cmd+W
+      SingleActivator(LogicalKeyboardKey.keyW, control: !isMac, meta: isMac): () {
+        if (appProvider.activeFileIndex >= 0) {
+          appProvider.closeFile(appProvider.activeFileIndex);
+        }
+      },
+      // Run: F5 or Ctrl/Cmd+Enter
+      const SingleActivator(LogicalKeyboardKey.f5): () {
+        appProvider.runActiveFile();
+      },
+      SingleActivator(LogicalKeyboardKey.enter, control: !isMac, meta: isMac): () {
+        appProvider.runActiveFile();
+      },
+      // Undo: Ctrl/Cmd+Z
+      SingleActivator(LogicalKeyboardKey.keyZ, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.undo');
+      },
+      // Redo: Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z
+      SingleActivator(LogicalKeyboardKey.keyY, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.redo');
+      },
+      SingleActivator(LogicalKeyboardKey.keyZ, control: !isMac, meta: isMac, shift: true): () {
+        appProvider.triggerEditorAction('editor.redo');
+      },
+      // Find: Ctrl/Cmd+F
+      SingleActivator(LogicalKeyboardKey.keyF, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.find');
+      },
+      // Replace: Ctrl/Cmd+H
+      SingleActivator(LogicalKeyboardKey.keyH, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.replace');
+      },
+    };
 
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () {
-          CommandPalette.show(context);
-        },
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
-          appProvider.saveActiveFile();
-        },
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
-          appProvider.addNewFile();
-        },
-        const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
-          if (appProvider.activeFileIndex >= 0) {
-            appProvider.closeFile(appProvider.activeFileIndex);
-          }
-        },
-        const SingleActivator(LogicalKeyboardKey.f5): () {
-          appProvider.runActiveFile();
-        },
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
-          appProvider.runActiveFile();
-        },
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () {
-          appProvider.triggerEditorAction('editor.undo');
-        },
-        const SingleActivator(LogicalKeyboardKey.keyY, control: true): () {
-          appProvider.triggerEditorAction('editor.redo');
-        },
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): () {
-          appProvider.triggerEditorAction('editor.redo');
-        },
-      },
+      bindings: shortcuts,
       child: Focus(
         autofocus: true,
         child: Scaffold(

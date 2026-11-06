@@ -1,5 +1,9 @@
 function T = finite_square_well_transmission(E, V0, L, m, hbar)
     % FINITE_SQUARE_WELL_TRANSMISSION T for E > V0 (barrier)
+    if nargin < 1, E = []; end
+    if nargin < 2, V0 = []; end
+    if nargin < 3, L = []; end
+    if nargin < 4, m = []; end
     if nargin < 5, hbar = 1; end
     if E < V0
         k2 = sqrt(2 * m * (V0 - E)) / hbar;

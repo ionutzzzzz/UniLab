@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 @immutable
 class UiSpacing {
   const UiSpacing({
+    this.scale = 1.0,
     required this.xxs,
     required this.xs,
     required this.sm,
@@ -17,6 +18,7 @@ class UiSpacing {
     required this.focusRing,
   });
 
+  final double scale;
   final double xxs;
   final double xs;
   final double sm;
@@ -33,6 +35,7 @@ class UiSpacing {
   final double focusRing;
 
   factory UiSpacing.standard({double scale = 1.0}) => UiSpacing(
+        scale: scale,
         xxs: 2.0 * scale,
         xs: 4.0 * scale,
         sm: 8.0 * scale,

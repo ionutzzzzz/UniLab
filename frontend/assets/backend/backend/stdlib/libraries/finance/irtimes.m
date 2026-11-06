@@ -1,6 +1,8 @@
 function t = irtimes(dates, start_date, convention)
     % IRTIMES Day count calculations (simple implementation)
     % convention: '30/360', 'ACT/360', 'ACT/365', 'ACT/ACT'
+    if nargin < 1, dates = []; end
+    if nargin < 2, start_date = []; end
     if nargin < 3, convention = 'ACT/365'; end
     
     % Simple mock implementation assuming dates are in days from a reference

@@ -19,6 +19,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   int _selectedIndex = 0;
   final TextEditingController _hexController = TextEditingController();
+  late final TextEditingController _defaultProjectPathController;
+  late final TextEditingController _kernelAddressController;
 
   final List<Map<String, dynamic>> _categories = [
     {'title': 'Appearance', 'icon': LucideIcons.palette},
@@ -31,8 +33,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final settings = Provider.of<SettingsProvider>(context, listen: false).settings;
+    _defaultProjectPathController = TextEditingController(text: settings.defaultProjectPath);
+    _kernelAddressController = TextEditingController(text: settings.kernelAddress);
+  }
+
+  @override
   void dispose() {
     _hexController.dispose();
+    _defaultProjectPathController.dispose();
+    _kernelAddressController.dispose();
     super.dispose();
   }
 
@@ -257,8 +269,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Restart Backend Server',
               variant: UiButtonVariant.secondary,
               icon: LucideIcons.refreshCw,
-              onPressed: () {
-                // TODO: Implement backend restart
+              onPressed: () async {
+                final appProvider = Provider.of<AppProvider>(context, listen: false);
+                await appProvider.restartBackend();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Backend server restarted successfully')),
+                  );
+                }
               },
             ),
           ],
@@ -638,7 +656,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             width: 250,
             child: TextField(
-              controller: TextEditingController(text: settings.defaultProjectPath),
+              controller: _defaultProjectPathController,
               onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: val)),
               decoration: const InputDecoration(
                 hintText: '/home/user/unilab_projects',
@@ -737,7 +755,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             width: 200,
             child: TextField(
-              controller: TextEditingController(text: settings.kernelAddress),
+              controller: _kernelAddressController,
               onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(kernelAddress: val)),
               decoration: const InputDecoration(
                 hintText: 'http://localhost:8000',
@@ -882,7 +900,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Switch(
         value: value,
         onChanged: onChanged,
-        activeThumbColor: ui.colors.accent,
+        activeColor: ui.colors.accent,
       ),
     );
   }

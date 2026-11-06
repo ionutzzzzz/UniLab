@@ -1,4 +1,6 @@
 function counts = rand_multinomial_custom(n_trials, p)
+    if nargin < 1, n_trials = []; end
+    if nargin < 2, p = []; end
     k = length(p);
     counts = zeros(1, k);
     for i = 1:n_trials

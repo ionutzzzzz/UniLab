@@ -1,6 +1,7 @@
 function weights = estimateMaxSharpeRatio(obj)
     % ESTIMATEMAXSHARPERATIO Simplified optimization to find Max Sharpe Ratio weights
     
+    if nargin < 1, obj = []; end
     if isempty(obj.AssetMean) || isempty(obj.AssetCovar)
         weights = [];
         return;

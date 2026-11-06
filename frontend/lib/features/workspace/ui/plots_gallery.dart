@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as p;
@@ -191,6 +193,34 @@ class _PlotThumbnail extends StatefulWidget {
 
 class _PlotThumbnailState extends State<_PlotThumbnail> {
   bool _isHovered = false;
+  Uint8List? _cachedImageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _decodeImage();
+  }
+
+  @override
+  void didUpdateWidget(_PlotThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plotData.imageDataUri != widget.plotData.imageDataUri) {
+      _decodeImage();
+    }
+  }
+
+  void _decodeImage() {
+    if (widget.plotData.imageDataUri != null) {
+      try {
+        _cachedImageBytes =
+            base64Decode(widget.plotData.imageDataUri!.split(',').last);
+      } catch (_) {
+        _cachedImageBytes = null;
+      }
+    } else {
+      _cachedImageBytes = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -226,11 +256,11 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                     alignment: Alignment.center,
                     children: [
                       // Render actual plot data
-                      if (widget.plotData.imageDataUri != null)
+                      if (_cachedImageBytes != null)
                         Image.memory(
-                          base64Decode(widget.plotData.imageDataUri!.split(',').last),
+                          _cachedImageBytes!,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => Icon(
+                          errorBuilder: (_, __, ___) => Icon(
                             LucideIcons.lineChart,
                             size: 32,
                             color: ui.colors.textDisabled.withValues(alpha: 0.3),
@@ -240,7 +270,10 @@ class _PlotThumbnailState extends State<_PlotThumbnail> {
                         PlotWidget(
                           title: '',
                           data: List.generate(
-                            widget.plotData.xData.length,
+                            math.min(
+                              widget.plotData.xData.length,
+                              widget.plotData.yData.length,
+                            ),
                             (i) => {
                               'x': widget.plotData.xData[i],
                               'y': widget.plotData.yData[i],

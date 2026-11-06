@@ -1,6 +1,8 @@
 function [W] = lda(X, y, num_components)
     % LDA Linear Discriminant Analysis
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 3, num_components = size(X, 2); end
     
     classes = unique(y);

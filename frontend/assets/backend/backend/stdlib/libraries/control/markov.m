@@ -1,4 +1,6 @@
 function M = markov(sys, N)
+    if nargin < 1, sys = []; end
+    if nargin < 2, N = []; end
     [A, B, C, D] = ssdata(ss(sys));
     
     M = zeros(1, N+1);

@@ -1,6 +1,8 @@
 function [y_pred] = adaboost_predict(X, boost_model)
     % ADABOOST_PREDICT Predict using AdaBoost ensemble
     
+    if nargin < 1, X = []; end
+    if nargin < 2, boost_model = []; end
     m = size(X, 1);
     n_models = length(boost_model);
     total_preds = zeros(m, 1);

@@ -24,6 +24,12 @@ class _HelpViewState extends State<HelpView> {
   bool _isMarkdown = false;
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   final List<Map<String, dynamic>> _quickLinks = [
     {'title': 'Language Basics', 'icon': LucideIcons.bookOpen, 'topic': 'scripting'},
     {'title': 'Plotting Data', 'icon': LucideIcons.lineChart, 'topic': 'plotting'},

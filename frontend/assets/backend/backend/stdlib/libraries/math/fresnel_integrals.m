@@ -3,6 +3,8 @@ function [S, C] = fresnel_integrals(x, n)
     % S(x) = integral_0^x sin(pi*t^2 / 2) dt
     % C(x) = integral_0^x cos(pi*t^2 / 2) dt
     
+    if nargin < 1, x = []; end
+    if nargin < 2, n = []; end
     S = zeros(size(x));
     C = zeros(size(x));
     

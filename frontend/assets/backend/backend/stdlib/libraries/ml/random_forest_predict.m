@@ -1,6 +1,8 @@
 function [y_pred] = random_forest_predict(X, forest)
     % RANDOM_FOREST_PREDICT Predict using a random forest
     
+    if nargin < 1, X = []; end
+    if nargin < 2, forest = []; end
     n_trees = length(forest);
     m = size(X, 1);
     votes = zeros(m, n_trees);

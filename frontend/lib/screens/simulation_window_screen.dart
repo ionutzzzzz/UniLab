@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
-import '../theme/app_theme.dart';
 import '../widgets/plot_viewer/plot_widget.dart';
 import 'dart:convert';
-import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
+import '../utils/platform_dmw.dart' as dmw;
 import '../models/editor_models.dart';
 
 class SimulationWindowScreen extends StatefulWidget {
@@ -54,71 +51,71 @@ class _SimulationWindowScreenState extends State<SimulationWindowScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, _) {
-        final settings = settingsProvider.settings;
-        final darkTheme = AppTheme.createTheme(settings, Brightness.dark);
-        final lightTheme = AppTheme.createTheme(settings, Brightness.light);
+  void dispose() {
+    dmw.WindowMethodChannel('simulation_channel').setMethodCallHandler(null);
+    super.dispose();
+  }
 
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          themeMode: settings.themeMode,
-          theme: lightTheme,
-          darkTheme: darkTheme,
-          home: Scaffold(
-            appBar: AppBar(
-              title: Text('Simulation: ${_model ?? "Running..."}'),
-            ),
-            body: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: _plots.isEmpty
-                      ? const Center(child: Text('Waiting for plot output...'))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _plots.length,
-                          itemBuilder: (context, index) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 16.0),
-                              child: PlotWidget(plot: _plots[index]),
-                            );
-                          },
-                        ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Simulation: ${_model ?? "Running..."}'),
+      ),
+      body: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: _plots.isEmpty
+                ? const Center(child: Text('Waiting for plot output...'))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _plots.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: PlotWidget(plot: _plots[index]),
+                      );
+                    },
+                  ),
+          ),
+          if (_controls.isNotEmpty)
+            Container(
+              width: 280,
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: Theme.of(context).dividerColor),
                 ),
-                if (_controls.isNotEmpty)
-                  Container(
-                    width: 280,
-                    decoration: BoxDecoration(
-                      border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
-                      color: Theme.of(context).cardColor,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: Text('CONTROLS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: _controls.length,
-                            itemBuilder: (context, index) {
-                              final ctrl = _controls[index];
-                              return _buildControl(context, ctrl);
-                            },
-                          ),
-                        ),
-                      ],
+                color: Theme.of(context).cardColor,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: Text(
+                      'CONTROLS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
-              ],
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _controls.length,
+                      itemBuilder: (context, index) {
+                        final ctrl = _controls[index];
+                        return _buildControl(context, ctrl);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -128,9 +125,13 @@ class _SimulationWindowScreenState extends State<SimulationWindowScreen> {
     final label = ctrl['label'];
 
     if (type == 'slider') {
-      double value = (ctrl['value'] as num).toDouble();
-      double min = (ctrl['min'] as num).toDouble();
-      double max = (ctrl['max'] as num).toDouble();
+      double min = (ctrl['min'] as num?)?.toDouble() ?? 0.0;
+      double max = (ctrl['max'] as num?)?.toDouble() ?? 100.0;
+      if (max <= min) {
+        max = min + 1.0;
+      }
+      double rawValue = (ctrl['value'] as num?)?.toDouble() ?? min;
+      double value = rawValue.clamp(min, max);
 
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -141,7 +142,13 @@ class _SimulationWindowScreenState extends State<SimulationWindowScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(label, style: const TextStyle(fontSize: 13)),
-                Text(value.toStringAsFixed(2), style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
+                Text(
+                  value.toStringAsFixed(2),
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             Slider(
@@ -149,10 +156,10 @@ class _SimulationWindowScreenState extends State<SimulationWindowScreen> {
               min: min,
               max: max,
               onChanged: (val) {
-                dmw.WindowMethodChannel('simulation_channel').invokeMethod('on_sim_control', jsonEncode({
-                  'id': id,
-                  'value': val,
-                }));
+                dmw.WindowMethodChannel('simulation_channel').invokeMethod(
+                  'on_sim_control',
+                  jsonEncode({'id': id, 'value': val}),
+                );
                 if (mounted) {
                   setState(() {
                     ctrl['value'] = val;

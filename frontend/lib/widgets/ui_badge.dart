@@ -30,7 +30,7 @@ class UiBadge extends StatelessWidget {
         break;
       case UiBadgeVariant.warning:
         bgColor = ui.colors.warning;
-        fgColor = ui.colors.textInverse;
+        fgColor = const Color(0xFF1E1E1E);
         break;
       case UiBadgeVariant.danger:
         bgColor = ui.colors.danger;

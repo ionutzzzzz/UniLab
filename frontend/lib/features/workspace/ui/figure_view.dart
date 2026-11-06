@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -222,7 +223,7 @@ class _FigureViewState extends State<FigureView> {
             fit: BoxFit.contain,
             gaplessPlayback: true,
             filterQuality: FilterQuality.low,
-            errorBuilder: (_, e, _) => Center(
+            errorBuilder: (_, e, __) => Center(
               child: UiText(text: 'Image error: $e', color: ui.colors.danger),
             ),
           ),
@@ -241,7 +242,7 @@ class _FigureViewState extends State<FigureView> {
           child: PlotWidget(
             title: widget.plotData.title,
             data: List.generate(
-              widget.plotData.xData.length,
+              math.min(widget.plotData.xData.length, widget.plotData.yData.length),
               (i) => {'x': widget.plotData.xData[i], 'y': widget.plotData.yData[i]},
             ),
           ),

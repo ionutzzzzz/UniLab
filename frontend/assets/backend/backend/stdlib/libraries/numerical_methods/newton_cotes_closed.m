@@ -1,5 +1,8 @@
 function I = newton_cotes_closed(y, h, n)
     % NEWTON_COTES_CLOSED Integration for specific n (1: Trapezoidal, 2: Simpson, etc.)
+    if nargin < 1, y = []; end
+    if nargin < 2, h = []; end
+    if nargin < 3, n = []; end
     if n == 1
         I = (h/2) * (y(1) + y(2));
     elseif n == 2

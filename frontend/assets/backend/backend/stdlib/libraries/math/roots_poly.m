@@ -2,6 +2,7 @@ function [r] = roots_poly(p)
     % ROOTS_POLY Find roots of a polynomial with coefficients p
     % Uses the companion matrix approach
     
+    if nargin < 1, p = []; end
     n = length(p) - 1;
     if n < 1
         r = [];

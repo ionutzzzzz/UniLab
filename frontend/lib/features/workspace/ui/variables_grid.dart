@@ -297,6 +297,7 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
             color: ui.colors.canvas,
             child: PlutoGrid(
               key: ValueKey(_visibleColumnFields.join(',')), // Force rebuild on column change
+              mode: PlutoGridMode.selectWithOneTap,
               columns: _buildColumns(),
               rows: rows,
               onLoaded: (PlutoGridOnLoadedEvent event) {
@@ -305,7 +306,7 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
               },
               onSelected: (event) {
                 if (event.row != null) {
-                  final name = event.row!.cells['name']?.value;
+                  final name = event.row!.cells['name']?.value?.toString();
                   ref.read(selectedVariableNameProvider.notifier).state = name;
                 }
               },

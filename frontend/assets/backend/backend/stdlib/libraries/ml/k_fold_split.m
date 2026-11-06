@@ -2,6 +2,8 @@ function [folds] = k_fold_split(n_samples, k)
     % K_FOLD_SPLIT Generate indices for k-fold cross validation
     % [folds] = k_fold_split(n_samples, k)
     
+    if nargin < 1, n_samples = []; end
+    if nargin < 2, k = []; end
     indices = randperm(n_samples);
     fold_size = floor(n_samples / k);
     

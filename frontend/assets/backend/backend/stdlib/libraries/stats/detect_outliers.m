@@ -1,5 +1,6 @@
 function [outliers] = detect_outliers(data, k)
     % Detects outliers using k * IQR method
+    if nargin < 1, data = []; end
     if nargin < 2, k = 1.5; end
     
     q1 = quantile(data, 0.25);

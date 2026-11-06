@@ -1,6 +1,8 @@
 function [y_pred] = gradient_boosting_predict(X, gbm_model)
     % GRADIENT_BOOSTING_PREDICT Predict using gradient boosting ensemble
     
+    if nargin < 1, X = []; end
+    if nargin < 2, gbm_model = []; end
     m = size(X, 1);
     preds = ones(m, 1) * gbm_model.init_pred;
     

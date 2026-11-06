@@ -1,6 +1,7 @@
 function [X_std, mu, sigma] = standardize_features(X)
     % STANDARDIZE_FEATURES Scales features to have zero mean and unit variance
     
+    if nargin < 1, X = []; end
     mu = mean(X, 1);
     sigma = std(X, 1);
     

@@ -1,68 +1,106 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # test_samples_python.sh - UniLab Backend Sample Verification Script using Python CLI
-# Runs all MATLAB samples in the sample/ directory and reports results.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+cd "$PROJECT_ROOT"
 
-export PYTHONPATH=$PYTHONPATH:.
-# Ensure the Rust shared library is linked correctly
-ln -sf $(pwd)/backend/target/release/libunilab_core.so backend/core/unilab_rust_core.so
+export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+export UNILAB_WEB_MODE=1
+export MPLBACKEND=Agg
+if [ -z "$PYTHON_BIN" ] || [ "$PYTHON_BIN" = "python3" ]; then
+    if [ -x "$PROJECT_ROOT/.venv/bin/python3" ]; then
+        PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python3"
+    elif [ -x "$PROJECT_ROOT/backend/venv/bin/python3" ]; then
+        PYTHON_BIN="$PROJECT_ROOT/backend/venv/bin/python3"
+    elif [ -x "$HOME/anaconda3/bin/python3" ]; then
+        PYTHON_BIN="$HOME/anaconda3/bin/python3"
+    elif [ -x "$HOME/miniconda3/bin/python3" ]; then
+        PYTHON_BIN="$HOME/miniconda3/bin/python3"
+    elif [ -x "/opt/homebrew/bin/python3" ]; then
+        PYTHON_BIN="/opt/homebrew/bin/python3"
+    else
+        PYTHON_BIN="python3"
+    fi
+fi
 
-# Statistics
+if [ -f "$PROJECT_ROOT/backend/target/release/libunilab_core.so" ]; then
+    ln -sf "$PROJECT_ROOT/backend/target/release/libunilab_core.so" "$PROJECT_ROOT/backend/core/unilab_rust_core.so"
+elif [ -f "$PROJECT_ROOT/backend/target/release/libunilab_core.dylib" ]; then
+    ln -sf "$PROJECT_ROOT/backend/target/release/libunilab_core.dylib" "$PROJECT_ROOT/backend/core/unilab_rust_core.so"
+fi
+
+run_with_timeout() {
+    local secs="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "${secs}s" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "${secs}s" "$@"
+    else
+        "$PYTHON_BIN" - "$secs" "$@" <<'PY'
+import subprocess, sys
+timeout_s = float(sys.argv[1])
+cmd = sys.argv[2:]
+try:
+    res = subprocess.run(cmd, timeout=timeout_s)
+    sys.exit(res.returncode)
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+PY
+    fi
+}
+
 TOTAL=0
 PASSED=0
 FAILED=0
 FAILED_FILES=()
 
 echo "===================================================="
-echo "🚀 UniLab Sample Verification Suite (Python CLI / Rust Engine)"
+echo "🚀 UniLab Sample Verification Suite (Python CLI)"
 echo "===================================================="
 echo ""
 
-# Find all .m files in sample/ directory and its subdirectories, sorted
 SAMPLES=$(find sample/ -name "*.m" | sort)
 
 for sample in $SAMPLES; do
     ((TOTAL++))
-    filename=$sample
-    
+    filename="$sample"
+
     echo -n "[$TOTAL] Running $filename... "
-    
-    # Run the sample and capture output/stderr
-    # We use a timeout of 60 seconds per sample to prevent hangs
+
     output_file=$(mktemp)
-    
-    # We use the rust engine which is now default
-    timeout 60s python3 backend/cli/app.py run "$sample" > "$output_file" 2>&1
+
+    run_with_timeout 60 "$PYTHON_BIN" backend/cli/app.py run "$sample" > "$output_file" 2>&1
     exit_code=$?
-    
+
     if [ $exit_code -eq 0 ]; then
-        # Check if the output contains "FAILED" which app.py might print
         if grep -q "Status: FAILED" "$output_file"; then
-             echo "❌ FAILED (Execution Error)"
-             ((FAILED++))
-             error_msg=$(grep -A 5 "Status: FAILED" "$output_file" | tail -n 3)
-             FAILED_FILES+=("$filename: $error_msg")
+            echo "❌ FAILED (Execution Error)"
+            ((FAILED++))
+            error_msg=$(grep -A 5 "Status: FAILED" "$output_file" | tail -n 3 | tr '\n' ' ')
+            FAILED_FILES+=("$filename: $error_msg")
         elif grep -q "Error:" "$output_file"; then
-             echo "❌ FAILED (Error found in logs)"
-             ((FAILED++))
-             error_msg=$(grep "Error:" "$output_file" | tail -n 1)
-             FAILED_FILES+=("$filename: $error_msg")
+            echo "❌ FAILED (Error found in logs)"
+            ((FAILED++))
+            error_msg=$(grep "Error:" "$output_file" | tail -n 1)
+            FAILED_FILES+=("$filename: $error_msg")
         else
-             echo "✅ PASSED"
-             ((PASSED++))
+            echo "✅ PASSED"
+            ((PASSED++))
         fi
     elif [ $exit_code -eq 124 ]; then
         echo "⏱️ TIMEOUT"
         ((FAILED++))
         FAILED_FILES+=("$filename (TIMEOUT)")
     else
-        echo "❌ FAILED (Crash)"
+        echo "❌ FAILED (Exit $exit_code)"
         ((FAILED++))
         error_msg=$(tail -n 1 "$output_file")
         FAILED_FILES+=("$filename: $error_msg")
     fi
-    
-    rm "$output_file"
+
+    rm -f "$output_file"
 done
 
 echo ""
@@ -73,7 +111,7 @@ echo "Total Samples: $TOTAL"
 echo "Passed:        $PASSED"
 echo "Failed:        $FAILED"
 if [ $TOTAL -gt 0 ]; then
-    echo "Success Rate:  $(echo "scale=2; $PASSED * 100 / $TOTAL" | bc)%"
+    echo "Success Rate:  $(awk "BEGIN { printf \"%.2f\", ($PASSED * 100) / $TOTAL }")%"
 fi
 
 if [ $FAILED -gt 0 ]; then
@@ -82,9 +120,9 @@ if [ $FAILED -gt 0 ]; then
     for entry in "${FAILED_FILES[@]}"; do
         echo "  - $entry"
     done
+    exit 1
 fi
 
-if [ $FAILED -eq 0 ] && [ $TOTAL -gt 0 ]; then
-    echo ""
-    echo "🎉 All samples passed successfully!"
-fi
+echo ""
+echo "🎉 All samples passed successfully!"
+exit 0

@@ -1,5 +1,7 @@
 function [mst_edges, total_weight] = prim_algorithm(A, start_node)
     % PRIM_ALGORITHM Minimum Spanning Tree
+    if nargin < 1, A = []; end
+    if nargin < 2, start_node = []; end
     n = size(A, 1);
     visited = false(1, n);
     mst_edges = [];

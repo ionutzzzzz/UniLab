@@ -1,4 +1,5 @@
 function out = box_blur_3x3(img)
+    if nargin < 1, img = []; end
     [rows, cols] = size(img);
     out = zeros(rows, cols);
     for i = 2:rows-1

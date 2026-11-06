@@ -1,4 +1,5 @@
 function RT = routh_table(coeff)
+    if nargin < 1, coeff = []; end
     n = length(coeff);
     num_cols = ceil(n/2);
     RT = zeros(n, num_cols);

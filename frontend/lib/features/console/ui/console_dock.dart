@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_badge.dart';
@@ -19,15 +20,29 @@ class ConsoleDock extends StatefulWidget {
 }
 
 class _ConsoleDockState extends State<ConsoleDock> {
-  String _activeTab = 'Console';
   final List<String> _tabs = ['Console', 'Problems', 'Terminal'];
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider>(context);
+
+    final selectedTab = appProvider.selectedConsoleTab.toLowerCase();
+    String activeTab = 'Console';
+    if (selectedTab.contains('problem')) {
+      activeTab = 'Problems';
+    } else if (selectedTab.contains('term')) {
+      activeTab = 'Terminal';
+    } else {
+      activeTab = 'Console';
+    }
+
+    final problemsCount = appProvider.consoleMessages
+        .where((m) => m.type == ConsoleMessageType.error || m.type == ConsoleMessageType.warning)
+        .length;
 
     Widget activeView;
-    switch (_activeTab) {
+    switch (activeTab) {
       case 'Console':
         activeView = const _ConsoleView();
         break;
@@ -65,9 +80,9 @@ class _ConsoleDockState extends State<ConsoleDock> {
                 Expanded(
                   child: Row(
                     children: _tabs.map((tab) {
-                      final isActive = tab == _activeTab;
+                      final isActive = tab == activeTab;
                       return GestureDetector(
-                        onTap: () => setState(() => _activeTab = tab),
+                        onTap: () => appProvider.setSelectedConsoleTab(tab.toLowerCase()),
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: AnimatedContainer(
@@ -91,9 +106,9 @@ class _ConsoleDockState extends State<ConsoleDock> {
                                   color: isActive ? ui.colors.textPrimary : ui.colors.textMuted,
                                   letterSpacing: 0.2,
                                 ),
-                                if (tab == 'Problems') ...[
+                                if (tab == 'Problems' && problemsCount > 0) ...[
                                   SizedBox(width: ui.spacing.xs),
-                                  const UiBadge(label: '3', variant: UiBadgeVariant.neutral),
+                                  UiBadge(label: '$problemsCount', variant: UiBadgeVariant.warning),
                                 ]
                               ],
                             ),
@@ -103,6 +118,13 @@ class _ConsoleDockState extends State<ConsoleDock> {
                     }).toList(),
                   ),
                 ),
+                IconButton(
+                  icon: Icon(LucideIcons.trash2, size: 14, color: ui.colors.textMuted),
+                  tooltip: 'Clear Output',
+                  splashRadius: 16,
+                  onPressed: () => appProvider.clearConsole(),
+                ),
+                SizedBox(width: ui.spacing.xs),
               ],
             ),
           ),
@@ -144,13 +166,25 @@ class _ConsoleViewState extends State<_ConsoleView> {
         }
 
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          _handleHistoryNavigation(true);
-          return KeyEventResult.handled;
+          final text = _controller.text;
+          final selStart = _controller.selection.start;
+          final isFirstLine = selStart <= 0 || !text.substring(0, selStart.clamp(0, text.length)).contains('\n');
+          if (isFirstLine) {
+            _handleHistoryNavigation(true);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         }
 
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _handleHistoryNavigation(false);
-          return KeyEventResult.handled;
+          final text = _controller.text;
+          final selEnd = _controller.selection.end;
+          final isLastLine = selEnd < 0 || !text.substring(selEnd.clamp(0, text.length)).contains('\n');
+          if (isLastLine) {
+            _handleHistoryNavigation(false);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         }
         
         if (event.logicalKey == LogicalKeyboardKey.enter) {

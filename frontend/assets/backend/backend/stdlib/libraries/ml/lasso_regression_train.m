@@ -2,6 +2,8 @@ function [theta] = lasso_regression_train(X, y, lambda, max_iters, tol)
     % LASSO_REGRESSION_TRAIN Train linear regression with L1 regularization
     % Uses Coordinate Descent algorithm
     
+    if nargin < 2, y = []; end
+    if nargin < 3, lambda = []; end
     if nargin < 5, tol = 1e-6; end
     if nargin < 4, max_iters = 1000; end
     

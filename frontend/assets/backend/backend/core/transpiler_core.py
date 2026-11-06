@@ -1,5 +1,171 @@
 from lark import Lark, Transformer
 import re
+import uuid
+
+# Internal single-character transpose markers emitted by _disambiguate_transposes
+_CONJ_TRANSPOSE_CHAR = "\x1e"
+_DOT_TRANSPOSE_CHAR = "\x1f"
+
+_STATEMENT_KEYWORDS = {
+    "function", "if", "elseif", "else", "for", "parfor", "while",
+    "switch", "case", "otherwise", "try", "catch",
+    "global", "clear", "return", "break", "continue",
+    "import", "export", "edit",
+}
+
+_DOUBLE_STR_ESC_RE = re.compile(
+    r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[0-7]{1,3}|[\\"\'abfnrtv]|.)'
+)
+
+_SIMPLE_ESCAPES = {
+    "\\": "\\",
+    '"': '"',
+    "'": "'",
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+}
+
+
+def _unescape_double_quoted(raw: str) -> str:
+    """Unescape MATLAB/C-style escapes inside double quotes without corrupting UTF-8 or raw backslashes."""
+    def _replace(match: re.Match) -> str:
+        esc = match.group(1)
+        if esc in _SIMPLE_ESCAPES:
+            return _SIMPLE_ESCAPES[esc]
+        if esc.startswith(("x", "u", "U")) and len(esc) in (3, 5, 9):
+            return chr(int(esc[1:], 16))
+        if esc[0] in "01234567" and all(c in "01234567" for c in esc):
+            return chr(int(esc, 8))
+        return "\\" + esc
+
+    return _DOUBLE_STR_ESC_RE.sub(_replace, raw)
+
+
+def _disambiguate_transposes(code: str) -> str:
+    """
+    Pre-scan UniLab/MATLAB code outside '%' comments, '...' continuations, and strings to
+    distinguish single-quoted string literals ('...') from conjugate transpose (') and
+    non-conjugate array transpose (.').
+    Preserves line numbers and column offsets.
+    """
+    n = len(code)
+    out = []
+    i = 0
+    just_transposed = False
+
+    while i < n:
+        ch = code[i]
+
+        # Line continuation `...` ignores rest of line (including apostrophes in comments after `...`)
+        if ch == "." and code[i:i + 3] == "...":
+            nl = code.find("\n", i + 3)
+            if nl == -1:
+                out.append(code[i:])
+                break
+            out.append(code[i:nl + 1])
+            i = nl + 1
+            just_transposed = False
+            continue
+
+        # `%` comment outside strings
+        if ch == "%":
+            nl = code.find("\n", i + 1)
+            if nl == -1:
+                out.append(code[i:])
+                break
+            out.append(code[i:nl + 1])
+            i = nl + 1
+            just_transposed = False
+            continue
+
+        # Double-quoted string `"..."`
+        if ch == '"':
+            start = i
+            i += 1
+            while i < n:
+                c2 = code[i]
+                if c2 == "\\":
+                    i += 2
+                    continue
+                if c2 == '"':
+                    i += 1
+                    break
+                i += 1
+            out.append(code[start:i])
+            just_transposed = False
+            continue
+
+        # Non-conjugate array transpose `.'`
+        if ch == "." and i + 1 < n and code[i + 1] == "'":
+            out.append(_DOT_TRANSPOSE_CHAR + " ")
+            i += 2
+            just_transposed = True
+            continue
+
+        # Single quote `'`: either transpose or opening `'...'` string literal
+        if ch == "'":
+            is_transpose = False
+            if just_transposed:
+                is_transpose = True
+            elif i > 0:
+                prev = code[i - 1]
+                if prev in ")]}":
+                    is_transpose = True
+                elif prev.isalnum() or prev == "_":
+                    # Check preceding word is not a statement keyword (e.g., `case'a'`)
+                    w_end = i
+                    w_start = i - 1
+                    while w_start > 0 and (code[w_start - 1].isalnum() or code[w_start - 1] == "_"):
+                        w_start -= 1
+                    prev_word = code[w_start:w_end]
+                    if prev_word not in _STATEMENT_KEYWORDS:
+                        is_transpose = True
+
+            if is_transpose:
+                out.append(_CONJ_TRANSPOSE_CHAR)
+                i += 1
+                just_transposed = True
+                continue
+
+            # Otherwise, scan a single-quoted string `'...'` (with `''` escaped quotes)
+            start = i
+            i += 1
+            while i < n:
+                c2 = code[i]
+                if c2 == "\n":
+                    # Unclosed string on this line; stop so Lark reports syntax error cleanly
+                    break
+                if c2 == "'":
+                    if i + 1 < n and code[i + 1] == "'":
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            out.append(code[start:i])
+            just_transposed = False
+            continue
+
+        out.append(ch)
+        if not ch.isspace():
+            just_transposed = False
+        i += 1
+
+    return "".join(out)
+
+
+class ExprStr(str):
+    """String subclass carrying structured postfix AST metadata for clean LHS assignment codegen."""
+    def __new__(cls, value: str, ast_node=None):
+        obj = super().__new__(cls, value)
+        obj.ast_node = ast_node
+        return obj
+
 
 # EBNF Grammar for UniLab (MATLAB-compatible)
 UniLab_GRAMMAR = r"""
@@ -11,6 +177,7 @@ UniLab_GRAMMAR = r"""
     ?statement: assignment
               | if_stmt
               | for_stmt
+              | parfor_stmt
               | while_stmt
               | switch_stmt
               | try_stmt
@@ -32,12 +199,16 @@ UniLab_GRAMMAR = r"""
     
     if_stmt: IF expression separator+ block (ELSEIF expression separator+ block)* [ELSE separator* block] END
     for_stmt: FOR IDENTIFIER EQUAL expression separator+ block END
+    parfor_stmt: PARFOR IDENTIFIER EQUAL expression separator+ block END
     while_stmt: WHILE expression separator+ block END
-    switch_stmt: SWITCH expression separator+ case_clause* [otherwise_clause] END
-    case_clause: CASE expression separator+ block
-    otherwise_clause: OTHERWISE block
+    switch_stmt: SWITCH expression separator* case_clause* [otherwise_clause] END
+    case_clause: CASE expression separator* block
+    otherwise_clause: OTHERWISE separator* block
     
-    try_stmt: TRY block CATCH [IDENTIFIER] block END
+    try_stmt: TRY block catch_clause END
+    catch_clause: catch_with_var | catch_no_var
+    catch_with_var.10: CATCH IDENTIFIER separator* block
+    catch_no_var: CATCH separator* block
     
     function_def: FUNCTION [function_ret] IDENTIFIER LPAR [func_params] RPAR block END
     function_ret: (IDENTIFIER | lhs_list) EQUAL
@@ -69,11 +240,14 @@ UniLab_GRAMMAR = r"""
     ?addition.5: multiplication (ADD_OP multiplication)*
     ?multiplication.5: unary (MUL_OP unary)*
     ?unary: UNARY_OP unary | power
-    ?power: postfix_expr (POW_OP unary)*
+    ?power: postfix_expr (POW_OP signed_atom)*
+    ?signed_atom: UNARY_OP signed_atom | postfix_expr
     
     ?postfix_expr: atom
                  | function_call
                  | cell_indexing
+                 | postfix_expr CONJ_TRANSPOSE -> transpose
+                 | postfix_expr DOT_TRANSPOSE -> array_transpose
                  | postfix_expr QUOTE -> transpose
                  | postfix_expr DOT IDENTIFIER -> attr_access
 
@@ -105,10 +279,10 @@ UniLab_GRAMMAR = r"""
     
     command_call: IDENTIFIER (IDENTIFIER | STRING | NUMBER)+ -> cmd_call
 
-    IDENTIFIER: /(?!(?:function|end|if|elseif|else|for|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export|edit)\b)[a-zA-Z_][a-zA-Z0-9_]*/
+    IDENTIFIER: /(?!(?:function|end|if|elseif|else|for|parfor|while|switch|case|otherwise|try|catch|global|clear|return|break|continue|import|export|edit)\b)[a-zA-Z_][a-zA-Z0-9_]*/
     FILE_PATH: /[a-zA-Z0-9_\/]+\.m/
     NUMBER: /(?:0x[0-9a-fA-F]+)|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[ij]?/
-    STRING: /'([^']|'')*'|"([^"\\]|\\.)*"/
+    STRING: /'([^'\n]|'')*'|"([^"\\]|\\.)*"/
     
     ADD_OP: "+" | "-" | ".+" | ".-"
     MUL_OP: "*" | "/" | "\\" | ".*" | "./" | ".\\"
@@ -131,11 +305,14 @@ UniLab_GRAMMAR = r"""
     COLON: ":"
     AT: "@"
     QUOTE: "'"
+    CONJ_TRANSPOSE: "\x1e"
+    DOT_TRANSPOSE: "\x1f"
     
     IF: "if"
     ELSEIF: "elseif"
     ELSE: "else"
     FOR: "for"
+    PARFOR: "parfor"
     WHILE: "while"
     SWITCH: "switch"
     CASE: "case"
@@ -188,15 +365,16 @@ class UniLabToPython(Transformer):
         s = str(n[0])
         if s.endswith('i'): return s[:-1] + 'j'
         return s
+
     def string(self, s):
         s_val = str(s[0])
         quote = s_val[0]
         if quote == "'":
             content = s_val[1:-1].replace("''", "'")
         else:
-            # Handle backslash escapes for double quotes
-            content = s_val[1:-1].encode('utf-8').decode('unicode_escape')
+            content = _unescape_double_quoted(s_val[1:-1])
         return repr(content)
+
     def end_expr(self, items): return "unilab_end"
     def colon_arg(self, items): return "slice(None)"
 
@@ -217,68 +395,80 @@ class UniLabToPython(Transformer):
         if name in keywords: return f"{name}_"
         return name
 
+    def _unwrap_var_expr(self, target):
+        node = getattr(target, "ast_node", None)
+        if node is not None and node[0] == "var":
+            return node[1]
+        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
+            return target[12:-1]
+        return str(target)
+
     def var(self, items):
         name = str(items[0])
         name = self._escape_name(name)
         if name in ("nargin", "nargout", "varargin", "varargout", "ans", "pi", "inf", "Inf", "nan", "NaN", "eps", "i", "j", "realmax", "realmin", "true", "false", "error", "clc", "whos", "fprintf"): 
-            return name
+            return ExprStr(name, ("var", name))
         
         self.variables.add(name)
         self.called_functions.add(name)
-        return f"unilab_call({name})"
+        return ExprStr(f"unilab_call({name})", ("var", name))
 
     def qualified_name(self, items):
         return ".".join(str(i) for i in items if str(i) != '.')
 
     def attr_access(self, items):
-        target, attr = items[0], items[2]
-        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
-             m = re.match(r"unilab_call\((.*)\)", target)
-             if m:
-                 name = m.group(1)
-                 if name not in self.variables:
-                     target = f"unilab_get_undefined('{name}', globals())"
-                 else:
-                     target = name
-                 # Do not add to variables yet, wait for assignment to confirm if it's a variable
-        return f"unilab_get({target}, '{attr}')"
+        target, attr = items[0], str(items[2])
+        target_node = getattr(target, "ast_node", None)
+        if target_node is not None and target_node[0] == "var":
+            name = target_node[1]
+            if name not in self.variables:
+                base_str = f"unilab_get_undefined('{name}', globals())"
+            else:
+                base_str = name
+            return ExprStr(f"unilab_get({base_str}, '{attr}')", ("attr", target_node, attr))
+        return ExprStr(f"unilab_get({target}, '{attr}')", ("attr", target_node or ("expr", str(target)), attr))
 
     def function_call(self, items):
-        name = items[0]
-        # items[1] is LPAR, items[2] is call_args?
+        target = items[0]
         args = items[2] if len(items) > 3 else None
+        target_node = getattr(target, "ast_node", None)
+        name = self._unwrap_var_expr(target)
+        if target_node is None or target_node[0] == "var":
+            self.called_functions.add(str(name))
         
-        if isinstance(name, str) and name.startswith('unilab_call(') and name.endswith(')') and ',' not in name:
-             name = name[12:-1]
-        self.called_functions.add(str(name))
-        
-        if name == "pi" and not args: return "np.pi"
+        if name == "pi" and not args:
+            return ExprStr("np.pi", ("expr", "np.pi"))
         if name == "addpath" and args:
-            arg_list = args if isinstance(args, list) else [args]
-            for a in arg_list:
+            arg_list_check = args if isinstance(args, list) else [args]
+            for a in arg_list_check:
                 if str(a).startswith("'") and str(a).endswith("'"):
                     self.added_paths.add(str(a)[1:-1])
 
-        arg_str = ", ".join(map(str, args)) if isinstance(args, list) else (str(args) if args is not None else "")
-        if arg_str:
-            return f"unilab_call({name}, {arg_str})"
-        return f"unilab_call({name})"
+        arg_list = args if isinstance(args, list) else ([args] if args is not None else [])
+        arg_str = ", ".join(map(str, arg_list))
+        code_str = f"unilab_call({name}, {arg_str})" if arg_str else f"unilab_call({name})"
+        return ExprStr(code_str, ("call", target_node or ("expr", str(name)), [str(a) for a in arg_list]))
 
     def cell_indexing(self, items):
         target = items[0]
-        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
-             target = target[12:-1]
+        target_node = getattr(target, "ast_node", None)
+        base = self._unwrap_var_expr(target)
         args = items[2] if len(items) > 3 else None
-        arg_str = ", ".join(map(str, args)) if isinstance(args, list) else (str(args) if args is not None else "")
-        if arg_str:
-            return f"unilab_call({target}, {arg_str})"
-        return f"unilab_call({target})"
+        arg_list = args if isinstance(args, list) else ([args] if args is not None else [])
+        arg_str = ", ".join(map(str, arg_list))
+        code_str = f"unilab_cell_get({base}, {arg_str})" if arg_str else f"unilab_cell_get({base})"
+        return ExprStr(code_str, ("cell", target_node or ("expr", str(base)), [str(a) for a in arg_list]))
 
     def transpose(self, items):
-        target = items[0]
-        if isinstance(target, str) and target.startswith('unilab_call(') and target.endswith(')') and ',' not in target:
-             target = target[12:-1]
+        target = self._unwrap_var_expr(items[0])
         return f"unilab_transpose({target})"
+
+    def array_transpose(self, items):
+        target = self._unwrap_var_expr(items[0])
+        return f"unilab_array_transpose({target})"
+
+    def signed_atom(self, items):
+        return self.unary(items)
 
     def unary(self, items):
         if len(items) == 2:
@@ -316,7 +506,12 @@ class UniLabToPython(Transformer):
         if len(items) == 1: return items[0]
         res = f"({items[0]}"
         for i in range(1, len(items), 2):
-            res += f" {items[i]} {items[i+1]}"
+            op = str(items[i])
+            if op == ".+":
+                op = "+"
+            elif op == ".-":
+                op = "-"
+            res += f" {op} {items[i+1]}"
         res += ")"
         return res
 
@@ -351,55 +546,78 @@ class UniLabToPython(Transformer):
         lhs, expr = items[0], items[2]
         if isinstance(expr, str) and expr.startswith("unilab_call("):
             expr = expr.replace("unilab_call(", f"unilab_call_nargout({len(lhs)}, ", 1)
-        # items[0] is from lhs_list, which returns a list of strings
         stmt = f"({', '.join(lhs)}) = {expr}"
         return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(lhs)}]", "is_multi": True, "names": lhs}
 
     def single_assignment(self, items):
         lhs, expr = items[0], items[2]
         
-        # Hack to fix mis-parsed multi-assignments where Lark preferred 'matrix' atom
+        # Fallback if Lark preferred 'matrix' atom on [a b] = func()
         if isinstance(lhs, str) and lhs.startswith('unilab_matrix_concat('):
-             # Try to extract identifiers from unilab_call(name) patterns
-             matches = re.findall(r"unilab_call\(([^,)]+)\)", lhs)
-             if matches and 'unilab_matrix_concat' not in str(matches):
-                  # Check if there are any non-identifiers
-                  is_pure_ids = all(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", m) for m in matches)
-                  if is_pure_ids:
-                      if isinstance(expr, str) and expr.startswith("unilab_call("):
-                          expr = expr.replace("unilab_call(", f"unilab_call_nargout({len(matches)}, ", 1)
-                      stmt = f"({', '.join(matches)}) = {expr}"
-                      for n in matches: self.variables.add(n)
-                      return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(matches)}]", "is_multi": True, "names": matches, "nargout": len(matches)}
+            matches = re.findall(r"unilab_call\(([^,)]+)\)", lhs)
+            if matches and 'unilab_matrix_concat' not in str(matches):
+                is_pure_ids = all(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", m) for m in matches)
+                if is_pure_ids:
+                    if isinstance(expr, str) and expr.startswith("unilab_call("):
+                        expr = expr.replace("unilab_call(", f"unilab_call_nargout({len(matches)}, ", 1)
+                    stmt = f"({', '.join(matches)}) = {expr}"
+                    for n in matches: self.variables.add(n)
+                    return {"type": "assignment", "stmt": stmt, "lhs": f"[{', '.join(matches)}]", "is_multi": True, "names": matches, "nargout": len(matches)}
 
         if isinstance(expr, str) and expr.startswith("unilab_call("):
             expr = expr.replace("unilab_call(", "unilab_call_nargout(1, ", 1)
 
-        # items[0] is from postfix_expr, which returns a string
-        if isinstance(lhs, str) and lhs.startswith('unilab_call(') and lhs.endswith(')') and ',' not in lhs:
-             lhs = lhs[12:-1]
+        lhs_node = getattr(lhs, "ast_node", None)
+        if lhs_node is not None:
+            if lhs_node[0] == "var":
+                var_name = lhs_node[1]
+                self.variables.add(var_name)
+                return {"type": "assignment", "stmt": f"{var_name} = {expr}", "lhs": var_name, "is_multi": False}
 
-        if "unilab_call" in str(lhs) or "unilab_get" in str(lhs):
-            if "unilab_call" in str(lhs):
-                match = re.match(r"unilab_call\(([^,]+)(?:,\s*(.*))?\)", str(lhs))
-                if match:
-                    obj, args = match.group(1), match.group(2)
-                    stmt = f"{obj} = unilab_set({obj} if '{obj}' in locals() else globals().get('{obj}', None), {expr}{', ' + args if args else ''})"
-                    return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
-            
-            if "unilab_get" in str(lhs):
-                match = re.search(r"unilab_get\((?:unilab_get_undefined\('([^']+)',\s*globals\(\)\)|([^,]+)),\s*'([^']+)'\)", str(lhs))
-                if match:
-                    # If it was unilab_get_undefined, name is in group 1. Else group 2.
-                    obj = match.group(1) or match.group(2)
-                    attr = match.group(3)
-                    self.variables.add(obj)
-                    # We need to check if obj exists or use get_undefined again if it's nested
-                    stmt = f"{obj} = unilab_set_attr({obj} if '{obj}' in locals() else globals().get('{obj}', None), '{attr}', {expr}, globals())"
-                    return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+            # Unwind postfix chain: call / cell / attr -> root var
+            steps = []
+            cur = lhs_node
+            while isinstance(cur, tuple) and cur[0] in ("call", "cell", "attr"):
+                kind = cur[0]
+                if kind == "attr":
+                    steps.append(("attr", cur[2]))
+                else:
+                    steps.append((kind, cur[2]))
+                cur = cur[1]
 
-        self.variables.add(str(lhs))
-        return {"type": "assignment", "stmt": f"{lhs} = {expr}", "lhs": str(lhs), "is_multi": False}
+            if isinstance(cur, tuple) and cur[0] == "var" and steps:
+                steps.reverse()
+                obj = cur[1]
+                self.variables.add(obj)
+                obj_lookup = f"{obj} if '{obj}' in locals() else globals().get('{obj}', None)"
+
+                if len(steps) == 1:
+                    kind, payload = steps[0]
+                    if kind == "call":
+                        args_str = ", ".join(payload)
+                        stmt = f"{obj} = unilab_set({obj_lookup}, {expr}{', ' + args_str if args_str else ''})"
+                        return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+                    if kind == "cell":
+                        args_str = ", ".join(payload)
+                        stmt = f"{obj} = unilab_cell_set({obj_lookup}, {expr}{', ' + args_str if args_str else ''})"
+                        return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+                    if kind == "attr":
+                        stmt = f"{obj} = unilab_set_attr({obj_lookup}, '{payload}', {expr}, globals())"
+                        return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+
+                # Arbitrary nested struct/index/cell assignment (e.g. s.field(1) = 5, s.a.b = 1, folds(i).train = idx)
+                step_exprs = []
+                for kind, payload in steps:
+                    if kind == "attr":
+                        step_exprs.append(f"('attr', {payload!r})")
+                    else:
+                        step_exprs.append(f"({kind!r}, [{', '.join(payload)}])")
+                stmt = f"{obj} = unilab_set_nested({obj_lookup}, [{', '.join(step_exprs)}], {expr})"
+                return {"type": "assignment", "stmt": stmt, "lhs": obj, "is_multi": False}
+
+        lhs_str = self._unwrap_var_expr(lhs)
+        self.variables.add(lhs_str)
+        return {"type": "assignment", "stmt": f"{lhs_str} = {expr}", "lhs": lhs_str, "is_multi": False}
 
     def expr_stmt(self, items):
         expr = items[0]
@@ -416,6 +634,8 @@ class UniLabToPython(Transformer):
 
     def _process_stmt(self, stmt, has_semi):
         if isinstance(stmt, dict):
+            if stmt.get("type") == "function_def":
+                return stmt
             if stmt.get("type") == "assignment":
                 python_stmt = stmt["stmt"]
                 if not has_semi:
@@ -448,7 +668,6 @@ class UniLabToPython(Transformer):
             if s in ("[", "]", ","): continue
             if s == "~":
                 _ignored_counter += 1
-                import uuid
                 ignored_name = f"_ignored_{uuid.uuid4().hex[:4]}_{_ignored_counter}"
                 names.append(ignored_name)
             else:
@@ -466,16 +685,39 @@ class UniLabToPython(Transformer):
         res = []
         for i in items:
             if i is None: continue
-            if isinstance(i, list):
+            if isinstance(i, dict) and i.get("type") == "function_def":
+                # Nested function inside another block/function stays inline to preserve closure scope
+                res.append(i["code"])
+            elif isinstance(i, list):
                 for sub in i:
-                    if sub: res.append(str(sub))
+                    if isinstance(sub, dict) and sub.get("type") == "function_def":
+                        res.append(sub["code"])
+                    elif sub:
+                        res.append(str(sub))
             else:
                 s = str(i)
                 if s: res.append(s)
         return res
 
     def start(self, items):
-        return "\n".join(self.block(items))
+        body_lines = []
+        for i in items:
+            if i is None:
+                continue
+            if isinstance(i, dict) and i.get("type") == "function_def":
+                # Top-level function definitions are hoisted so script calls above them succeed
+                self.functions.append(i["code"])
+            elif isinstance(i, list):
+                for sub in i:
+                    if isinstance(sub, dict) and sub.get("type") == "function_def":
+                        self.functions.append(sub["code"])
+                    elif sub:
+                        body_lines.append(str(sub))
+            else:
+                s = str(i)
+                if s:
+                    body_lines.append(s)
+        return "\n".join(body_lines)
 
     def if_stmt(self, items):
         items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
@@ -498,12 +740,16 @@ class UniLabToPython(Transformer):
         return lines
 
     def for_stmt(self, items):
-        var, expr = str(items[1]), items[3]
+        var = self._escape_name(str(items[1]))
+        expr = items[3]
         block = next(i for i in items[4:] if isinstance(i, list))
         self.variables.add(var)
         lines = [f"for {var} in unilab_iter({expr}):"]
         lines.extend(self._indent(block))
         return lines
+
+    def parfor_stmt(self, items):
+        return self.for_stmt(items)
 
     def while_stmt(self, items):
         cond = items[1]
@@ -523,55 +769,69 @@ class UniLabToPython(Transformer):
         for clause in clauses:
             if isinstance(clause, list):
                 if first:
-                    clause[0] = clause[0].replace("elif", "if").replace("_sw_tmp", var_name)
+                    if clause[0].startswith("elif "):
+                        clause[0] = "if " + clause[0][5:].replace("_sw_tmp", var_name)
+                    else:
+                        clause[0] = clause[0].replace("_sw_tmp", var_name)
                     first = False
                 else:
                     clause[0] = clause[0].replace("_sw_tmp", var_name)
                 lines.extend(clause)
-        if first: lines.append("    pass")
+        if first: lines.append("pass")
         self._switch_depth -= 1
         return lines
 
     def case_clause(self, items):
         items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
         expr, block = items[1], items[2]
-        return [f"elif _sw_tmp == {expr}:"] + self._indent(block)
+        return [f"elif unilab_switch_match(_sw_tmp, {expr}):"] + self._indent(block)
 
     def otherwise_clause(self, items):
-        return ["else:"] + self._indent(items[1])
+        items = [i for i in items if not (isinstance(i, str) and i.strip() in ("", ";", ","))]
+        block = next((i for i in items[1:] if isinstance(i, list)), [])
+        return ["else:"] + self._indent(block)
+
+    def catch_with_var(self, items):
+        err_var = items[1]
+        block = next(i for i in reversed(items) if isinstance(i, list))
+        err_name = self._escape_name(str(err_var))
+        self.variables.add(err_name)
+        lines = [
+            f"except Exception as {err_name}:",
+            f"    {err_name} = unilab_exception({err_name})"
+        ]
+        lines.extend(self._indent(block))
+        return lines
+
+    def catch_no_var(self, items):
+        block = next((i for i in reversed(items) if isinstance(i, list)), [])
+        lines = ["except Exception:"]
+        lines.extend(self._indent(block))
+        return lines
+
+    def catch_clause(self, items):
+        return items[0]
 
     def try_stmt(self, items):
+        try_block = items[1]
+        catch_lines = items[2]
         lines = ["try:"]
-        block = items[1]
-        lines.extend(self._indent(block))
-        idx = 2
-        if idx < len(items) and str(items[idx]) == "catch":
-            idx += 1
-            err_var = items[idx] if not isinstance(items[idx], list) and str(items[idx]) != "END" else None
-            if err_var: 
-                idx += 1
-                lines.append(f"except Exception as {err_var}:")
-                lines.append(f"    {err_var} = unilab_exception({err_var})")
-            else:
-                lines.append("except Exception:")
-            
-            catch_block = items[idx]
-            lines.extend(self._indent(catch_block))
+        lines.extend(self._indent(try_block))
+        lines.extend(catch_lines)
         return lines
 
     def function_def(self, items):
         ret = items[1]
-        name = str(items[2])
+        name = self._escape_name(str(items[2]))
         params = items[4]
         if params is None: params = []
         if isinstance(params, str): params = []
         block = items[-2]
-        raw_params = [str(p) for p in params if str(p) not in (",", "(", ")")]
+        raw_params = [self._escape_name(str(p)) for p in params if str(p) not in (",", "(", ")")]
         
         # Handle tilde (~) in parameters by converting to dummy names
         processed_params = []
         _ignored_counter = 0
-        import uuid
         for p in raw_params:
             if p == "~":
                 _ignored_counter += 1
@@ -583,7 +843,7 @@ class UniLabToPython(Transformer):
         has_varargin = "varargin" in raw_params
         if has_varargin:
             idx = raw_params.index("varargin")
-            py_params = raw_params[:idx]
+            py_params = [f"{p}=None" for p in raw_params[:idx]]
             py_params.append("*varargin_args")
         else:
             py_params = [f"{p}=None" for p in raw_params]
@@ -591,7 +851,7 @@ class UniLabToPython(Transformer):
         lines = [f"def {name}({', '.join(py_params)}):"]
         
         inner = [
-            f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params if not has_varargin else raw_params[:idx])}] if x is not None)" if not has_varargin else f"nargin = {len(raw_params)-1} + len(varargin_args)",
+            f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params if not has_varargin else raw_params[:idx])}] if x is not None)" if not has_varargin else f"nargin = unilab_nargin_sum(1 for x in [{', '.join(raw_params[:idx])}] if x is not None) + len(varargin_args)",
             "nargout = unilab_get_nargout()"
         ]
         
@@ -635,9 +895,9 @@ class UniLabToPython(Transformer):
                 ret_stmt = f"return {ret}"
         
         # Replace early return markers in the block while preserving indentation
-        def replace_return_marker(items, r_stmt):
+        def replace_return_marker(items_list, r_stmt):
             res = []
-            for item in items:
+            for item in items_list:
                 if isinstance(item, list):
                     res.append(replace_return_marker(item, r_stmt))
                 elif isinstance(item, str):
@@ -654,15 +914,15 @@ class UniLabToPython(Transformer):
             inner.append(ret_stmt)
             
         lines.extend(self._indent(inner))
-        self.functions.append("\n".join(lines))
-        return []
+        return {"type": "function_def", "name": name, "code": "\n".join(lines)}
+
     def return_stmt(self, items): return "__UNILAB_RETURN__"
     def break_stmt(self, items): return "break"
     def continue_stmt(self, items): return "continue"
 
     def func_params(self, items): return [self._escape_name(str(i)) for i in items if str(i) != ","]
     def call_args(self, items): return [str(i) for i in items if str(i) != ","]
-    def keyword_arg(self, items): return f"{str(items[0])}={str(items[2])}"
+    def keyword_arg(self, items): return f"{self._escape_name(str(items[0]))}={str(items[2])}"
     
     def matrix(self, items):
         rows = []
@@ -675,9 +935,7 @@ class UniLabToPython(Transformer):
         if current_row: rows.append(current_row)
         row_strs = []
         for r in rows:
-            items_str = []
-            for item in r:
-                items_str.append(str(item))
+            items_str = [str(item) for item in r]
             row_strs.append(f"[{', '.join(items_str)}]")
         return f"unilab_matrix_concat({', '.join(row_strs)})"
 
@@ -694,10 +952,7 @@ class UniLabToPython(Transformer):
         
         row_strs = []
         for r in rows:
-            # print(f"DEBUG: processing row {r}")
-            items_str = []
-            for item in r:
-                items_str.append(str(item))
+            items_str = [str(item) for item in r]
             row_strs.append(f"[{', '.join(items_str)}]")
         return f"unilab_cell_concat({', '.join(row_strs)})"
         
@@ -706,12 +961,10 @@ class UniLabToPython(Transformer):
     def anonymous_func(self, items):
         params = items[2] if len(items) > 3 else []
         expr = items[-1]
-        raw_params = [str(p) for p in params if str(p) not in (",", "(", ")")]
+        raw_params = [self._escape_name(str(p)) for p in params if str(p) not in (",", "(", ")")]
         
-        # Handle tilde (~) in anonymous function parameters
         processed_params = []
         _ignored_counter = 0
-        import uuid
         for p in raw_params:
             if p == "~":
                 _ignored_counter += 1
@@ -725,26 +978,36 @@ class UniLabToPython(Transformer):
         target = str(items[1])
         if '.' in target or '/' in target:
             return f"unilab_handle('{target}')"
-        return f"unilab_handle({target})"
+        return f"unilab_handle({self._escape_name(target)})"
         
     def cmd_call(self, items):
-        name, args = str(items[0]), [f"'{str(a)}'" for a in items[1:]]
+        name = self._escape_name(str(items[0]))
+        args = []
+        for a in items[1:]:
+            sa = str(a)
+            if (sa.startswith("'") and sa.endswith("'")) or (sa.startswith('"') and sa.endswith('"')):
+                args.append(self.string([sa]))
+            else:
+                args.append(repr(sa))
+        self.called_functions.add(name)
         return f"{name}({', '.join(args)})"
         
     def clear_stmt(self, items):
-        names = [str(i) for i in items if str(i) not in ("clear", " ")]
-        if not names or "all" in names: return "unilab_clear_workspace(globals())"
+        raw_names = [str(i) for i in items if str(i) not in ("clear", " ")]
+        if not raw_names or "all" in raw_names:
+            return "unilab_clear_workspace(globals())"
+        names = [self._escape_name(n) for n in raw_names]
         quoted = [f"'{n}'" for n in names]
         return f"unilab_clear_variables(globals(), [{', '.join(quoted)}])"
         
     def global_stmt(self, items):
-        names = [str(i) for i in items if str(i) != "global"]
+        names = [self._escape_name(str(i)) for i in items if str(i) != "global"]
         for n in names: self.globals.add(n)
         return f"global {', '.join(names)}"
         
     def import_stmt(self, items): return f"import {items[1]}"
     def export_stmt(self, items): return f"# export {items[1]}"
-    def atom_group(self, items): return items[1]
+    def atom_group(self, items): return str(items[1])
 
 class UniLabTranspiler:
     def __init__(self):
@@ -754,25 +1017,33 @@ class UniLabTranspiler:
         self._cache_limit = 100
 
     def transpile(self, code: str):
-        # Check cache first
-        code_hash = hash(code)
-        if code_hash in self._cache:
-            return self._cache[code_hash]
+        # Key cache directly on code string to avoid hash collisions
+        if code in self._cache:
+            cached_code, cached_called, cached_paths = self._cache[code]
+            return cached_code, set(cached_called), set(cached_paths)
 
         try:
-            tree = self.parser.parse(code + "\n")
-            self.transformer.variables, self.transformer.called_functions, self.transformer.added_paths = set(), set(), set()
+            preprocessed = _disambiguate_transposes(code)
+            tree = self.parser.parse(preprocessed + "\n")
+            self.transformer.variables = set()
+            self.transformer.globals = set()
+            self.transformer.called_functions = set()
+            self.transformer.added_paths = set()
             self.transformer.functions = []
+            self.transformer._switch_depth = 0
             result = self.transformer.transform(tree)
             
-            final_code = "\n\n".join(self.transformer.functions) + "\n\n" + str(result)
-            transpiled = (final_code, self.transformer.called_functions, self.transformer.added_paths)
+            if self.transformer.functions:
+                final_code = "\n\n".join(self.transformer.functions) + ("\n\n" + str(result) if str(result).strip() else "")
+            else:
+                final_code = str(result)
+            transpiled = (final_code, set(self.transformer.called_functions), set(self.transformer.added_paths))
             
-            # Simple LRU-ish cache management
+            # Simple FIFO/LRU-ish cache management
             if len(self._cache) >= self._cache_limit:
-                # Remove a random item (good enough for 100 items)
                 self._cache.pop(next(iter(self._cache)))
             
-            self._cache[code_hash] = transpiled
-            return transpiled
-        except Exception as e: raise Exception(f"Transpilation Error: {str(e)}")
+            self._cache[code] = transpiled
+            return final_code, set(transpiled[1]), set(transpiled[2])
+        except Exception as e:
+            raise e

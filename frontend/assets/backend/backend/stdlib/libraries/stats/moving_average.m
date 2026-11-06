@@ -1,6 +1,8 @@
 function [y] = moving_average(x, window)
     % Calculates the moving average of a signal x with a given window size
     % Implementation using a simple sliding window
+    if nargin < 1, x = []; end
+    if nargin < 2, window = []; end
     n = length(x);
     y = zeros(size(x));
     

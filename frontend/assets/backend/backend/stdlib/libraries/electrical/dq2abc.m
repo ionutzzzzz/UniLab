@@ -2,6 +2,8 @@ function [abc] = dq2abc(dq0, theta)
     % DQ2ABC Performs inverse Park transformation (dq0 to abc)
     % abc = dq2abc(dq0, theta)
     
+    if nargin < 1, dq0 = []; end
+    if nargin < 2, theta = []; end
     if size(dq0, 2) ~= 3
         dq0 = dq0';
     end

@@ -2,6 +2,10 @@ function [y_pred] = naive_bayes_predict(X, means, vars, priors)
     % NAIVE_BAYES_PREDICT Predict using a Gaussian Naive Bayes classifier
     % [y_pred] = naive_bayes_predict(X, means, vars, priors)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, means = []; end
+    if nargin < 3, vars = []; end
+    if nargin < 4, priors = []; end
     [m, n] = size(X);
     num_classes = length(priors);
     y_pred = zeros(m, 1);

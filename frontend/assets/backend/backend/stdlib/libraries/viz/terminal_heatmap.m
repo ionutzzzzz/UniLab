@@ -1,5 +1,6 @@
 function terminal_heatmap(M, h, w)
     % TERMINAL_HEATMAP Create an ASCII heatmap using common terminal characters
+    if nargin < 1, M = []; end
     if nargin < 2 || isempty(h), h = 15; end
     if nargin < 3 || isempty(w), w = 40; end
     

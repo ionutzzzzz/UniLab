@@ -2,6 +2,9 @@ function [x_min, f_min] = fminbnd_custom(f, ax, bx, tol)
     % FMINBND_CUSTOM Find minimum of single-variable function on fixed interval
     % Uses Golden Section Search
     
+    if nargin < 1, f = []; end
+    if nargin < 2, ax = []; end
+    if nargin < 3, bx = []; end
     if nargin < 4, tol = 1e-6; end
     
     R = (sqrt(5) - 1) / 2; % Golden ratio

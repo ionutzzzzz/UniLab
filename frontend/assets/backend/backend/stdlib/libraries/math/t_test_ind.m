@@ -1,6 +1,8 @@
 function [t_stat, p_val] = t_test_ind(x1, x2)
     % T_TEST_IND Independent two-sample t-test
     
+    if nargin < 1, x1 = []; end
+    if nargin < 2, x2 = []; end
     n1 = length(x1);
     n2 = length(x2);
     m1 = mean(x1);

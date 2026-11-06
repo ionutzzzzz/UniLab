@@ -2,6 +2,10 @@ function [A, Z] = nn_forward(X, W, b, activation_func)
     % NN_FORWARD Neural network forward pass for one layer
     % [A, Z] = nn_forward(X, W, b, activation_func)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, W = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, activation_func = []; end
     Z = X * W + b';
     
     if strcmp(activation_func, 'sigmoid')

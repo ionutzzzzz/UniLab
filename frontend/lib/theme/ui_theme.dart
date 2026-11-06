@@ -5,7 +5,6 @@ import 'ui_typography.dart';
 import 'ui_spacing.dart';
 import 'ui_density.dart';
 import 'syntax_palette.dart';
-import 'syntax_themes.dart';
 import '../models/models.dart';
 
 @immutable
@@ -53,31 +52,8 @@ class UiTheme extends ThemeExtension<UiTheme> {
 UiTheme createUiTheme(UserSettings settings, Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final baseColors = isDark ? UiColors.dark() : UiColors.light();
-  
-  // Find the selected syntax theme
-  final syntaxTheme = SyntaxHighlightTheme.all.firstWhere(
-    (t) => t.name == settings.syntaxHighlightTheme,
-    orElse: () => SyntaxHighlightTheme.all.first,
-  );
-
-  // Determine background and text colors based on interface theme and syntax theme
-  final Color canvasColor = isDark ? syntaxTheme.backgroundColor : baseColors.canvas;
-  final Color panelColor = isDark ? syntaxTheme.backgroundColor : baseColors.panel;
-  final Color headerColor = isDark ? syntaxTheme.backgroundColor : baseColors.panelHeader;
-  
-  // Use syntax theme foreground for text in dark mode for better integration
-  final Color textPrimary = isDark ? syntaxTheme.foregroundColor : baseColors.textPrimary;
-  final Color textSecondary = isDark ? syntaxTheme.foregroundColor.withValues(alpha: 0.7) : baseColors.textSecondary;
-  final Color textMuted = isDark ? syntaxTheme.foregroundColor.withValues(alpha: 0.5) : baseColors.textMuted;
 
   final colors = baseColors.copyWith(
-    canvas: canvasColor,
-    panel: panelColor,
-    panelHeader: headerColor,
-    ribbonTabs: headerColor,
-    textPrimary: textPrimary,
-    textSecondary: textSecondary,
-    textMuted: textMuted,
     accent: settings.accentColor,
     accentHover: settings.accentColor.withValues(alpha: 0.8),
   );

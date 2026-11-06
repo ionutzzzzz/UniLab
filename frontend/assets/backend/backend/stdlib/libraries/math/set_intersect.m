@@ -1,6 +1,8 @@
 function [c] = set_intersect(a, b)
     % SET_INTERSECT Intersection of two sets
     
+    if nargin < 1, a = []; end
+    if nargin < 2, b = []; end
     a = a(:);
     b = b(:);
     

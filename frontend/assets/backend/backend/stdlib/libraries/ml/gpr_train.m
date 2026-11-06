@@ -2,6 +2,8 @@ function [gp_model] = gpr_train(X, y, alpha, kernel)
     % GPR_TRAIN Train a Gaussian Process Regressor
     % gp_model = gpr_train(X, y, alpha, kernel)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 4, kernel = 'rbf'; end
     if nargin < 3, alpha = 1e-10; end
     
@@ -18,6 +20,9 @@ end
 
 function [K] = compute_kernel(X1, X2, kernel)
     % RBF Kernel: exp(-0.5 * ||x1 - x2||^2)
+    if nargin < 1, X1 = []; end
+    if nargin < 2, X2 = []; end
+    if nargin < 3, kernel = []; end
     m1 = size(X1, 1);
     m2 = size(X2, 1);
     K = zeros(m1, m2);

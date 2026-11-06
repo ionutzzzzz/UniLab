@@ -1,5 +1,7 @@
 function C = kronecker_product(A, B)
     % KRONECKER_PRODUCT Kronecker product of two matrices
+    if nargin < 1, A = []; end
+    if nargin < 2, B = []; end
     [ma, na] = size(A);
     [mb, nb] = size(B);
     C = zeros(ma*mb, na*nb);

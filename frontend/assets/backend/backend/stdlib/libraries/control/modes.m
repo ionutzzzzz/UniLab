@@ -1,4 +1,5 @@
 function mlist = modes(H)
+    if nargin < 1, H = []; end
     pols = pole(H);
     syms t;
     mlist = [];

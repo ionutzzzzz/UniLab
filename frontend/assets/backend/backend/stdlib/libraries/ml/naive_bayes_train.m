@@ -2,6 +2,8 @@ function [means, vars, priors] = naive_bayes_train(X, y)
     % NAIVE_BAYES_TRAIN Train a Gaussian Naive Bayes classifier
     % [means, vars, priors] = naive_bayes_train(X, y)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     classes = unique(y);
     num_classes = length(classes);
     [m, n] = size(X);

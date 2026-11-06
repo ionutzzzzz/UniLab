@@ -1,6 +1,7 @@
 function [p] = is_prime(n)
     % IS_PRIME Check if a number is prime
     
+    if nargin < 1, n = []; end
     if n <= 1
         p = 0;
         return;

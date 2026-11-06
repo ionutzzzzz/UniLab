@@ -1,5 +1,8 @@
 function I = gauss_quadrature_2point(f, a, b)
     % GAUSS_QUADRATURE_2POINT 2-point Gauss quadrature
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
     x1 = -1/sqrt(3);
     x2 = 1/sqrt(3);
     w1 = 1;

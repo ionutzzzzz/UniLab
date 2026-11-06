@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'dart:io' as io;
+import 'platform_io.dart' as io;
 import 'package:path/path.dart' as p;
 import '../bridge/unilab_bridge.dart';
 

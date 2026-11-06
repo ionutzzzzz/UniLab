@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../providers/app_provider.dart';
+import '../../../models/editor_models.dart';
 
 class ProblemsView extends StatelessWidget {
   const ProblemsView({super.key});
@@ -14,34 +16,51 @@ class ProblemsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final appProvider = Provider.of<AppProvider>(context);
     final settings = settingsProvider.settings;
-    
-    // Mock problems for UI development
-    final mockProblems = [
-      _Problem(
-        type: _ProblemType.error,
-        message: "Undefined function or variable 'alpha'.",
-        file: "main.m",
-        line: 12,
-        column: 5,
-      ),
-      _Problem(
-        type: _ProblemType.warning,
-        message: "The variable 'x' is assigned a value but never used.",
-        file: "utils.m",
-        line: 45,
-        column: 1,
-      ),
-      _Problem(
-        type: _ProblemType.info,
-        message: "Consider using 'vec' instead of 'array' for performance.",
-        file: "main.m",
-        line: 8,
-        column: 12,
-      ),
-    ];
+    final activeFileName = appProvider.activeFile?.name ?? 'workspace';
 
-    if (mockProblems.isEmpty) {
+    final problems = <_Problem>[];
+    for (final msg in appProvider.consoleMessages) {
+      if (msg.type == ConsoleMessageType.error || msg.type == ConsoleMessageType.warning) {
+        final text = msg.text.trim();
+        if (text.isEmpty) continue;
+
+        int line = 1;
+        int column = 1;
+        String file = activeFileName;
+
+        final lineMatch = RegExp(r'(?:line|Line)\s+(\d+)').firstMatch(text);
+        if (lineMatch != null) {
+          line = int.tryParse(lineMatch.group(1)!) ?? 1;
+        }
+
+        final colMatch = RegExp(r'(?:column|col|Column)\s+(\d+)').firstMatch(text);
+        if (colMatch != null) {
+          column = int.tryParse(colMatch.group(1)!) ?? 1;
+        }
+
+        final fileMatch = RegExp(r'(?:in|file)\s+([a-zA-Z0-9_\-\.]+\.m)', caseSensitive: false).firstMatch(text);
+        if (fileMatch != null) {
+          file = fileMatch.group(1)!;
+        }
+
+        problems.add(
+          _Problem(
+            type: msg.type == ConsoleMessageType.error ? _ProblemType.error : _ProblemType.warning,
+            message: text,
+            file: file,
+            line: line,
+            column: column,
+          ),
+        );
+      }
+    }
+
+    final errorCount = problems.where((p) => p.type == _ProblemType.error).length;
+    final warningCount = problems.where((p) => p.type == _ProblemType.warning).length;
+
+    if (problems.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -86,23 +105,23 @@ class ProblemsView extends StatelessWidget {
             child: Row(
               children: [
                 UiText(
-                  text: '${mockProblems.length} Problems',
+                  text: '${problems.length} Problems',
                   variant: UiTextVariant.label,
                   fontWeight: FontWeight.bold,
                 ),
                 const Spacer(),
-                _FilterPill(label: 'Errors', count: 1, color: ui.colors.danger),
+                _FilterPill(label: 'Errors', count: errorCount, color: ui.colors.danger),
                 const SizedBox(width: 8),
-                _FilterPill(label: 'Warnings', count: 1, color: ui.colors.warning),
+                _FilterPill(label: 'Warnings', count: warningCount, color: ui.colors.warning),
               ],
             ),
           ),
           Expanded(
             child: SelectionArea(
               child: ListView.builder(
-                itemCount: mockProblems.length,
+                itemCount: problems.length,
                 itemBuilder: (context, index) {
-                  return _ProblemRow(problem: mockProblems[index], fontSize: settings.fontSize);
+                  return _ProblemRow(problem: problems[index], fontSize: settings.fontSize);
                 },
               ),
             ),

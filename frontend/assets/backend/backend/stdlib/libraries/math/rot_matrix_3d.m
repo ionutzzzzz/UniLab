@@ -1,6 +1,8 @@
 function [R] = rot_matrix_3d(theta, axis)
     % ROT_MATRIX_3D 3D Rotation Matrix around 'x', 'y', or 'z'
     
+    if nargin < 1, theta = []; end
+    if nargin < 2, axis = []; end
     c = cos(theta);
     s = sin(theta);
     

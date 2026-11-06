@@ -330,6 +330,7 @@ temp_python/
 release-windows/
 dist/
 backend/target/
+backend/unilab_cli/unilab_cli_bin
 frontend/build/
 frontend/dist/
 frontend/.dart_tool/
@@ -338,3 +339,5 @@ frontend/.metadata
 frontend/pubspec.lock
 *.iml
 .idea/
+!frontend/web/**
+!backend/web/**

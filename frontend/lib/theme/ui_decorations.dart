@@ -7,17 +7,10 @@ class ShellDecorations {
   static BoxDecoration panelDecoration(UiTheme theme) {
     return BoxDecoration(
       color: theme.colors.panel,
-      borderRadius: BorderRadius.circular(6.0), // Updated to 6px for refined IDE look
-      border: Border(
-        // 1px sharp external border
-        left: BorderSide(color: theme.colors.border, width: 1.0),
-        right: BorderSide(color: theme.colors.border, width: 1.0),
-        bottom: BorderSide(color: theme.colors.border, width: 1.0),
-        // Beveled inner top-highlight using the Pastel Blue
-        top: BorderSide(
-          color: theme.colors.accent.withValues(alpha: 0.3), 
-          width: 1.0,
-        ),
+      borderRadius: BorderRadius.circular(6.0),
+      border: Border.all(
+        color: theme.colors.border,
+        width: 1.0,
       ),
       boxShadow: theme.colors.shadowMd,
     );

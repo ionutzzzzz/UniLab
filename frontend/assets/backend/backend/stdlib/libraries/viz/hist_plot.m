@@ -1,5 +1,6 @@
 function [] = hist_plot(data, bins)
     % HIST_PLOT Create an ASCII histogram
+    if nargin < 1, data = []; end
     if nargin < 2
         bins = 10;
     end

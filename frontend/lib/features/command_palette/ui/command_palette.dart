@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fuzzy/fuzzy.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter/services.dart';
 import '../../../core/commands/command.dart';
 import '../../../core/commands/commands_registration.dart';
 import '../../../theme/ui_theme.dart';
@@ -26,6 +27,7 @@ class CommandPalette extends ConsumerStatefulWidget {
 
 class _CommandPaletteState extends ConsumerState<CommandPalette> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   List<AppCommand> _filteredCommands = [];
   List<AppCommand> _allCommands = [];
   int _selectedIndex = 0;
@@ -36,11 +38,44 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     _allCommands = ref.read(commandRegistryProvider).getAll();
     _filteredCommands = List.from(_allCommands);
     _searchController.addListener(_onSearchChanged);
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_filteredCommands.isNotEmpty) {
+            setState(() {
+              _selectedIndex = (_selectedIndex + 1) % _filteredCommands.length;
+            });
+          }
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (_filteredCommands.isNotEmpty) {
+            setState(() {
+              _selectedIndex =
+                  (_selectedIndex - 1 + _filteredCommands.length) %
+                  _filteredCommands.length;
+            });
+          }
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_filteredCommands.isNotEmpty &&
+              _selectedIndex >= 0 &&
+              _selectedIndex < _filteredCommands.length) {
+            _executeCommand(_filteredCommands[_selectedIndex]);
+          }
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+          Navigator.of(context).pop();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -87,7 +122,10 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
       elevation: 0,
       insetPadding: const EdgeInsets.only(top: 100),
       alignment: Alignment.topCenter,
-      child: UiGlassContainer(
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
+        child: UiGlassContainer(
         borderRadius: ui.spacing.radiusMd,
         padding: EdgeInsets.zero,
         opacity: 0.8,
@@ -178,6 +216,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

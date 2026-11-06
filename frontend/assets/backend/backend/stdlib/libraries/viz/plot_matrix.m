@@ -1,5 +1,6 @@
 function [] = plot_matrix(M)
     % PLOT_MATRIX Visual representation of a matrix in terminal
+    if nargin < 1, M = []; end
     [r, c] = size(M);
     disp(['Matrix (', num2str(r), 'x', num2str(c), '):']);
     

@@ -222,6 +222,12 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
   final TerminalController _terminalController = TerminalController();
 
   @override
+  void dispose() {
+    _terminalController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TerminalView(
       widget.terminal,

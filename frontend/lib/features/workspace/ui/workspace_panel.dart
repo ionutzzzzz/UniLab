@@ -21,16 +21,16 @@ class WorkspacePanel extends ConsumerStatefulWidget {
 }
 
 class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
-  String _activeSegment = 'Variables';
   final List<String> _segments = ['Variables', 'Inspector', 'Plots', 'Help'];
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = p.Provider.of<AppProvider>(context);
+    final activeSegment = appProvider.selectedWorkspaceSegment;
 
     Widget activeView;
-    switch (_activeSegment) {
+    switch (activeSegment) {
       case 'Variables':
         activeView = const VariablesGrid();
         break;
@@ -127,10 +127,10 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
               // Navigation
               WorkspaceSegmented(
                 segments: _segments,
-                activeSegment: _activeSegment,
+                activeSegment: activeSegment,
                 showLabels: !isCompact,
                 onSegmentChanged: (segment) =>
-                    setState(() => _activeSegment = segment),
+                    appProvider.setSelectedWorkspaceSegment(segment),
               ),
               // Content
               Expanded(

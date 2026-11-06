@@ -89,23 +89,24 @@ if [ "$PLATFORM" == "linux" ]; then
     "$BUILD_DIR/opt/unilab/venv/bin/pip" install --upgrade pip
 
     cat <<EOF > "$BUILD_DIR/requirements.txt"
-numpy==2.4.4
-scipy>=1.10.0
-matplotlib==3.10.9
-pandas>=2.0.0
-sympy
-Pillow
-scikit-learn>=1.2.0
+numpy>=1.26.0,<3.0.0
+scipy>=1.11.0
+matplotlib>=3.8.0,<4.0.0
+pandas>=2.1.0
+sympy>=1.12
+Pillow>=10.2.0
+scikit-learn>=1.3.0
+nest-asyncio>=1.6.0
 lark==1.3.1
-fastapi
-uvicorn[standard]
-gunicorn
-pydantic
-python-dotenv
-python-multipart
-httpx
-pytest-asyncio
-aiofiles
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+pydantic>=2.6.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+pytest-asyncio>=0.23.0
+aiofiles>=23.2.1
 EOF
 
     echo "📦 Installing Python dependencies..."
@@ -134,6 +135,7 @@ EOF
 
     # 4. Build Frontend
     echo "🚀 Building frontend..."
+    ./script/sync_assets.sh
     ./script/build_bridge.sh
 
     cd "$PROJECT_ROOT/frontend"
@@ -201,7 +203,7 @@ export PYTHONPATH="/opt/unilab:\$PYTHONPATH"
 
 # Start the backend server in the background
 cd /opt/unilab/backend
-/opt/unilab/venv/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.main:app --bind 127.0.0.1:8000 &
+/opt/unilab/venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker backend.api.main:app --bind 127.0.0.1:8000 &
 SERVER_PID=\$!
 
 # Launch the Flutter GUI
@@ -226,7 +228,7 @@ done
 export PYTHONPATH="/opt/unilab:\$PYTHONPATH"
 
 cd /opt/unilab/backend
-/opt/unilab/venv/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:8000
+/opt/unilab/venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker backend.api.main:app --bind 0.0.0.0:8000
 EOF
     chmod +x "$BUILD_DIR/usr/bin/unilab-server"
 

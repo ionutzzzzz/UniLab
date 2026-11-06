@@ -113,7 +113,9 @@ install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    COMPONENT Runtime)
 
 # Copy the UniLab FFI bridge library
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/libunilab_core.so"
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/libunilab_core.so"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../backend/target/release/libunilab_core.so"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime
   OPTIONAL)

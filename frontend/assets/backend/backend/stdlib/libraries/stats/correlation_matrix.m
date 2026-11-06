@@ -3,6 +3,7 @@ function [R] = correlation_matrix(data)
     % data: Matrix where columns are variables and rows are observations
 
     % Ensure data is properly formatted and 2D
+    if nargin < 1, data = []; end
     if isvector(data)
         data = reshape(data, [], 1);
     end

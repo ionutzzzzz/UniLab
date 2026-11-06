@@ -1,5 +1,6 @@
 function [mst_edges, total_weight] = kruskal_algorithm(A)
     % KRUSKAL_ALGORITHM Minimum Spanning Tree
+    if nargin < 1, A = []; end
     n = size(A, 1);
     [u, v, w] = find(triu(A));
     edges = [u, v, w];

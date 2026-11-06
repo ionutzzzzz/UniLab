@@ -96,7 +96,9 @@ if(EXISTS "${NATIVE_ASSETS_DIR}")
 endif()
 
 # Copy the UniLab FFI bridge library
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/unilab_core.dll"
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/unilab_core.dll"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../backend/target/release/unilab_core.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime
   OPTIONAL)

@@ -1,4 +1,7 @@
 function h = ponder(num, den, U)
+    if nargin < 1, num = []; end
+    if nargin < 2, den = []; end
+    if nargin < 3, U = []; end
     Ha = tf(num, den);
     H = minreal(Ha);
 

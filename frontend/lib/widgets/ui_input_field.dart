@@ -48,7 +48,7 @@ class _UiInputFieldState extends State<UiInputField> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final height = widget.isDense ? 28.0 : 32.0;
+    final height = (widget.isDense ? 28.0 : 32.0) * ui.spacing.scale;
 
     return Container(
       height: height,

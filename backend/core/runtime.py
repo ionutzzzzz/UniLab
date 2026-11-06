@@ -44,16 +44,73 @@ def simulate(*args, **kwargs):
         print("Simulation engine unavailable (missing dependencies)")
         return None
 
-# ContextVar for thread-safe session workspace path
+from backend.core.models import safe_resolve_in_workspace, sanitize_for_json
+
+# ContextVar for thread-safe session workspace path and CWD
 unilab_workspace_ctx = ContextVar('unilab_workspace', default=None)
+unilab_cwd_ctx = ContextVar('unilab_cwd', default=None)
+unilab_restricted_ctx = ContextVar('unilab_restricted', default=False)
 # ContextVar for engine update callback
 unilab_update_ctx = ContextVar('unilab_update_callback', default=None)
 unilab_event_ctx = ContextVar('unilab_event_callback', default=None)
 # ContextVar for the current script path
 unilab_script_ctx = ContextVar('unilab_script', default=None)
+# Session-isolated state ContextVars
+_unilab_tic_ctx = ContextVar('unilab_tic_stack', default=None)
+_unilab_fid_ctx = ContextVar('unilab_fid_state', default=None)
+_unilab_hold_ctx = ContextVar('unilab_hold', default=None)
+_unilab_3d_ctx = ContextVar('unilab_3d_store', default=None)
 
-# Store for 3D plot data (fig_num -> {type, x, y, z})
+# Fallback module-level store when outside session context
 _unilab_3d_data_store = {}
+
+
+def _get_3d_store() -> dict:
+    store = _unilab_3d_ctx.get()
+    return store if store is not None else _unilab_3d_data_store
+
+
+def _get_hold_state() -> bool:
+    h = _unilab_hold_ctx.get()
+    if isinstance(h, dict):
+        return bool(h.get("hold", False))
+    if h is not None:
+        return bool(h)
+    return bool(_unilab_hold)
+
+
+def _set_hold_state(val: bool) -> None:
+    global _unilab_hold
+    h = _unilab_hold_ctx.get()
+    if isinstance(h, dict):
+        h["hold"] = bool(val)
+    else:
+        _unilab_hold = bool(val)
+
+
+def _get_tic_stack() -> list:
+    st = _unilab_tic_ctx.get()
+    return st if st is not None else _tic_stack
+
+
+def _get_fid_state() -> dict:
+    st = _unilab_fid_ctx.get()
+    if st is not None:
+        return st
+    return _unilab_default_fid_state
+
+
+def _resolve_runtime_path(user_path: str | pathlib.Path) -> pathlib.Path:
+    """Resolve file paths against session CWD/workspace, enforcing workspace sandbox when restricted."""
+    ws_root = unilab_workspace_ctx.get()
+    cwd = unilab_cwd_ctx.get()
+    base_dir = pathlib.Path(cwd) if cwd else (pathlib.Path(ws_root) if ws_root else pathlib.Path.cwd())
+    p = pathlib.Path(str(user_path))
+    candidate = p if p.is_absolute() else (base_dir / p)
+    restricted = bool(unilab_restricted_ctx.get()) or os.environ.get("UNILAB_API_SERVER") == "1"
+    if restricted and ws_root is not None:
+        return safe_resolve_in_workspace(pathlib.Path(ws_root), candidate)
+    return candidate.resolve()
 
 def uibutton(label, callback):
     """Adds a custom button to the current simulation window."""
@@ -357,7 +414,17 @@ def unilab_damp(sys):
     return wn, zeta, p
 
 def unilab_c2d(sys, dt, method='zoh'):
-    return signal.cont2discrete((sys.A, sys.B, sys.C, sys.D) if isinstance(sys, signal.StateSpace) else sys, dt, method=method)
+    m = str(method).lower()
+    scipy_method = 'bilinear' if m == 'tustin' else m
+    dt_f = float(dt)
+    if hasattr(sys, 'to_discrete'):
+        return sys.to_discrete(dt_f, method=scipy_method)
+    if isinstance(sys, (tuple, list)):
+        res = signal.cont2discrete(sys, dt_f, method=scipy_method)
+        if len(res) == 5:
+            return signal.StateSpace(res[0], res[1], res[2], res[3], dt=res[4])
+        return signal.TransferFunction(res[0], res[1], dt=res[2])
+    return signal.cont2discrete(sys, dt_f, method=scipy_method)
 
 def unilab_ctrb(A, B):
     n = A.shape[0]
@@ -369,8 +436,8 @@ def unilab_obsv(A, C):
 
 def unilab_rlocus(sys):
     s = sys if isinstance(sys, signal.TransferFunction) else sys.to_tf()
-    num = s.num
-    den = s.den
+    num = np.asarray(s.num, dtype=float).flatten()
+    den = np.asarray(s.den, dtype=float).flatten()
     # Use a more balanced gain range for visibility
     gains = np.logspace(-2, 3, 500)
     all_roots = []
@@ -533,13 +600,20 @@ def unilab_lsim(sys, U, T):
 
 def unilab_bode(sys, w=None): 
     w, mag, phase = signal.bode(sys, w=_unilab_vec(w) if w is not None else None)
+    if isinstance(mag, np.ndarray) and mag.ndim > 1:
+        mag = mag.squeeze()
+    if isinstance(phase, np.ndarray) and phase.ndim > 1:
+        phase = phase.squeeze()
     
-    # Plotting for Bode
-    if not _unilab_hold: 
-        plt.clf()
+    # Draw subplots directly on current figure instead of spawning an orphan figure
+    fig = plt.gcf()
+    if not _get_hold_state() or len(fig.axes) != 2:
+        fig.clf()
         _unilab_update_fig_version()
-
-    fig, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+        ax_mag = fig.add_subplot(2, 1, 1)
+        ax_phase = fig.add_subplot(2, 1, 2, sharex=ax_mag)
+    else:
+        ax_mag, ax_phase = fig.axes[0], fig.axes[1]
     
     ax_mag.semilogx(w, mag, linewidth=3)
     ax_mag.set_ylabel('Magnitude (dB)')
@@ -749,7 +823,42 @@ def unilab_lqg(sys, Q, R, Qn, Rn):
     return signal.StateSpace(A_reg, L, K, np.zeros((K.shape[0], L.shape[1])))
 
 def unilab_d2c(sys, method='zoh'):
-    return sys.to_continuous()
+    from scipy.linalg import logm
+    was_tf = isinstance(sys, signal.TransferFunction)
+    dt = float(getattr(sys, 'dt', None) or 1.0)
+    if dt <= 0:
+        raise ValueError("Discrete-time system must have a positive sampling time dt.")
+    ss_d = sys if isinstance(sys, signal.StateSpace) else sys.to_ss()
+    Ad = np.atleast_2d(np.asarray(ss_d.A, dtype=float))
+    Bd = np.atleast_2d(np.asarray(ss_d.B, dtype=float))
+    Cd = np.atleast_2d(np.asarray(ss_d.C, dtype=float))
+    Dd = np.atleast_2d(np.asarray(ss_d.D, dtype=float))
+    n = Ad.shape[0]
+    m = Bd.shape[1]
+    m_name = str(method).lower()
+    if m_name in ('tustin', 'bilinear'):
+        I_n = np.eye(n)
+        inv_p = np.linalg.inv(I_n + Ad)
+        Ac = (2.0 / dt) * inv_p @ (Ad - I_n)
+        Bc = (2.0 / dt) * inv_p @ Bd
+        Cc = 2.0 * Cd @ inv_p
+        Dc = Dd - Cd @ inv_p @ Bd
+    else:
+        aug = np.block([
+            [Ad, Bd],
+            [np.zeros((m, n)), np.eye(m)]
+        ])
+        L = logm(aug) / dt
+        if np.max(np.abs(np.imag(L))) < 1e-8:
+            L = np.real(L)
+        Ac = L[:n, :n]
+        Bc = L[:n, n:]
+        Cc = Cd
+        Dc = Dd
+    sys_c = signal.StateSpace(Ac, Bc, Cc, Dc)
+    if was_tf:
+        return sys_c.to_tf()
+    return sys_c
 
 def unilab_zp2ss(z, p, k):
     return signal.zpk2ss(_unilab_vec(z), _unilab_vec(p), k)
@@ -951,68 +1060,166 @@ def edit(filename):
     # Actually, the easiest is to print a marker that AppProvider handles
     print(f"::OPEN_FILE::{filename}")
 
+def _to_safe_serializable(val):
+    """Prepare values for safe scipy.io.savemat / np.savez without pickle."""
+    if isinstance(val, (int, float, complex, str, bool, np.number, np.bool_)):
+        return val
+    if isinstance(val, np.ndarray):
+        if val.dtype == object:
+            # Convert homogeneous string/numeric object arrays if possible
+            flat = val.flatten().tolist()
+            if builtins.all(isinstance(x, (int, float, complex, str, bool, np.number, np.bool_)) for x in flat):
+                return np.array(val.tolist())
+        return val
+    if isinstance(val, (list, tuple)):
+        return np.array(val)
+    if isinstance(val, UnilabStruct):
+        return {k: _to_safe_serializable(v) for k, v in val.__dict__.items() if not k.startswith('_')}
+    if isinstance(val, dict):
+        return {str(k): _to_safe_serializable(v) for k, v in val.items() if not str(k).startswith('_')}
+    return str(val)
+
+
+def _save_safe_dict(path: pathlib.Path, data: dict) -> None:
+    """Save dictionary of variables safely using scipy.io.savemat or np.savez (never pickle)."""
+    from scipy.io import savemat
+    clean_data = {}
+    for k, v in data.items():
+        if not isinstance(k, str) or not k or k.startswith('_'):
+            continue
+        try:
+            clean_data[k] = _to_safe_serializable(v)
+        except Exception:
+            continue
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == '.npz':
+        with open(path, 'wb') as f:
+            np.savez(f, **{k: np.asarray(v) if not isinstance(v, dict) else str(v) for k, v in clean_data.items()})
+        return
+
+    try:
+        savemat(str(path), clean_data, do_compression=True)
+    except Exception:
+        # Fallback to safe .npz format (without pickle) for types savemat rejects
+        npz_dict = {}
+        for k, v in clean_data.items():
+            arr = np.asarray(v) if not isinstance(v, dict) else np.asarray(str(v))
+            if arr.dtype != object:
+                npz_dict[k] = arr
+            else:
+                npz_dict[k] = np.asarray([str(x) for x in arr.flatten()]).reshape(arr.shape)
+        with open(path, 'wb') as f:
+            np.savez(f, **npz_dict)
+
+
+def _load_safe_dict(path: pathlib.Path) -> dict:
+    """Load dictionary of variables safely using scipy.io.loadmat or np.load(..., allow_pickle=False)."""
+    from scipy.io import loadmat
+    with open(path, 'rb') as f:
+        header = f.read(4)
+
+    data = {}
+    if header == b'PK\x03\x04' or path.suffix.lower() == '.npz':
+        with np.load(str(path), allow_pickle=False) as archive:
+            for k in archive.files:
+                val = archive[k]
+                if val.ndim == 0:
+                    data[k] = val.item()
+                else:
+                    data[k] = val
+        return data
+
+    raw = loadmat(str(path), squeeze_me=False)
+    for k, v in raw.items():
+        if k.startswith('__') and k.endswith('__'):
+            continue
+        if isinstance(v, np.ndarray):
+            if v.dtype.kind in ('U', 'S'):
+                if v.size == 1:
+                    data[k] = str(v.item())
+                elif v.ndim <= 1:
+                    data[k] = "".join(v.tolist())
+                else:
+                    data[k] = v
+            elif v.size == 1 and v.ndim == 2 and v.shape == (1, 1):
+                data[k] = v.item()
+            else:
+                data[k] = v
+        else:
+            data[k] = v
+    return data
+
+
 def save(filename, *vars):
-    """Saves variables to a file (uses pickle/pkl)."""
-    import pickle
-    if not filename.endswith('.mat') and not filename.endswith('.pkl'):
-        filename += '.mat'
-    
-    # Resolve path relative to workspace
-    ws_path = unilab_workspace_ctx.get()
-    if ws_path:
-        p = pathlib.Path(ws_path) / filename
-    else:
-        p = pathlib.Path(filename)
-        
+    """Saves variables to a .mat or .npz file safely without pickle."""
+    fname = str(filename)
+    if not fname.endswith('.mat') and not fname.endswith('.npz'):
+        fname += '.mat'
+
+    p = _resolve_runtime_path(fname)
+
     frame = inspect.currentframe().f_back
-    # Find user workspace
     while frame and frame.f_globals.get('__name__') == __name__:
         frame = frame.f_back
-    
+
     data = {}
+    caller_globals = frame.f_globals if frame else {}
     if not vars:
-        # Save all user variables
+        runtime_names = set(dir(sys.modules[__name__]))
         internal = {'np', 'plt', 'signal', 'unilab_workspace_ctx', 'unilab_update_ctx', 'ans'}
-        for k, v in frame.f_globals.items():
-            if k.startswith('_') or k in internal: continue
-            if inspect.ismodule(v) or inspect.isfunction(v): continue
+        for k, v in caller_globals.items():
+            if k.startswith('_') or k in internal or k in runtime_names:
+                continue
+            if inspect.ismodule(v) or inspect.isfunction(v) or inspect.isbuiltin(v) or isinstance(v, type):
+                continue
             data[k] = v
     else:
         for v in vars:
-            if v in frame.f_globals:
-                data[v] = frame.f_globals[v]
-                
-    with open(p, 'wb') as f:
-        pickle.dump(data, f)
-    print(f"Saved {len(data)} variables to {filename}")
+            vname = str(v)
+            if vname in caller_globals:
+                data[vname] = caller_globals[vname]
 
-def load(filename):
-    """Loads variables from a file."""
-    import pickle
-    if not filename.endswith('.mat') and not filename.endswith('.pkl'):
-        if not pathlib.Path(filename).exists():
-             if pathlib.Path(filename + '.mat').exists(): filename += '.mat'
-             elif pathlib.Path(filename + '.pkl').exists(): filename += '.pkl'
-    
-    ws_path = unilab_workspace_ctx.get()
-    if ws_path:
-        p = pathlib.Path(ws_path) / filename
-    else:
-        p = pathlib.Path(filename)
-        
-    if not p.exists():
-        print(f"File not found: {filename}")
-        return
+    _save_safe_dict(p, data)
+    print(f"Saved {len(data)} variables to {fname}")
 
-    with open(p, 'rb') as f:
-        data = pickle.load(f)
-        
+
+def load(filename, *vars):
+    """Loads variables from a .mat or .npz file safely without pickle."""
+    fname = str(filename)
+    candidates = [fname]
+    if not fname.endswith('.mat') and not fname.endswith('.npz'):
+        candidates.extend([fname + '.mat', fname + '.npz'])
+
+    p = None
+    for cand in candidates:
+        resolved = _resolve_runtime_path(cand)
+        if resolved.exists():
+            p = resolved
+            fname = cand
+            break
+
+    if p is None:
+        p = _resolve_runtime_path(candidates[0])
+        if not p.exists():
+            raise FileNotFoundError(f"File not found: {filename}")
+
+    data = _load_safe_dict(p)
+    if vars:
+        wanted = {str(v) for v in vars}
+        data = {k: v for k, v in data.items() if k in wanted}
+
+    n_out = _unilab_nargout_ctx.get()
+    if n_out is not None and n_out >= 1:
+        return data
+
     frame = inspect.currentframe().f_back
     while frame and frame.f_globals.get('__name__') == __name__:
         frame = frame.f_back
-        
-    frame.f_globals.update(data)
-    print(f"Loaded {len(data)} variables from {filename}")
+    if frame is not None:
+        frame.f_globals.update(data)
+    print(f"Loaded {len(data)} variables from {fname}")
+    return data
 
 def exit(*args):
     print("Use the 'Quit' button in the application menu to close UniLab.")
@@ -1021,7 +1228,10 @@ def quit(*args):
     print("Use the 'Quit' button in the application menu to close UniLab.")
 
 def clc():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    if os.environ.get('UNILAB_WEB_MODE') == '1' or os.environ.get('UNILAB_API_SERVER') == '1' or os.environ.get('UNILAB_BRIDGE_MODE') == '1':
+        print('::CLEAR_TERMINAL::')
+    else:
+        os.system('cls' if os.name == 'nt' else 'clear')
 
 def pause(n=None):
     """Pauses execution for n seconds or until a key is pressed."""
@@ -1191,40 +1401,116 @@ def unilab_print_and_save_ans(expr, val):
             print(f"ans =\n   {formatted}\n")
     return val
 
+def _unilab_to_int(x):
+    if isinstance(x, np.ndarray):
+        return int(x.item() if x.size == 1 else x.flatten()[0])
+    return int(x)
+
 class UnilabEnd:
-    def __init__(self, offset=0):
-        self.offset = offset
+    """Deferred MATLAB `end` index expression supporting full arithmetic and rounding."""
+    def __init__(self, fn_or_offset=0):
+        if callable(fn_or_offset):
+            self._fn = fn_or_offset
+        else:
+            off = fn_or_offset
+            self._fn = lambda n, _o=off: n + _o
+
+    @staticmethod
+    def _eval_operand(other, n):
+        if isinstance(other, UnilabEnd):
+            return other._fn(n)
+        if isinstance(other, np.ndarray) and other.size == 1:
+            return other.item()
+        return other
+
+    def resolve(self, size: int) -> int:
+        return int(self._fn(size))
+
+    @property
+    def offset(self) -> int:
+        return int(self._fn(0))
+
     def __add__(self, other):
-        return UnilabEnd(self.offset + other)
-    def __sub__(self, other):
-        return UnilabEnd(self.offset - other)
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) + UnilabEnd._eval_operand(o, n))
+
     def __radd__(self, other):
-        return UnilabEnd(self.offset + other)
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) + s(n))
+
+    def __sub__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) - UnilabEnd._eval_operand(o, n))
+
+    def __rsub__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) - s(n))
+
+    def __mul__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) * UnilabEnd._eval_operand(o, n))
+
+    def __rmul__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) * s(n))
+
+    def __truediv__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) / UnilabEnd._eval_operand(o, n))
+
+    def __rtruediv__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) / s(n))
+
+    def __floordiv__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) // UnilabEnd._eval_operand(o, n))
+
+    def __rfloordiv__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) // s(n))
+
+    def __mod__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: s(n) % UnilabEnd._eval_operand(o, n))
+
+    def __rmod__(self, other):
+        return UnilabEnd(lambda n, s=self._fn, o=other: UnilabEnd._eval_operand(o, n) % s(n))
+
+    def __neg__(self):
+        return UnilabEnd(lambda n, s=self._fn: -s(n))
+
+    def __pos__(self):
+        return self
+
+    def __floor__(self):
+        return UnilabEnd(lambda n, s=self._fn: math.floor(s(n)))
+
+    def __ceil__(self):
+        return UnilabEnd(lambda n, s=self._fn: math.ceil(s(n)))
+
+    def __round__(self, ndigits=None):
+        return UnilabEnd(lambda n, s=self._fn, d=ndigits: builtins.round(s(n), d) if d is not None else builtins.round(s(n)))
+
     def __repr__(self):
-        return f"unilab_end{'' if self.offset == 0 else ('+' + str(self.offset) if self.offset > 0 else str(self.offset))}"
+        return "unilab_end"
+
 
 unilab_end = UnilabEnd()
 
 def unilab_range(start, stop, step=1):
-    if isinstance(start, UnilabEnd) or isinstance(stop, UnilabEnd):
+    if isinstance(start, UnilabEnd) or isinstance(stop, UnilabEnd) or isinstance(step, UnilabEnd):
         return slice(start, stop, step)
     # Standard numerical range
-    # Use a small epsilon to handle floating point precision and match MATLAB's inclusive-if-within-step behavior
-    eps = step * 1e-10
-    return np.atleast_2d(np.arange(start, stop + eps, step))
+    eps_val = step * 1e-10
+    return np.atleast_2d(np.arange(start, stop + eps_val, step))
 
 
 def _unilab_resolve_idx(idx, size):
     if isinstance(idx, UnilabEnd):
-        return size + idx.offset - 1
+        return idx.resolve(size) - 1
     if idx is None: return None
+    if isinstance(idx, np.ndarray) and idx.size == 1:
+        return int(idx.item()) - 1
     return int(idx) - 1
 
 def _unilab_resolve_slice(slc, size):
     if not isinstance(slc, slice): return slc
     start = _unilab_resolve_idx(slc.start, size) if slc.start is not None else 0
     stop = _unilab_resolve_idx(slc.stop, size) + 1 if slc.stop is not None else size
-    step = int(slc.step) if slc.step is not None else 1
+    if isinstance(slc.step, UnilabEnd):
+        step = slc.step.resolve(size)
+    else:
+        step = int(slc.step) if slc.step is not None else 1
     return slice(start, stop, step)
 
 class UnilabHandle:
@@ -1232,37 +1518,34 @@ class UnilabHandle:
         self.func = func
     def __call__(self, *args, **kwargs):
         if isinstance(self.func, str):
-            # Execute file
             return unilab_execute_file(self.func, *args, **kwargs)
         return self.func(*args, **kwargs)
     def __repr__(self):
         return f"<function handle: {self.func}>"
 
 def unilab_execute_file(path, *args, **kwargs):
-    from backend.core.unilab_core import UniLabCore
-    UniLabCore()
-    # We might need a proper session here, but for simple script execution
-    # we can try to read and execute. 
-    # For now, let's assume it's on the filesystem.
-    full_path = pathlib.Path(path)
-    if not full_path.exists():
-        # Try relative to project root?
-        full_path = pathlib.Path.cwd() / path
-    
-    if full_path.exists():
-        content = full_path.read_text()
+    p_str = str(path)
+    candidates = [p_str]
+    if not p_str.endswith('.m'):
+        candidates.append(p_str + '.m')
+
+    full_path = None
+    for cand in candidates:
+        resolved = _resolve_runtime_path(cand)
+        if resolved.exists():
+            full_path = resolved
+            break
+
+    if full_path is not None and full_path.exists():
+        content = full_path.read_text(encoding='utf-8')
         from backend.core.transpiler_core import UniLabTranspiler
         transpiler = UniLabTranspiler()
-        py_code, _ = transpiler.transpile(content)
-        
-        # We should probably run this in a clean namespace or the current one
-        # but function handle call expects parameters?
-        # Standard MATLAB file handles usually point to functions.
-        # If it's a script, arguments are usually ignored.
+        py_code, _, _ = transpiler.transpile(content)
         exec_globals = globals().copy()
-        # Pass arguments if any (MATLAB functions use nargin/varargin)
-        # This is a bit complex for a generic script, but let's try.
         exec(py_code, exec_globals)
+        stem = full_path.stem
+        if stem in exec_globals and callable(exec_globals[stem]):
+            return exec_globals[stem](*args, **kwargs)
         return exec_globals.get('ans', None)
     return None
 
@@ -1322,17 +1605,20 @@ def unilab_call_nargout(nargout, obj, *args, **kwargs):
             _unilab_nargout_ctx.reset(token)
             
         if nargout <= 1:
+            if isinstance(res, (tuple, list)) and len(res) > 0 and hasattr(obj, '__name__') and obj.__name__ in ('eig', 'svd', 'min', 'max', 'sort'):
+                return res[0]
             if isinstance(res, tuple) and len(res) > 0:
                 return res[0]
             return res
             
         # For nargout > 1
-        if isinstance(res, tuple):
+        if isinstance(res, (tuple, list)):
+            res_list = list(res)
             # Ensure we return exactly nargout values
-            if len(res) >= nargout:
-                return res[:nargout]
+            if len(res_list) >= nargout:
+                return tuple(res_list[:nargout])
             else:
-                return tuple(list(res) + [None] * (nargout - len(res)))
+                return tuple(res_list + [None] * (nargout - len(res_list)))
         else:
             # Function returned a scalar but nargout > 1 requested
             return tuple([res] + [None] * (nargout - 1))
@@ -1413,7 +1699,20 @@ def unilab_call(obj, *args, **kwargs):
         if isinstance(obj, np.ndarray):
             # Logical indexing
             if isinstance(idx, np.ndarray) and idx.dtype == bool:
-                res = obj[idx.flatten() if obj.ndim == 1 else idx]
+                if obj.ndim == 1 or (obj.ndim == 2 and (obj.shape[0] == 1 or obj.shape[1] == 1)):
+                    flat_obj = obj.flatten()
+                    flat_mask = idx.flatten()
+                    res = flat_obj[flat_mask]
+                    if res.size == 1: return res.item()
+                    if obj.ndim == 2 and obj.shape[1] == 1:
+                        return res.reshape(-1, 1)
+                    if obj.ndim == 2 and obj.shape[0] == 1:
+                        return res.reshape(1, -1)
+                    return res
+                try:
+                    res = obj[idx]
+                except (IndexError, ValueError):
+                    res = obj.flatten()[idx.flatten()]
                 if res.size == 1: return res.item()
                 if res.ndim == 1:
                     if obj.ndim == 2 and obj.shape[1] == 1:
@@ -1424,7 +1723,7 @@ def unilab_call(obj, *args, **kwargs):
             
             if isinstance(idx, UnilabEnd):
                 flat = obj.flatten()
-                return flat[len(flat) + idx.offset - 1]
+                return flat[idx.resolve(len(flat)) - 1]
                 
             flat = obj.flatten()
             # Scalar indexing
@@ -1449,20 +1748,22 @@ def unilab_call(obj, *args, **kwargs):
                 if isinstance(res, np.ndarray) and res.size == 1: return res.item()
                 if isinstance(res, np.ndarray) and res.ndim == 1: 
                     # Try to maintain orientation if original was column vector
-                    if (obj.ndim == 2 and obj.shape[1] == 1) or obj.ndim == 1:
+                    if (obj.ndim == 2 and obj.shape[1] == 1):
                         return res.reshape(-1, 1)
-                    return res.reshape(1, -1)
+                    if (obj.ndim == 2 and obj.shape[0] == 1):
+                        return res.reshape(1, -1)
+                    return res
                 return res
         if isinstance(obj, (list, tuple, str)):
             if isinstance(idx, UnilabEnd):
-                return obj[len(obj) + idx.offset - 1]
+                return obj[idx.resolve(len(obj)) - 1]
             try:
                 # Scalar indexing
                 if isinstance(idx, (int, np.integer, float, np.floating, np.ndarray)) and np.asarray(idx).size == 1:
                     return obj[int(np.asarray(idx).item()) - 1]
             except:
                 pass
-            if isinstance(idx, slice): return obj[idx]
+            if isinstance(idx, slice): return obj[_unilab_resolve_slice(idx, len(obj))]
             if isinstance(idx, (list, np.ndarray)):
                 indices = (np.asarray(idx).astype(int) - 1).tolist()
                 res = [obj[i] for i in indices]
@@ -1478,7 +1779,7 @@ def unilab_call(obj, *args, **kwargs):
     processed = []
     for i, arg in enumerate(args):
         if isinstance(arg, UnilabEnd):
-            processed.append(indexing_obj.shape[i] + arg.offset - 1)
+            processed.append(arg.resolve(indexing_obj.shape[i]) - 1)
         elif isinstance(arg, slice):
             processed.append(_unilab_resolve_slice(arg, indexing_obj.shape[i]))
         elif isinstance(arg, (int, np.integer, float, np.floating)):
@@ -1538,7 +1839,212 @@ def unilab_transpose(x):
         if x.ndim == 1:
             return x.reshape(-1, 1).conj()
         return x.T.conj()
+    if isinstance(x, (complex, np.complexfloating)):
+        return np.conj(x)
     return x
+
+
+def unilab_array_transpose(x):
+    """Non-conjugate transpose (MATLAB `.'` operator)."""
+    if isinstance(x, (list, tuple)):
+        x = np.asarray(x)
+    if isinstance(x, np.ndarray):
+        if x.ndim == 1:
+            return x.reshape(-1, 1)
+        return np.swapaxes(np.atleast_2d(x), -2, -1)
+    return x
+
+
+def unilab_switch_match(sw_val, case_expr) -> bool:
+    """MATLAB switch/case matcher supporting cell cases `case {'a', 'b'}` and safe array/string equality."""
+    if isinstance(case_expr, (list, tuple)):
+        return builtins.any(unilab_switch_match(sw_val, item) for item in case_expr)
+    if isinstance(case_expr, np.ndarray) and case_expr.dtype == object:
+        return builtins.any(unilab_switch_match(sw_val, item) for item in case_expr.flatten().tolist())
+    if isinstance(sw_val, str) or isinstance(case_expr, str):
+        return isinstance(sw_val, str) and isinstance(case_expr, str) and sw_val == case_expr
+    if isinstance(sw_val, np.ndarray) or isinstance(case_expr, np.ndarray):
+        try:
+            return bool(np.array_equal(sw_val, case_expr))
+        except Exception:
+            return False
+    try:
+        return bool(sw_val == case_expr)
+    except Exception:
+        return False
+
+
+def unilab_cell_get(cell_obj, *args):
+    """MATLAB curly-brace cell indexing `C{idx}` returning unpacked element(s)."""
+    if cell_obj is None:
+        raise NameError("Attempted to index into an undefined cell array")
+    if not args:
+        return cell_obj
+    if isinstance(cell_obj, (list, tuple)):
+        idx = args[0]
+        if isinstance(idx, slice):
+            return cell_obj[_unilab_resolve_slice(idx, len(cell_obj))]
+        r_idx = _unilab_resolve_idx(idx, len(cell_obj))
+        return cell_obj[r_idx]
+    if isinstance(cell_obj, np.ndarray):
+        if len(args) == 1:
+            idx = args[0]
+            flat = cell_obj.flatten(order='F') if cell_obj.ndim >= 2 else cell_obj.flatten()
+            if isinstance(idx, slice):
+                return flat[_unilab_resolve_slice(idx, flat.size)].tolist()
+            r_idx = _unilab_resolve_idx(idx, flat.size)
+            return flat[r_idx]
+        coords = []
+        for dim_i, arg in enumerate(args):
+            dim_sz = cell_obj.shape[dim_i] if dim_i < cell_obj.ndim else 1
+            if isinstance(arg, slice):
+                coords.append(_unilab_resolve_slice(arg, dim_sz))
+            else:
+                coords.append(_unilab_resolve_idx(arg, dim_sz))
+        return cell_obj[tuple(coords)]
+    return unilab_call(cell_obj, *args)
+
+
+def unilab_cell_set(cell_obj, val, *args):
+    """MATLAB curly-brace cell assignment `C{idx} = val`."""
+    if not args:
+        return val
+    if isinstance(cell_obj, list):
+        if len(args) == 1:
+            r_idx = _unilab_resolve_idx(args[0], len(cell_obj))
+            if r_idx >= len(cell_obj):
+                cell_obj.extend([None] * (r_idx - len(cell_obj) + 1))
+            cell_obj[r_idx] = val
+            return cell_obj
+    if cell_obj is None:
+        if len(args) == 1:
+            r_idx = _unilab_resolve_idx(args[0], 0)
+            arr = np.full((1, r_idx + 1), None, dtype=object)
+            arr[0, r_idx] = val
+            return arr
+        shape = tuple(_unilab_resolve_idx(a, 0) + 1 for a in args)
+        arr = np.full(shape, None, dtype=object)
+        arr[tuple(s - 1 for s in shape)] = val
+        return arr
+
+    if not isinstance(cell_obj, np.ndarray) or cell_obj.dtype != object:
+        arr = np.empty(np.shape(cell_obj) or (1, 1), dtype=object)
+        arr[...] = cell_obj
+        cell_obj = arr
+
+    if len(args) == 1:
+        idx = args[0]
+        if isinstance(idx, slice):
+            slc = _unilab_resolve_slice(idx, cell_obj.size)
+            cell_obj.flat[slc] = val
+            return cell_obj
+        r_idx = _unilab_resolve_idx(idx, cell_obj.size)
+        if r_idx >= cell_obj.size:
+            pad_len = r_idx - cell_obj.size + 1
+            if cell_obj.ndim == 2 and cell_obj.shape[0] <= 1:
+                new_arr = np.full((1, cell_obj.size + pad_len), None, dtype=object)
+                if cell_obj.size > 0:
+                    new_arr[0, :cell_obj.size] = cell_obj.flatten()
+                cell_obj = new_arr
+            else:
+                new_arr = np.full((cell_obj.size + pad_len, 1), None, dtype=object)
+                if cell_obj.size > 0:
+                    new_arr[:cell_obj.size, 0] = cell_obj.flatten()
+                cell_obj = new_arr
+        cell_obj.flat[r_idx] = val
+        return cell_obj
+
+    coords = []
+    req_shape = list(cell_obj.shape)
+    while len(req_shape) < len(args):
+        req_shape.append(1)
+    need_grow = False
+    for dim_i, arg in enumerate(args):
+        if isinstance(arg, slice):
+            coords.append(_unilab_resolve_slice(arg, req_shape[dim_i]))
+        else:
+            c = _unilab_resolve_idx(arg, req_shape[dim_i])
+            coords.append(c)
+            if c >= req_shape[dim_i]:
+                req_shape[dim_i] = c + 1
+                need_grow = True
+    if need_grow:
+        grown = np.full(tuple(req_shape), None, dtype=object)
+        old_slices = tuple(slice(0, s) for s in cell_obj.shape)
+        grown[old_slices] = cell_obj
+        cell_obj = grown
+    cell_obj[tuple(coords)] = val
+    return cell_obj
+
+
+def unilab_set_nested(root_obj, steps, val):
+    """Recursive setter for arbitrary nested struct/index/cell LHS chains (`s.field(1)=5`, `s.a.b=1`, `folds(i).train=idx`)."""
+    if not steps:
+        return val
+    kind, payload = steps[0]
+    rest = steps[1:]
+
+    if not rest:
+        if kind == 'attr':
+            return unilab_set_attr(root_obj, payload, val)
+        if kind == 'cell':
+            return unilab_cell_set(root_obj, val, *payload)
+        if kind == 'call':
+            return unilab_set(root_obj, val, *payload)
+        return val
+
+    next_kind = rest[0][0]
+    if kind == 'attr':
+        if root_obj is None:
+            root_obj = {}
+        cur_child = unilab_get(root_obj, payload)
+        new_child = unilab_set_nested(cur_child, rest, val)
+        return unilab_set_attr(root_obj, payload, new_child)
+
+    if kind == 'cell':
+        cur_child = None
+        if root_obj is not None:
+            try:
+                cur_child = unilab_cell_get(root_obj, *payload)
+            except Exception:
+                cur_child = None
+        new_child = unilab_set_nested(cur_child, rest, val)
+        return unilab_cell_set(root_obj, new_child, *payload)
+
+    if kind == 'call':
+        # e.g. folds(i).train = idx (struct array) or arr(i)...
+        if next_kind == 'attr':
+            if root_obj is None or (isinstance(root_obj, np.ndarray) and root_obj.size == 0):
+                root_obj = np.empty((1, 0), dtype=object)
+            elif isinstance(root_obj, dict) or isinstance(root_obj, UnilabStruct):
+                arr = np.empty((1, 1), dtype=object)
+                arr[0, 0] = root_obj
+                root_obj = arr
+            if isinstance(root_obj, np.ndarray) and root_obj.dtype == object and len(payload) == 1:
+                r_idx = _unilab_resolve_idx(payload[0], root_obj.size)
+                if r_idx >= root_obj.size:
+                    grown = np.empty((1, r_idx + 1), dtype=object)
+                    for k in range(r_idx + 1):
+                        if k < root_obj.size and root_obj.flat[k] is not None:
+                            grown[0, k] = root_obj.flat[k]
+                        else:
+                            grown[0, k] = {}
+                    root_obj = grown
+                cur_elem = root_obj.flat[r_idx]
+                if cur_elem is None:
+                    cur_elem = {}
+                root_obj.flat[r_idx] = unilab_set_nested(cur_elem, rest, val)
+                return root_obj
+        cur_child = None
+        if root_obj is not None:
+            try:
+                cur_child = unilab_call(root_obj, *payload)
+            except Exception:
+                cur_child = None
+        new_child = unilab_set_nested(cur_child, rest, val)
+        return unilab_set(root_obj, new_child, *payload)
+
+    return root_obj
 
 def unilab_mul(a, b):
     # Ensure we are not dealing with Python lists/tuples in a way that causes "multiply sequence"
@@ -1554,11 +2060,16 @@ def unilab_mul(a, b):
     else:
         try:
             # Matrix multiplication
-            res = np.matmul(a, b)
+            if a.ndim == 2 and a.shape[1] == 1 and b.ndim == 1 and a.shape[0] == b.shape[0]:
+                res = np.matmul(a, b.reshape(1, -1))
+            else:
+                res = np.matmul(a, b)
         except (ValueError, TypeError):
             # Fallback for 1x1 matrices which MATLAB often treats as scalars for *
             if a.size == 1 or b.size == 1:
                 res = a * b
+            elif a.ndim == 2 and a.shape[1] == 1 and b.ndim == 1 and a.shape[0] == b.shape[0]:
+                res = np.matmul(a, b.reshape(1, -1))
             else:
                 # Re-raise to avoid silent broadcasting bugs
                 raise
@@ -1859,9 +2370,9 @@ def unilab_mean(x, axis=None):
         for i, d in enumerate(x_arr.shape):
             if d > 1: axis = i; break
             
-    res = np.mean(x_arr, axis=axis)
-    # Return as Python scalar if it's a single value
-    if hasattr(res, 'item') and res.size == 1:
+    keep = (x_arr.ndim >= 2 and axis is not None)
+    res = np.mean(x_arr, axis=axis, keepdims=keep)
+    if hasattr(res, 'item') and res.size == 1 and not keep:
         return res.item()
     return res
 
@@ -1912,6 +2423,14 @@ def unilab_set(obj, val, *args):
         except:
             return obj
     
+    if obj is None:
+        if len(args) == 1:
+            r_idx = _unilab_resolve_idx(args[0], 0)
+            obj = np.zeros((1, max(1, r_idx + 1)))
+        elif len(args) > 1:
+            shape = tuple(max(1, _unilab_resolve_idx(a, 0) + 1) for a in args)
+            obj = np.zeros(shape)
+
     if len(args) == 1:
         idx = args[0]
         # Flatten boolean masks for consistent indexing
@@ -1923,11 +2442,11 @@ def unilab_set(obj, val, *args):
             idx_adj = idx.flatten()
         else:
             if isinstance(idx, UnilabEnd):
-                idx_adj = len(obj.flatten()) + idx.offset - 1
+                idx_adj = idx.resolve(len(obj.flatten()) if isinstance(obj, np.ndarray) else len(obj)) - 1
             elif isinstance(idx, (list, np.ndarray)):
                 idx_adj = np.asarray(idx).astype(int) - 1
             elif isinstance(idx, slice):
-                idx_adj = _unilab_resolve_slice(idx, obj.size)
+                idx_adj = _unilab_resolve_slice(idx, obj.size if isinstance(obj, np.ndarray) else len(obj))
             else:
                 idx_adj = int(idx)-1 if isinstance(idx, (int, np.integer, float, np.floating)) else idx
             
@@ -2012,10 +2531,30 @@ def unilab_set(obj, val, *args):
                 return tmp_obj.item() if tmp_obj.size == 1 else tmp_obj
             raise
     elif len(args) > 1:
+        if isinstance(obj, np.ndarray):
+            req_shape = list(obj.shape)
+            while len(req_shape) < len(args):
+                req_shape.append(1)
+            need_grow = False
+            for dim_i, arg in enumerate(args):
+                if isinstance(arg, (int, np.integer, float, np.floating)) or (isinstance(arg, np.ndarray) and arg.size == 1 and arg.dtype != bool):
+                    c = int(np.asarray(arg).item()) - 1
+                    if c >= req_shape[dim_i]:
+                        req_shape[dim_i] = c + 1
+                        need_grow = True
+            if need_grow:
+                if len(obj.shape) < len(req_shape):
+                    obj = obj.reshape(tuple(list(obj.shape) + [1] * (len(req_shape) - len(obj.shape))))
+                grown = np.zeros(tuple(req_shape), dtype=obj.dtype)
+                if obj.size > 0:
+                    old_slices = tuple(slice(0, s) for s in obj.shape)
+                    grown[old_slices] = obj
+                obj = grown
+
         processed = []
         for i, arg in enumerate(args):
             if isinstance(arg, UnilabEnd):
-                processed.append(obj.shape[i] + arg.offset - 1)
+                processed.append(arg.resolve(obj.shape[i]) - 1)
             elif isinstance(arg, slice):
                 processed.append(_unilab_resolve_slice(arg, obj.shape[i]))
             elif isinstance(arg, (int, np.integer, float, np.floating, np.ndarray)) and np.asarray(arg).size == 1:
@@ -2214,9 +2753,15 @@ def cell(*args):
     return np.full(shape, None, dtype=object)
 
 def factorial(n):
+    if _is_symbolic(n):
+        import sympy
+        return sympy.factorial(n)
     from math import factorial as f
-    if isinstance(n, (np.ndarray, list)): return np.array([f(int(i)) for i in n])
-    return f(int(n))
+    if isinstance(n, (np.ndarray, list, tuple)):
+        arr = np.asarray(n)
+        vec = np.vectorize(lambda k: float(f(int(k))))
+        return vec(arr)
+    return float(f(int(n)))
 
 def real(x): return np.real(x)
 def imag(x): return np.imag(x)
@@ -2485,9 +3030,10 @@ def fprintf(*args):
     try:
         # Determine output target
         target = sys.stdout
+        fid_map = _get_fid_state()["map"]
         if handle == 2: target = sys.stderr
-        elif handle > 2 and handle in _unilab_fid_map:
-            target = _unilab_fid_map[handle]
+        elif handle > 2 and handle in fid_map:
+            target = fid_map[handle]
 
         if not data_args:
             output = str(fmt)
@@ -2544,8 +3090,7 @@ def fprintf(*args):
 
 def clc():
     """Clear Command Window."""
-    import os
-    if os.environ.get('UNILAB_WEB_MODE') == '1':
+    if os.environ.get('UNILAB_WEB_MODE') == '1' or os.environ.get('UNILAB_API_SERVER') == '1' or os.environ.get('UNILAB_BRIDGE_MODE') == '1':
         print('::CLEAR_TERMINAL::')
     else:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -2571,7 +3116,9 @@ def size(x, dim=None):
     if len(s) == 0: s = (1, len(x)) if isinstance(x, (str, bytes, list)) else (1, 1)
     elif len(s) == 1: s = (1, s[0])
     
-    if dim is not None: return s[dim-1] if dim <= len(s) else 1
+    if dim is not None:
+        d = _unilab_to_int(dim)
+        return s[d-1] if d <= len(s) else 1
     
     n = unilab_get_nargout()
     if n > 1:
@@ -2585,27 +3132,82 @@ def numel(x):
 
 def reshape(x, *args):
     if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        return np.reshape(x, args[0])
-    return np.reshape(x, args)
-def sort(x, axis=None):
+        raw_dims = list(np.asarray(args[0]).flatten())
+    else:
+        raw_dims = list(args)
+    shape = []
+    for d in raw_dims:
+        if d is None or (isinstance(d, (list, tuple, np.ndarray)) and np.asarray(d).size == 0):
+            shape.append(-1)
+        else:
+            shape.append(_unilab_to_int(d))
+    return np.reshape(x, shape, order='F') if np.asarray(x).ndim >= 2 else np.reshape(x, shape)
+
+def sort(x, axis=None, direction='ascend'):
+    x_arr = np.asarray(x)
+    if isinstance(axis, str) and axis.lower() in ('ascend', 'descend'):
+        direction = axis
+        axis = None
     if axis is None:
-        if isinstance(x, np.ndarray) and x.ndim == 2: axis = 1 if x.shape[0] == 1 else 0
-        else: axis = 0
-    n = unilab_get_nargout()
-    if n <= 1:
-        return np.sort(x, axis=axis)
-    return np.sort(x, axis=axis), np.argsort(x, axis=axis) + 1
+        if x_arr.ndim == 2:
+            axis = 1 if x_arr.shape[0] == 1 else 0
+        else:
+            axis = 0
+    else:
+        axis = _unilab_to_int(axis) - 1
+
+    desc = str(direction).lower().startswith('desc')
+    if x_arr.ndim == 0:
+        idx = np.array([[1]])
+        return (x_arr, idx) if unilab_get_nargout() > 1 else x_arr
+
+    order_idx = np.argsort(-x_arr if desc else x_arr, axis=axis, kind='mergesort')
+    sorted_arr = np.take_along_axis(x_arr, order_idx, axis=axis)
+    if unilab_get_nargout() <= 1:
+        return sorted_arr
+    return sorted_arr, order_idx + 1
 
 def unique(x): return np.unique(x)
-def inv(x): return np.linalg.inv(np.atleast_2d(x))
-def det(x): return np.linalg.det(np.atleast_2d(x))
 
-def svd(x):
-    U, S, Vh = np.linalg.svd(np.atleast_2d(x))
-    return U, np.diag(S), Vh.T
+def inv(x):
+    arr = np.asarray(x)
+    if arr.ndim == 0 or (arr.ndim <= 2 and arr.size == 1 and np.isscalar(x)):
+        val = arr.item()
+        if val == 0:
+            return np.inf
+        return 1.0 / val
+    res = np.linalg.inv(np.atleast_2d(arr))
+    return res
 
-def linspace(start, stop, n=100): return np.atleast_2d(np.linspace(start, stop, int(n)))
-def logspace(start, stop, n=50): return np.atleast_2d(np.logspace(start, stop, int(n)))
+def det(x):
+    arr = np.asarray(x)
+    if arr.ndim == 0 or arr.size == 1:
+        return float(arr.item()) if not np.iscomplexobj(arr) else arr.item()
+    return np.linalg.det(np.atleast_2d(arr))
+
+def svd(x, *args):
+    x_mat = np.atleast_2d(np.asarray(x))
+    econ = len(args) > 0 and str(args[0]) in ('0', 'econ')
+    n_out = unilab_get_nargout()
+    if n_out <= 1:
+        S = np.linalg.svd(x_mat, compute_uv=False)
+        return S.reshape(-1, 1)
+    U, S, Vh = np.linalg.svd(x_mat, full_matrices=(not econ))
+    if econ:
+        S_mat = np.diag(S)
+    else:
+        S_mat = np.zeros((x_mat.shape[0], x_mat.shape[1]), dtype=S.dtype)
+        np.fill_diagonal(S_mat, S)
+    return U, S_mat, Vh.conj().T
+
+def linspace(start, stop, n=100):
+    start = float(start) if isinstance(start, UnilabCallableConstant) else start
+    stop = float(stop) if isinstance(stop, UnilabCallableConstant) else stop
+    return np.atleast_2d(np.linspace(start, stop, int(n)))
+def logspace(start, stop, n=50):
+    start = float(start) if isinstance(start, UnilabCallableConstant) else start
+    stop = float(stop) if isinstance(stop, UnilabCallableConstant) else stop
+    return np.atleast_2d(np.logspace(start, stop, int(n)))
 def meshgrid(*args):
     if not args: return []
     processed_args = [_unilab_vec(arg) for arg in args]
@@ -2613,7 +3215,7 @@ def meshgrid(*args):
         x = processed_args[0]
         return np.meshgrid(x, x)
     return np.meshgrid(*processed_args)
-def randperm(n): return np.random.permutation(_unilab_to_int(n)) + 1
+def randperm(n): return (np.random.permutation(_unilab_to_int(n)) + 1).reshape(1, -1)
 def _is_symbolic(x):
     return hasattr(x, '__module__') and 'sympy' in x.__module__
 
@@ -2625,100 +3227,125 @@ def unilab_abs(*args):
         return sympy.Abs(x)
     return np.abs(x)
 
-def round(x): return np.round(x)
+def round(x, n=0):
+    if isinstance(x, UnilabEnd):
+        return x.__round__(int(n) if n else None)
+    if _is_symbolic(x):
+        return x
+    return np.round(x, decimals=int(n))
+
 def floor(x):
+    if isinstance(x, UnilabEnd):
+        return x.__floor__()
     if _is_symbolic(x):
         import sympy
         return sympy.floor(x)
     return np.floor(x)
 
 def ceil(x):
+    if isinstance(x, UnilabEnd):
+        return x.__ceil__()
     if _is_symbolic(x):
         import sympy
         return sympy.ceil(x)
     return np.ceil(x)
 
-def fix(x): return np.trunc(x)
+def fix(x):
+    if isinstance(x, UnilabEnd):
+        return UnilabEnd(lambda n, s=x._fn: math.trunc(s(n)))
+    return np.trunc(x)
 def rem(x, y): return np.remainder(x, y)
 def sign(x): return np.sign(x)
+
+def _to_numeric(x):
+    if _is_symbolic(x):
+        return x
+    if isinstance(x, UnilabCallableConstant):
+        return x.val
+    if isinstance(x, np.ndarray) and x.dtype == object:
+        try:
+            return x.astype(np.complex128 if np.iscomplexobj(x) else np.float64)
+        except Exception:
+            return x
+    return x
 
 def sin(x):
     if _is_symbolic(x):
         import sympy
         return sympy.sin(x)
-    return np.sin(x)
+    return np.sin(_to_numeric(x))
 
 def cos(x):
     if _is_symbolic(x):
         import sympy
         return sympy.cos(x)
-    return np.cos(x)
+    return np.cos(_to_numeric(x))
 
 def tan(x):
     if _is_symbolic(x):
         import sympy
         return sympy.tan(x)
-    return np.tan(x)
+    return np.tan(_to_numeric(x))
 
 def asin(x):
     if _is_symbolic(x):
         import sympy
         return sympy.asin(x)
-    return np.arcsin(x)
+    return np.arcsin(_to_numeric(x))
 
 def acos(x):
     if _is_symbolic(x):
         import sympy
         return sympy.acos(x)
-    return np.arccos(x)
+    return np.arccos(_to_numeric(x))
 
 def atan(x):
     if _is_symbolic(x):
         import sympy
         return sympy.atan(x)
-    return np.arctan(x)
+    return np.arctan(_to_numeric(x))
 
 def atan2(y, x):
     if _is_symbolic(y) or _is_symbolic(x):
         import sympy
         return sympy.atan2(y, x)
-    return np.arctan2(y, x)
+    return np.arctan2(_to_numeric(y), _to_numeric(x))
 
 def sinh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.sinh(x)
-    return np.sinh(x)
+    return np.sinh(_to_numeric(x))
 
 def cosh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.cosh(x)
-    return np.cosh(x)
+    return np.cosh(_to_numeric(x))
 
 def tanh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.tanh(x)
-    return np.tanh(x)
+    return np.tanh(_to_numeric(x))
 
 def asinh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.asinh(x)
-    return np.asinh(x)
+    return np.arcsinh(_to_numeric(x))
 
 def acosh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.acosh(x)
-    return np.acosh(x)
+    return np.arccosh(_to_numeric(x))
 
 def atanh(x):
     if _is_symbolic(x):
         import sympy
         return sympy.atanh(x)
-    return np.atanh(x)
+    return np.arctanh(_to_numeric(x))
 
 def sec(x): return 1.0 / np.cos(x)
 def csc(x): return 1.0 / np.sin(x)
@@ -2749,19 +3376,19 @@ def exp(x):
     if _is_symbolic(x):
         import sympy
         return sympy.exp(x)
-    return np.exp(x)
+    return np.exp(_to_numeric(x))
 
 def log(x):
     if _is_symbolic(x):
         import sympy
         return sympy.log(x)
-    return np.log(x)
+    return np.log(_to_numeric(x))
 
 def sqrt(x):
     if _is_symbolic(x):
         import sympy
         return sympy.sqrt(x)
-    return np.sqrt(x)
+    return np.sqrt(_to_numeric(x))
 
 def eye(n, m=None):
     if isinstance(n, (list, tuple, np.ndarray)):
@@ -2771,22 +3398,67 @@ def eye(n, m=None):
         n = sz[0]
     return np.eye(int(n), int(m) if m is not None else int(n))
 def zeros(*args): 
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        shape = tuple(int(i) for i in np.asarray(args[0]).flatten())
-        return np.zeros(shape)
-    if not args: return np.zeros((1, 1))
-    return np.zeros(tuple(int(i) for i in args))
+    if not args:
+        return np.zeros((1, 1))
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)):
+            flat = [_unilab_to_int(i) for i in np.asarray(args[0]).flatten()]
+            shape = (flat[0], flat[0]) if len(flat) == 1 else tuple(flat)
+            return np.zeros(shape)
+        n = _unilab_to_int(args[0])
+        return np.zeros((n, n))
+    return np.zeros(tuple(_unilab_to_int(i) for i in args))
 
 def ones(*args): 
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        shape = tuple(int(i) for i in np.asarray(args[0]).flatten())
-        return np.ones(shape)
-    if not args: return np.ones((1, 1))
-    return np.ones(tuple(int(i) for i in args))
-def median(x, axis=None): return np.median(x, axis=axis)
-def quantile(x, q, axis=None): return np.percentile(x, q * 100, axis=axis)
-def var(x, axis=None): return np.var(x, ddof=1, axis=axis)
-def std(x, axis=None): return np.std(x, ddof=1, axis=axis)
+    if not args:
+        return np.ones((1, 1))
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)):
+            flat = [_unilab_to_int(i) for i in np.asarray(args[0]).flatten()]
+            shape = (flat[0], flat[0]) if len(flat) == 1 else tuple(flat)
+            return np.ones(shape)
+        n = _unilab_to_int(args[0])
+        return np.ones((n, n))
+    return np.ones(tuple(_unilab_to_int(i) for i in args))
+
+def median(x, axis=None):
+    return unilab_median(x, axis=axis)
+
+def quantile(x, q, axis=None):
+    return unilab_quantile(x, q, axis=axis)
+
+def var(x, flag=0, axis=None):
+    x_arr = np.asarray(x, dtype=float)
+    ddof = 0 if (flag is not None and isinstance(flag, (int, float, np.number)) and int(flag) == 1) else (1 if x_arr.size > 1 else 0)
+    if axis is not None:
+        axis = _unilab_to_int(axis) - 1
+    elif x_arr.ndim > 1:
+        axis = 0
+        for idx, d in enumerate(x_arr.shape):
+            if d > 1:
+                axis = idx
+                break
+                
+    if axis is not None and x_arr.ndim > axis and x_arr.shape[axis] <= 1:
+        ddof = 0
+    res = np.var(x_arr, ddof=ddof, axis=axis)
+    return res.item() if hasattr(res, 'item') and res.size == 1 else res
+
+def std(x, flag=0, axis=None):
+    x_arr = np.asarray(x, dtype=float)
+    ddof = 0 if (flag is not None and isinstance(flag, (int, float, np.number)) and int(flag) == 1) else (1 if x_arr.size > 1 else 0)
+    if axis is not None:
+        axis = _unilab_to_int(axis) - 1
+    elif x_arr.ndim > 1:
+        axis = 0
+        for idx, d in enumerate(x_arr.shape):
+            if d > 1:
+                axis = idx
+                break
+    if axis is not None and x_arr.ndim > axis and x_arr.shape[axis] <= 1:
+        ddof = 0
+    res = np.std(x_arr, ddof=ddof, axis=axis)
+    return res.item() if hasattr(res, 'item') and res.size == 1 else res
 
 class UnilabCVPartition:
     def __init__(self, n, method='HoldOut', p=0.3):
@@ -2826,135 +3498,151 @@ def rng(seed=None, generator=None):
 _tic_stack = []
 
 def tic():
-    import time
-    _tic_stack.append(time.time())
+    _get_tic_stack().append(time.time())
 
 def toc():
-    import time
-    if not _tic_stack:
+    stack = _get_tic_stack()
+    if not stack:
         print("Error: toc called without a preceding tic.")
         return 0.0
-    elapsed = time.time() - _tic_stack.pop()
+    elapsed = time.time() - stack.pop()
     print(f"Elapsed time is {elapsed:.6f} seconds.")
     return elapsed
 
 def rand(*args):
     if len(args) == 1:
         if isinstance(args[0], (list, tuple, np.ndarray)): 
-            args = [int(a) for a in np.asarray(args[0]).flatten()]
+            args = [_unilab_to_int(a) for a in np.asarray(args[0]).flatten()]
         else:
-            args = [int(args[0]), int(args[0])]
+            args = [_unilab_to_int(args[0]), _unilab_to_int(args[0])]
     else:
-        args = [int(a) for a in args]
+        args = [_unilab_to_int(a) for a in args]
     return np.random.rand(*args) if args else np.random.rand()
 
 def randn(*args):
     if len(args) == 1:
         if isinstance(args[0], (list, tuple, np.ndarray)):
-            args = [int(a) for a in np.asarray(args[0]).flatten()]
+            args = [_unilab_to_int(a) for a in np.asarray(args[0]).flatten()]
         else:
-            args = [int(args[0]), int(args[0])]
+            args = [_unilab_to_int(args[0]), _unilab_to_int(args[0])]
     else:
-        args = [int(a) for a in args]
+        args = [_unilab_to_int(a) for a in args]
     return np.random.randn(*args) if args else np.random.randn()
 
 def randi(imax, *args):
-    if not args:
-        return np.random.randint(1, int(imax) + 1)
-    if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-        size = tuple(int(i) for i in args[0])
+    if isinstance(imax, (list, tuple, np.ndarray)):
+        bounds = np.asarray(imax).flatten()
+        if bounds.size >= 2:
+            low, high = _unilab_to_int(bounds[0]), _unilab_to_int(bounds[1])
+        else:
+            low, high = 1, _unilab_to_int(bounds[0])
     else:
-        size = tuple(int(i) for i in args)
-    return np.random.randint(1, int(imax) + 1, size=size)
+        low, high = 1, _unilab_to_int(imax)
+
+    if not args:
+        return int(np.random.randint(low, high + 1))
+    if len(args) == 1:
+        if isinstance(args[0], (list, tuple, np.ndarray)):
+            flat = [_unilab_to_int(i) for i in np.asarray(args[0]).flatten()]
+            size = (flat[0], flat[0]) if len(flat) == 1 else tuple(flat)
+        else:
+            n = _unilab_to_int(args[0])
+            size = (n, n)
+    else:
+        size = tuple(_unilab_to_int(i) for i in args)
+    return np.random.randint(low, high + 1, size=size)
 
 def unilab_max(x, *args, **kwargs):
     if len(args) == 1 and not kwargs:
-        # max(A, B) case
         return np.maximum(x, args[0])
-        
+
     x_arr = np.asarray(x)
     axis = kwargs.get('axis', None)
-    if axis is None and len(args) == 0:
-        if x_arr.ndim <= 1: axis = 0
+    if len(args) >= 2 and isempty(args[0]):
+        axis = _unilab_to_int(args[1]) - 1
+    elif axis is not None:
+        axis = _unilab_to_int(axis) - 1
+    elif len(args) == 0:
+        if x_arr.ndim <= 1:
+            axis = 0 if x_arr.ndim == 1 else None
         else:
             axis = 0
-            for i, d in enumerate(x_arr.shape):
-                if d > 1: axis = i; break
-    
+            for idx_d, d in enumerate(x_arr.shape):
+                if d > 1:
+                    axis = idx_d
+                    break
+
     n_out = unilab_get_nargout()
     if n_out <= 1:
-        res = np.max(x_arr, *args, **kwargs)
+        res = np.max(x_arr, axis=axis)
         return res.item() if hasattr(res, 'item') and res.size == 1 else res
-    
-    # [val, idx]
-    val = np.max(x_arr, *args, **kwargs)
-    idx = np.argmax(x_arr, *args, **kwargs) + 1 # 1-based
+
+    val = np.max(x_arr, axis=axis)
+    idx = np.argmax(x_arr, axis=axis) + 1
     v_ret = val.item() if hasattr(val, 'item') and val.size == 1 else val
     return v_ret, idx
 
 def unilab_min(x, *args, **kwargs):
     if len(args) == 1 and not kwargs:
-        # min(A, B) case
         return np.minimum(x, args[0])
-        
+
     x_arr = np.asarray(x)
     axis = kwargs.get('axis', None)
-    if axis is None and len(args) == 0:
-        if x_arr.ndim <= 1: axis = 0
+    if len(args) >= 2 and isempty(args[0]):
+        axis = _unilab_to_int(args[1]) - 1
+    elif axis is not None:
+        axis = _unilab_to_int(axis) - 1
+    elif len(args) == 0:
+        if x_arr.ndim <= 1:
+            axis = 0 if x_arr.ndim == 1 else None
         else:
             axis = 0
-            for i, d in enumerate(x_arr.shape):
-                if d > 1: axis = i; break
-                
+            for idx_d, d in enumerate(x_arr.shape):
+                if d > 1:
+                    axis = idx_d
+                    break
+
     n_out = unilab_get_nargout()
     if n_out <= 1:
-        res = np.min(x_arr, *args, **kwargs)
+        res = np.min(x_arr, axis=axis)
         return res.item() if hasattr(res, 'item') and res.size == 1 else res
-    
-    # [val, idx]
-    val = np.min(x_arr, *args, **kwargs)
-    idx = np.argmin(x_arr, *args, **kwargs) + 1 # 1-based
+
+    val = np.min(x_arr, axis=axis)
+    idx = np.argmin(x_arr, axis=axis) + 1
     v_ret = val.item() if hasattr(val, 'item') and val.size == 1 else val
     return v_ret, idx
 
 def unilab_sum(x, axis=None):
     x_arr = np.asarray(x)
     if axis is not None:
-        if isinstance(axis, (int, float)):
-            axis = int(axis) - 1
+        axis = _unilab_to_int(axis) - 1
     elif x_arr.ndim > 1:
-        # MATLAB default sum is along first non-singleton dimension
         axis = 0
-        for i, d in enumerate(x_arr.shape):
-            if d > 1: axis = i; break
-            
+        for idx_d, d in enumerate(x_arr.shape):
+            if d > 1:
+                axis = idx_d
+                break
+
     res = np.sum(x_arr, axis=axis)
     return res.item() if hasattr(res, 'item') and res.size == 1 else res
 
 def ode45(f, tspan, y0, options=None):
     from scipy.integrate import solve_ivp
-    # UniLab/MATLAB f(t, y) vs solve_ivp f(t, y) - matches!
-    # tspan [tstart, tend]
-    tspan = np.asarray(tspan).flatten()
-    y0_arr = np.asarray(y0)
+    tspan_arr = np.asarray(tspan, dtype=float).flatten()
+    y0_arr = np.asarray(y0, dtype=float)
     y0_shape = y0_arr.shape
     y0_flat = y0_arr.flatten()
     
-    # Wrap f to ensure it receives and returns 1D arrays for solve_ivp
     def wrapper(t, y):
-        # We need to find the engine's globals to get unilab_call, or just call it directly
-        # Since we are in runtime.py, we can use unilab_call
-        # Reshape y back to original shape for the dynamics function
-        res = unilab_call(f, t, y.reshape(y0_shape))
-        return np.asarray(res).flatten()
+        res = unilab_call(f, t, y.reshape(y0_shape) if y0_shape else y[0])
+        return np.asarray(res, dtype=float).flatten()
 
-    sol = solve_ivp(wrapper, (tspan[0], tspan[-1]), y0_flat, t_eval=np.linspace(tspan[0], tspan[-1], 100))
+    t_eval = tspan_arr if tspan_arr.size > 2 else np.linspace(tspan_arr[0], tspan_arr[-1], 100)
+    sol = solve_ivp(wrapper, (float(tspan_arr[0]), float(tspan_arr[-1])), y0_flat, t_eval=t_eval)
     
     n_out = unilab_get_nargout()
-    if n_out <= 1:
-        # Return solution object or similar? MATLAB returns [t, y]
-        return sol.t, sol.y.T
-    
+    if n_out == 1:
+        return {'x': sol.t, 'y': sol.y}
     return sol.t.reshape(-1, 1), sol.y.T
 
 ode45_custom = ode45
@@ -3080,7 +3768,7 @@ def _unilab_update_fig_version(fig_num=None):
 
 def _unilab_reset_runtime():
     global _unilab_hold, _unilab_plot_counter, _unilab_fig_versions
-    _unilab_hold = False
+    _set_hold_state(False)
     _unilab_plot_counter = 0
     _unilab_fig_versions = {}
     try:
@@ -3095,9 +3783,12 @@ def _unilab_refresh_graph():
         import json
         import base64
         fig = plt.gcf()
+        if not fig.axes:
+            return None
         ax = plt.gca()
-        if ax is None: return
-        meta = {
+        if ax is None:
+            return None
+        meta = sanitize_for_json({
             "title": ax.get_title(),
             "xlabel": ax.get_xlabel(),
             "ylabel": ax.get_ylabel(),
@@ -3105,24 +3796,26 @@ def _unilab_refresh_graph():
             "xmax": float(ax.get_xlim()[1]),
             "ymin": float(ax.get_ylim()[0]),
             "ymax": float(ax.get_ylim()[1]),
-            "is_3d": ax.name == '3d'
-        }
+            "is_3d": ax.name == '3d',
+        })
         _unilab_plot_counter += 1
         plot_id = _unilab_plot_counter
         ws_path = unilab_workspace_ctx.get()
 
-        # Cross-platform path handling
         if ws_path:
             ws_dir = pathlib.Path(ws_path)
-            ws_dir.mkdir(parents=True, exist_ok=True)
+            plots_dir = ws_dir / "plots"
+            plots_dir.mkdir(parents=True, exist_ok=True)
             prefix = ws_dir.name.split('_')[-1][:6] + "_"
         else:
-            ws_dir = pathlib.Path(".")
+            ws_dir = pathlib.Path(unilab_cwd_ctx.get() or ".")
+            plots_dir = ws_dir
+            plots_dir.mkdir(parents=True, exist_ok=True)
             prefix = ""
 
         plot_type_marker = "3d_" if ax.name == '3d' else ""
         filename = f"graph_{plot_type_marker}{prefix}{plot_id}_{int(time.time())}.png"
-        save_path = ws_dir / filename
+        save_path = plots_dir / filename
 
         # Styling for consistent look
         fig.set_facecolor('#121212')
@@ -3132,6 +3825,19 @@ def _unilab_refresh_graph():
 
         plt.draw()
         fig.savefig(str(save_path), format='png', dpi=120, facecolor='#121212', transparent=False)
+
+        # Write 2D/general metadata JSON
+        meta_path = save_path.with_suffix('.json')
+        with open(str(meta_path), 'w', encoding='utf-8') as mf:
+            json.dump(meta, mf, allow_nan=False)
+
+        # Write 3D sidecar file (.3d.json) if 3D data exists for this figure
+        store_3d = _get_3d_store()
+        if ax.name == '3d' and fig.number in store_3d:
+            sidecar_3d_path = pathlib.Path(str(save_path)[:-4] + '.3d.json')
+            clean_3d = sanitize_for_json(store_3d[fig.number])
+            with open(str(sidecar_3d_path), 'w', encoding='utf-8') as f3d:
+                json.dump(clean_3d, f3d, allow_nan=False)
 
         # Bridge emission (Base64)
         with open(str(save_path), 'rb') as img_file:
@@ -3146,18 +3852,17 @@ def _unilab_refresh_graph():
                 'ver': _unilab_fig_versions.get(fig.number, 1),
                 'script': unilab_script_ctx.get(),
                 'data': data_uri,
-                'meta': meta
-            }))
-
-        # Clean up local file in bridge mode to avoid clutter
-        # But only if NOT in web mode, as web mode needs the file to encode it into the result
-        if os.environ.get('UNILAB_BRIDGE_MODE') == '1' and os.environ.get('UNILAB_WEB_MODE') != '1':
-            try: save_path.unlink()
-            except: pass
+                'meta': meta,
+            }, allow_nan=False))
 
         print(f'::GRAPHICAL_PLOT::{filename}::FIG::{fig.number}')
+        return str(save_path)
     except Exception as e:
         print(f"Error saving graph: {e}")
+        return None
+
+
+_unilab_save_plot = _unilab_refresh_graph
 _unilab_hold = False
 
 def clf():
@@ -3208,7 +3913,7 @@ def plot(*args, **kwargs):
             continue
         i += 1
     args_list = [_unilab_vec(a) for a in args_list]
-    if target_ax == plt and not _unilab_hold:
+    if target_ax == plt and not _get_hold_state():
         plt.cla()
         _unilab_update_fig_version()
     res = target_ax.plot(*args_list, **kwargs)
@@ -3231,7 +3936,7 @@ def fill(*args, **kwargs):
             continue
         i += 1
     args_list = [_unilab_vec(a) for a in args_list]
-    if target_ax == plt and not _unilab_hold:
+    if target_ax == plt and not _get_hold_state():
         plt.cla()
         _unilab_update_fig_version()
     res = target_ax.fill(*args_list, **kwargs)
@@ -3385,7 +4090,7 @@ def terminal_plot_hd(y, x=None, height=None, width=None, type='line', **kwargs):
         if isinstance(y, (list, np.ndarray)): x = np.arange(builtins.len(y))
         else: x = np.arange(1); y = [y]
     x, y = _unilab_vec(x), _unilab_vec(y)
-    if not _unilab_hold:
+    if not _get_hold_state():
         plt.clf()
         if not plt.get_fignums(): plt.figure(figsize=(10, 6))
         _unilab_update_fig_version()
@@ -3426,19 +4131,19 @@ def _parse_matlab_style_args(args):
 def stem(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     res = plt.stem(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def stairs(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     res = plt.stairs(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def area(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     if builtins.len(p_args) == 1:
         y = p_args[0]; x = np.arange(builtins.len(y))
         res = plt.fill_between(x, y, **kwargs)
@@ -3450,7 +4155,7 @@ def area(*args, **kwargs):
 def scatter(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     p_args = [a for a in p_args if not (isinstance(a, str) and a == 'filled')]
     if 'markersize' in kwargs: kwargs['s'] = kwargs.pop('markersize')
     res = plt.scatter(*p_args, **kwargs); _unilab_refresh_graph(); return res
@@ -3458,13 +4163,26 @@ def scatter(*args, **kwargs):
 def bar(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     res = plt.bar(*p_args, **kwargs); _unilab_refresh_graph(); return res
+
+def barh(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
+    if builtins.len(p_args) == 1:
+        y = np.asarray(p_args[0]).flatten()
+        x = np.arange(1, len(y) + 1)
+        res = plt.barh(x, y, **kwargs)
+    else:
+        res = plt.barh(*p_args, **kwargs)
+    _unilab_refresh_graph()
+    return res
 
 def hist(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     res = plt.hist(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
 def title(*args, **kwargs):
@@ -3497,6 +4215,18 @@ def ylabel(*args, **kwargs):
         return res
     res = plt.ylabel(*args_list, **kwargs); _unilab_refresh_graph(); return res
 
+def zlabel(*args, **kwargs):
+    args_list = list(args)
+    if args_list and hasattr(args_list[0], 'set_zlabel'):
+        target = args_list.pop(0)
+        res = target.set_zlabel(*args_list, **kwargs)
+        if hasattr(target, 'figure'): target.figure.canvas.draw()
+        return res
+    ax = plt.gca()
+    res = ax.set_zlabel(*args_list, **kwargs) if hasattr(ax, 'set_zlabel') else None
+    _unilab_refresh_graph()
+    return res
+
 def gca(): return plt.gca()
 
 def figure(*args, **kwargs):
@@ -3504,20 +4234,22 @@ def figure(*args, **kwargs):
     kwargs.update(p_kwargs)
     if 'name' in kwargs: kwargs.pop('name')
     if 'position' in kwargs: kwargs.pop('position')
+    if p_args and isinstance(p_args[0], (int, float, np.integer, np.floating)):
+        return plt.figure(int(p_args[0]), **kwargs)
     return plt.figure(**kwargs)
 
 def subplot(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
+    p_args = [int(a) if isinstance(a, (float, np.floating, np.integer)) else a for a in p_args]
     res = plt.subplot(*p_args, **kwargs); return res
 
 def hold(*args):
-    global _unilab_hold
     args_list = list(args)
     if args_list and hasattr(args_list[0], 'plot'): args_list.pop(0)
     state = args_list[0] if args_list else 'on'
     val = str(state).lower()
-    _unilab_hold = (val == 'on' or val == '1' or state is True)
+    _set_hold_state(val == 'on' or val == '1' or state is True)
 
 def grid(*args, **kwargs):
     args_list = list(args)
@@ -3535,7 +4267,10 @@ def axis(*args):
     args_list = list(args)
     target = plt
     if args_list and hasattr(args_list[0], 'axis'): target = args_list.pop(0)
-    res = target.axis(args_list[0]) if args_list else target.axis()
+    arg0 = args_list[0] if args_list else None
+    if isinstance(arg0, np.ndarray):
+        arg0 = arg0.flatten().tolist()
+    res = target.axis(arg0) if args_list else target.axis()
     _unilab_refresh_graph(); return res
 
 def legend(*args, **kwargs):
@@ -3547,7 +4282,7 @@ def legend(*args, **kwargs):
 def contourf(*args, **kwargs):
     p_args, p_kwargs = _parse_matlab_style_args(args)
     kwargs.update(p_kwargs)
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     if builtins.len(p_args) >= 4 and isinstance(p_args[3], np.ndarray): p_args[3] = p_args[3].flatten()
     res = plt.contourf(*p_args, **kwargs); _unilab_refresh_graph(); return res
 
@@ -3561,7 +4296,7 @@ def colormap(*args):
         import matplotlib as mpl
         cmap_obj = ListedColormap(cmap, name='unilab_custom')
         try: mpl.colormaps.register(cmap_obj, force=True)
-        except: plt.register_cmap(name='unilab_custom', cmap=cmap_obj)
+        except: plt.register_cmap('unilab_custom', cmap_obj)
         cmap_name = 'unilab_custom'
     else:
         cmap_name = str(cmap)
@@ -3575,13 +4310,13 @@ def colormap(*args):
         if hasattr(target_ax, 'figure'): target_ax.figure.canvas.draw()
 
 def heatmap(M):
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     plt.imshow(M, interpolation='nearest'); plt.colorbar(); _unilab_refresh_graph()
 
 def imagesc(*args, **kwargs):
     args_list = list(args)
     target = args_list.pop(0) if args_list and hasattr(args_list[0], 'imshow') else plt
-    if target == plt and not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if target == plt and not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     if builtins.len(args_list) > 0 and isinstance(args_list[0], np.ndarray):
         res = target.imshow(args_list[0], interpolation='nearest', aspect='auto', **kwargs)
     else: res = target.imshow(*args_list, **kwargs)
@@ -3590,15 +4325,36 @@ def imagesc(*args, **kwargs):
     return res
 
 def plot3(*args, **kwargs):
-    if not _unilab_hold: plt.cla()
+    if not _get_hold_state(): plt.cla()
     fig = plt.gcf()
     ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
     res = ax.plot(*args, **kwargs)
     try:
-        _unilab_3d_data_store[fig.number] = {'type': 'scatter3d', 'x': np.asarray(args[0]).tolist() if builtins.len(args) > 0 else [], 'y': np.asarray(args[1]).tolist() if builtins.len(args) > 1 else [], 'z': np.asarray(args[2]).tolist() if builtins.len(args) > 2 else []}
+        _get_3d_store()[fig.number] = {'type': 'scatter3d', 'x': np.asarray(args[0]).tolist() if builtins.len(args) > 0 else [], 'y': np.asarray(args[1]).tolist() if builtins.len(args) > 1 else [], 'z': np.asarray(args[2]).tolist() if builtins.len(args) > 2 else []}
     except: pass
     _unilab_refresh_graph(); return res
+
+def scatter3(*args, **kwargs):
+    p_args, p_kwargs = _parse_matlab_style_args(args)
+    kwargs.update(p_kwargs)
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
+    p_args = [a for a in p_args if not (isinstance(a, str) and a == 'filled')]
+    if 'markersize' in kwargs: kwargs['s'] = kwargs.pop('markersize')
+    fig = plt.gcf()
+    ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
+    res = ax.scatter(*p_args, **kwargs)
+    try:
+        _get_3d_store()[fig.number] = {
+            'type': 'scatter3d',
+            'x': np.asarray(p_args[0]).tolist() if builtins.len(p_args) > 0 else [],
+            'y': np.asarray(p_args[1]).tolist() if builtins.len(p_args) > 1 else [],
+            'z': np.asarray(p_args[2]).tolist() if builtins.len(p_args) > 2 else [],
+        }
+    except Exception:
+        pass
+    _unilab_refresh_graph()
+    return res
 
 def colorbar(*args, **kwargs):
     if not args:
@@ -3610,7 +4366,7 @@ def colorbar(*args, **kwargs):
     _unilab_refresh_graph(); return res
 
 def surf(*args, **kwargs):
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     fig = plt.gcf()
     ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
     if builtins.len(args) == 1 and isinstance(args[0], (tuple, list)) and builtins.len(args[0]) == 3: args = args[0]
@@ -3632,12 +4388,12 @@ def surf(*args, **kwargs):
         res = ax.plot_surface(X, Y, Z, **kwargs)
     else: res = ax.plot_surface(*args, **kwargs)
     try:
-        if X_out is not None: _unilab_3d_data_store[fig.number] = {'type': 'surface', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
+        if X_out is not None: _get_3d_store()[fig.number] = {'type': 'surface', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
     except: pass
     _unilab_refresh_graph(); return res
 
 def mesh(*args, **kwargs):
-    if not _unilab_hold: plt.cla(); _unilab_update_fig_version()
+    if not _get_hold_state(): plt.cla(); _unilab_update_fig_version()
     fig = plt.gcf()
     ax = fig.gca() if fig.axes and fig.gca().name == '3d' else fig.add_subplot(111, projection='3d')
     args = [_unilab_vec(a) if isinstance(a, np.ndarray) and (a.shape[0] == 1 or a.shape[1] == 1) else a for a in args]
@@ -3653,7 +4409,7 @@ def mesh(*args, **kwargs):
         res = ax.plot_wireframe(X, Y, Z, **kwargs)
     else: res = ax.plot_wireframe(*args, **kwargs)
     try:
-        if X_out is not None: _unilab_3d_data_store[fig.number] = {'type': 'wireframe', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
+        if X_out is not None: _get_3d_store()[fig.number] = {'type': 'wireframe', 'x': np.asarray(X_out).tolist(), 'y': np.asarray(Y_out).tolist(), 'z': np.asarray(Z_out).tolist()}
     except: pass
     _unilab_refresh_graph(); return res
 
@@ -3796,7 +4552,13 @@ def unilab_iter(x):
     if isinstance(x, np.ndarray):
         if x.ndim == 0: return iter([x.item()])
         if x.ndim == 1: return iter(x)
-        return (x[:, i] if x.shape[0] > 1 else x[0, i] for i in range(x.shape[1]))
+        if x.ndim == 2:
+            if x.shape[0] == 1:
+                return (x[0, i] for i in range(x.shape[1]))
+            if x.shape[1] == 1:
+                return (x[i, 0] for i in range(x.shape[0]))
+            return (x[:, i] for i in range(x.shape[1]))
+        return (x[i] for i in range(x.shape[0]))
     return iter(x)
 
 def struct(*args):
@@ -3871,146 +4633,177 @@ def find_peaks(x, min_height=-np.inf):
     return np.array(peaks).reshape(-1, 1), np.array(locs).reshape(-1, 1)
 
 
-def _unilab_to_int(x):
-    if isinstance(x, np.ndarray):
-        return int(x.item())
-    return int(x)
-
-def sum(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.sum(x, axis=axis)
-def mean(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.mean(x, axis=axis)
-def std(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.std(x, axis=axis)
-def var(x, axis=None): 
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.var(x, axis=axis)
-def min(x, *args):
-    n_out = unilab_get_nargout()
-    if len(args) == 0:
-        if n_out > 1:
-            return np.min(x), np.argmin(x) + 1
-        return np.min(x)
-    if len(args) == 1:
-        y = args[0]
-        if n_out > 1:
-             # min(A, B) doesn't typically return indices in MATLAB the same way
-             return np.minimum(x, y), 0
-        return np.minimum(x, y)
-    return np.min(x)
-
-def max(x, *args):
-    n_out = unilab_get_nargout()
-    if len(args) == 0:
-        if n_out > 1:
-            return np.max(x), np.argmax(x) + 1
-        return np.max(x)
-    if len(args) == 1:
-        y = args[0]
-        if n_out > 1:
-             return np.maximum(x, y), 0
-        return np.maximum(x, y)
-    return np.max(x)
-def round(x): return np.round(x)
-def floor(x): return np.floor(x)
-def ceil(x): return np.ceil(x)
-def sin(x): return np.sin(x)
-def cos(x): return np.cos(x)
-def tan(x): return np.tan(x)
-def tanh(x): return np.tanh(x)
-def exp(x): return np.exp(x)
-def log(x): return np.log(x)
-def log10(x): return np.log10(x)
-def sqrt(x): return np.sqrt(x)
-def abs(x): return np.abs(x)
-# randperm already defined? Let's check again.
-def reshape(x, *shape): 
-    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
-        s = np.asarray(shape[0]).flatten()
-        shape = [_unilab_to_int(a) for a in s]
-    else:
-        shape = [_unilab_to_int(a) for a in shape]
-    return np.reshape(x, shape)
-def linspace(start, stop, n=100): return np.linspace(start, stop, _unilab_to_int(n))
-def zeros(*shape): 
-    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
-        s = np.asarray(shape[0]).flatten()
-        shape = [_unilab_to_int(a) for a in s]
-    else:
-        shape = [_unilab_to_int(a) for a in shape]
-    return np.zeros(shape)
-def ones(*shape): 
-    if len(shape) == 1 and isinstance(shape[0], (list, tuple, np.ndarray)):
-        s = np.asarray(shape[0]).flatten()
-        shape = [_unilab_to_int(a) for a in s]
-    else:
-        shape = [_unilab_to_int(a) for a in shape]
-    return np.ones(shape)
-def eye(n, m=None): return np.eye(_unilab_to_int(n), _unilab_to_int(m) if m is not None else _unilab_to_int(n))
-def factorial(n): return float(math.factorial(_unilab_to_int(n)))
-def trapz(y, x=None): 
-    # np.trapz was removed in NumPy 2.0, replaced by np.trapezoid
-    if hasattr(np, 'trapezoid'):
-        return np.trapezoid(y, x=x)
-    return np.trapz(y, x=x)
-def inv(x): return np.linalg.inv(x)
-def norm(x, ord=None): return np.linalg.norm(x, ord=ord)
-def det(x): return np.linalg.det(x)
-
-def mod(x, y): return np.mod(x, y)
-def rem(x, y): return np.remainder(x, y)
-
-def real(x): return np.real(x)
-def imag(x): return np.imag(x)
-
-def sort(x, axis=-1): 
-    if axis != -1: axis = _unilab_to_int(axis) - 1
-    return np.sort(x, axis=axis)
-
-def fft(x, n=None, axis=-1): return scipy_fft(x, n=n, axis=axis)
-def ifft(x, n=None, axis=-1): return scipy_ifft(x, n=n, axis=axis)
+# Aliases and unified canonical math builtins
+sum = unilab_sum
+mean = unilab_mean
+min = unilab_min
+max = unilab_max
+abs = unilab_abs
+eig = unilab_eig
 
 def mldivide(A, B): 
-    if A.ndim == 2 and B.ndim == 2:
-        if A.shape[0] == A.shape[1]:
-            return np.linalg.solve(A, B)
-        else:
-            return np.linalg.lstsq(A, B, rcond=None)[0]
-    return np.linalg.lstsq(A, B, rcond=None)[0]
+    A_mat = np.asarray(A)
+    B_mat = np.asarray(B)
+    if A_mat.ndim == 2 and B_mat.ndim == 2 and A_mat.shape[0] == A_mat.shape[1]:
+        try:
+            return np.linalg.solve(A_mat, B_mat)
+        except np.linalg.LinAlgError:
+            return np.linalg.lstsq(A_mat, B_mat, rcond=None)[0]
+    return np.linalg.lstsq(A_mat, B_mat, rcond=None)[0]
 
-def sinh(x): return np.sinh(x)
-def cosh(x): return np.cosh(x)
-def asinh(x): return np.arcsinh(x)
-def acosh(x): return np.arccosh(x)
-def atanh(x): return np.arctanh(x)
+def trapz(y, x=None, dim=None): 
+    y_arr = np.asarray(y)
+    if y_arr.ndim <= 2 and (y_arr.size == 0 or y_arr.shape[0] == 1 or y_arr.shape[1] == 1):
+        y_flat = y_arr.flatten()
+        x_flat = np.asarray(x).flatten() if x is not None else None
+        fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+        res = fn(y_flat, x=x_flat)
+        return res.item() if hasattr(res, 'item') and res.size == 1 else res
+    if dim is not None:
+        axis = _unilab_to_int(dim) - 1
+    else:
+        axis = 0
+        for i, d in enumerate(y_arr.shape):
+            if d > 1:
+                axis = i
+                break
+    fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+    res = fn(y_arr, x=x, axis=axis)
+    return res.item() if hasattr(res, 'item') and res.size == 1 else res
 
-def strcmp(s1, s2): return bool(s1 == s2)
-def isequal(a, b): return np.array_equal(a, b)
 def cumsum(x, axis=None): 
     if axis is not None: axis = _unilab_to_int(axis) - 1
     return np.cumsum(x, axis=axis)
-def randi(imax, *shape):
-    if len(shape) == 0: shape = (1, 1)
-    elif len(shape) == 1:
-        if isinstance(shape[0], (list, tuple, np.ndarray)):
-            s = np.asarray(shape[0]).flatten()
-            shape = [_unilab_to_int(a) for a in s]
-        else:
-            shape = (int(shape[0]), int(shape[0]))
-    else: 
-        shape = [int(s) for s in shape]
-    return np.random.randint(1, _unilab_to_int(imax) + 1, size=shape)
 
-def argmin(x, axis=None):
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    # MATLAB argmin (min with 2 outputs) returns 1-based index
-    return np.argmin(x, axis=axis) + 1
-def argmax(x, axis=None):
-    if axis is not None: axis = _unilab_to_int(axis) - 1
-    return np.argmax(x, axis=axis) + 1
+def strcmp(s1, s2): return bool(s1 == s2)
+def isequal(a, b):
+    try: return bool(np.array_equal(a, b))
+    except: return bool(a == b)
+
+fft = scipy_fft
+ifft = scipy_ifft
+
+def log2(x): return np.log2(x)
+def isnan(x): return np.isnan(x)
+def isinf(x): return np.isinf(x)
+def isfinite(x): return np.isfinite(x)
+def isreal(x):
+    arr = np.asarray(x)
+    return not np.iscomplexobj(arr) or np.all(np.imag(arr) == 0)
+
+def isprime(n):
+    def _is_prime(val):
+        try: v = int(val)
+        except: return False
+        if v <= 1: return False
+        if v <= 3: return True
+        if v % 2 == 0 or v % 3 == 0: return False
+        i = 5
+        while i * i <= v:
+            if v % i == 0 or v % (i + 2) == 0: return False
+            i += 6
+        return True
+    arr = np.asarray(n)
+    if arr.ndim == 0: return _is_prime(arr.item())
+    return np.vectorize(_is_prime)(arr)
+
+def repmat(A, *reps):
+    arr = np.asarray(A)
+    if len(reps) == 1 and isinstance(reps[0], (list, tuple, np.ndarray)):
+        r = [_unilab_to_int(x) for x in reps[0]]
+    elif len(reps) == 1:
+        r = [_unilab_to_int(reps[0]), _unilab_to_int(reps[0])]
+    else:
+        r = [_unilab_to_int(x) for x in reps]
+    while len(r) < 2:
+        r.append(1)
+    return np.tile(arr, tuple(r))
+
+def bsxfun(fun, A, B):
+    f = fun.func if isinstance(fun, UnilabHandle) else fun
+    return f(A, B)
+
+def plus(A, B): return np.add(A, B)
+
+def cond(A, p=None):
+    A_mat = np.atleast_2d(np.asarray(A))
+    return float(np.linalg.cond(A_mat, p=p))
+
+def unwrap(p, discont=np.pi, axis=-1):
+    return np.unwrap(p, discont=discont, axis=axis)
+
+def isfield(s, field):
+    if not isinstance(s, dict): return False
+    if isinstance(field, (list, tuple)): return [str(f) in s for f in field]
+    return str(field) in s
+
+def isstruct(s): return isinstance(s, dict)
+
+def strtrim(s):
+    if isinstance(s, str): return s.strip()
+    if isinstance(s, list): return [strtrim(item) for item in s]
+    return s
+
+def strsplit(s, delimiter=None):
+    if delimiter is None: return str(s).split()
+    return str(s).split(str(delimiter))
+
+def strfind(text, pattern):
+    t_str = str(text)
+    p_str = str(pattern)
+    indices = []
+    idx = t_str.find(p_str)
+    while idx != -1:
+        indices.append(idx + 1)
+        idx = t_str.find(p_str, idx + 1)
+    return np.array(indices, dtype=int).reshape(1, -1) if indices else np.array([], dtype=int)
+
+def fwrite(fid, data, precision='uint8'):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return 0
+    f = _unilab_fid_map[fid]
+    if isinstance(data, (bytes, bytearray)): return f.write(data)
+    if isinstance(data, str): return f.write(data.encode('utf-8'))
+    arr = np.asarray(data)
+    return f.write(arr.tobytes())
+
+def fseek(fid, offset, origin=0):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return -1
+    f = _unilab_fid_map[fid]
+    if str(origin) in ('bof', '-1'): whence = 0
+    elif str(origin) in ('cof', '0'): whence = 1
+    elif str(origin) in ('eof', '1'): whence = 2
+    else: whence = int(origin)
+    f.seek(int(offset), whence)
+    return 0
+
+def ftell(fid):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return -1
+    return float(_unilab_fid_map[fid].tell())
+
+def feof(fid):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return 1
+    f = _unilab_fid_map[fid]
+    cur = f.tell()
+    f.seek(0, 2)
+    end = f.tell()
+    f.seek(cur)
+    return int(cur >= end)
+
+def fgets(fid):
+    fid = int(fid)
+    if fid not in _unilab_fid_map: return -1
+    line = _unilab_fid_map[fid].readline()
+    return line if line else -1
+
+def unilab_freqresp(sys, w):
+    if hasattr(sys, 'freqresp'): return sys.freqresp(w)
+    num, den = unilab_tfdata(sys)
+    _, h = signal.freqs(num.flatten(), den.flatten(), worN=w)
+    return h
 
 class UnilabTable:
     def __init__(self, data_list, names):

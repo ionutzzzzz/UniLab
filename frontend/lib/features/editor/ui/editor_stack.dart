@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:highlight/languages/matlab.dart';
@@ -222,7 +223,10 @@ class _EditorStackState extends State<EditorStack> {
     });
 
     final settings = context.read<SettingsProvider>().settings;
-    if (settings.autoSave) {
+    if (settings.autoSave &&
+        activeFile.path.isNotEmpty &&
+        !activeFile.path.startsWith('Untitled') &&
+        !activeFile.name.startsWith('Untitled')) {
       _autoSaveTimer?.cancel();
       _autoSaveTimer = Timer(const Duration(seconds: 2), () {
         appProvider.saveActiveFile();
@@ -366,8 +370,12 @@ class _EditorStackState extends State<EditorStack> {
                           ),
                           if (_showFindReplace) 
                             Positioned(
-                              top: 0,
+                              top: 8,
                               right: 20,
+                              width: math.min(
+                                400.0,
+                                math.max(260.0, constraints.maxWidth - 32),
+                              ),
                               child: FindReplaceBar(
                                 onClose: _toggleFindReplace,
                                 controller: controller,
@@ -462,8 +470,11 @@ class _MinimapLine extends StatelessWidget {
     for (int i = 0; i < line.length; i++) {
       if (line[i] == ' ') {
         leadingSpaces++;
-      } else if (line[i] == '\t') leadingSpaces += 4;
-      else break;
+      } else if (line[i] == '\t') {
+        leadingSpaces += 4;
+      } else {
+        break;
+      }
     }
 
     final double indent = (leadingSpaces * 1.2).clamp(0.0, 40.0);

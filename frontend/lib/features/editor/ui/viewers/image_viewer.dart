@@ -1,8 +1,8 @@
-import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../theme/ui_theme.dart';
 import '../../../../widgets/ui_text.dart';
+import 'image_view_helper.dart';
 
 class ImageViewer extends StatelessWidget {
   final String path;
@@ -27,21 +27,7 @@ class ImageViewer extends StatelessWidget {
                   maxScale: 5.0,
                   child: kIsWeb 
                     ? _buildWebPlaceholder(ui)
-                    : Image.file(
-                        io.File(path),
-                        errorBuilder: (context, error, stackTrace) {
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.broken_image, size: 64, color: ui.colors.danger),
-                              const SizedBox(height: 16),
-                              UiText(text: 'Failed to load image', color: ui.colors.textMuted),
-                              const SizedBox(height: 8),
-                              UiText(text: error.toString(), variant: UiTextVariant.caption, color: ui.colors.textDisabled),
-                            ],
-                          );
-                        },
-                      ),
+                    : buildPlatformImage(path, ui),
                 ),
               ),
             ),

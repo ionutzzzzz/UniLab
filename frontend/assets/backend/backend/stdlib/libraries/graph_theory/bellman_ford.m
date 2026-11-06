@@ -1,5 +1,7 @@
 function [dist, parent] = bellman_ford(A, start_node)
     % BELLMAN_FORD Shortest paths from single source
+    if nargin < 1, A = []; end
+    if nargin < 2, start_node = []; end
     n = size(A, 1);
     dist = inf(1, n);
     parent = zeros(1, n);

@@ -1,6 +1,8 @@
 function model = egarch(p, q)
     % EGARCH Returns an EGARCH model struct
     
+    if nargin < 1, p = []; end
+    if nargin < 2, q = []; end
     model.Type = 'EGARCH';
     model.P = p;
     model.Q = q;

@@ -1,5 +1,7 @@
 function y = spherical_bessel_y(n, x)
     % SPHERICAL_BESSEL_Y y_n(x) = sqrt(pi / 2x) * Y_{n+1/2}(x)
+    if nargin < 1, n = []; end
+    if nargin < 2, x = []; end
     if n == 0
         y = -cos(x) ./ x;
     elseif n == 1

@@ -2,6 +2,7 @@ function [q] = polyint_custom(p, k)
     % POLYINT_CUSTOM Integrate polynomial p
     % [q] = polyint_custom(p, k) where k is the integration constant
     
+    if nargin < 1, p = []; end
     if nargin < 2
         k = 0;
     end

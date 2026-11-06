@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
+import '../utils/platform_dmw.dart';
 // import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
@@ -108,18 +108,17 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
   Future<void> _closeWindow() async {
     try {
       await _channel.invokeMethod('window_closing', {});
-
       await WindowController.fromWindowId(widget.windowId).hide();
     } catch (e) {
-      debugPrint('Error closing window: $e');
+      debugPrint('Error hiding window: $e');
     }
   }
 
   PlotData _parsePlotData(Map<String, dynamic> data) {
     return PlotData(
-      id: data['id'],
-      title: data['title'],
-      type: data['type'],
+      id: data['id']?.toString(),
+      title: data['title']?.toString() ?? 'Figure',
+      type: data['type']?.toString() ?? 'line',
       xData:
           (data['xData'] as List<dynamic>?)
               ?.map((e) => (e as num).toDouble())
@@ -130,8 +129,10 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
               ?.map((e) => (e as num).toDouble())
               .toList() ??
           [],
-      imageDataUri: data['imageDataUri'],
-      createdAt: DateTime.parse(data['createdAt']),
+      imageDataUri: data['imageDataUri']?.toString(),
+      createdAt:
+          DateTime.tryParse(data['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -199,8 +200,21 @@ class _PlotsWindowScreenState extends State<PlotsWindowScreen>
           IconButton(
             icon: const Icon(Icons.refresh, size: 16),
             tooltip: 'Refresh',
-            onPressed: () {
-              // Request data from main window if needed
+            onPressed: () async {
+              try {
+                final res = await _channel.invokeMethod('get_plots');
+                if (res != null && mounted) {
+                  final List<dynamic> plotsData = jsonDecode(res as String);
+                  setState(() {
+                    _plots = plotsData
+                        .map((data) =>
+                            _parsePlotData(data as Map<String, dynamic>))
+                        .toList();
+                  });
+                }
+              } catch (e) {
+                debugPrint('Error refreshing plots: $e');
+              }
             },
           ),
           IconButton(

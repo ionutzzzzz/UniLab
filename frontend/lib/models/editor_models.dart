@@ -155,12 +155,20 @@ class PlotData {
       id: json['id'] as String?,
       title: (json['title'] ?? json['name']) as String? ?? 'Figure',
       type: (json['type'] ?? json['plot_type']) as String? ?? 'line',
-      xData: (json['xData'] ?? json['x'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
-      yData: (json['yData'] ?? json['y'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [],
+      xData: ((json['x_data'] ?? json['xData'] ?? json['x']) as List?)
+              ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
+              .toList() ??
+          [],
+      yData: ((json['y_data'] ?? json['yData'] ?? json['y']) as List?)
+              ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
+              .toList() ??
+          [],
       imageDataUri: json['imageDataUri'] as String?,
       sourceScript: json['sourceScript'] as String?,
-      figNum: json['figNum'] as String?,
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      figNum: json['figNum']?.toString(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
     );
   }
 

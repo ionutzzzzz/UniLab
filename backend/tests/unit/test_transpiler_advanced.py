@@ -22,9 +22,9 @@ class TestUniLabTranspilerAdvanced(unittest.TestCase):
         # The current grammar requires CASE to follow expression immediately (whitespace only)
         code = "switch x\ncase 1; y = 10; case 2; y = 20; otherwise; y = 0; end"
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("_sw_1 = x", result)
-        self.assertIn("if _sw_1 == 1:", result)
-        self.assertIn("elif _sw_1 == 2:", result)
+        self.assertIn("_sw_1 = unilab_call(x)", result)
+        self.assertIn("if unilab_switch_match(_sw_1, 1):", result)
+        self.assertIn("elif unilab_switch_match(_sw_1, 2):", result)
         self.assertIn("else:", result)
 
     def test_try_catch_error_var(self):
@@ -37,8 +37,7 @@ class TestUniLabTranspilerAdvanced(unittest.TestCase):
         """
         result, _, _ = self.transpiler.transpile(code)
         self.assertIn("try:", result)
-        # Assuming current parser misses err
-        self.assertIn("except Exception", result)
+        self.assertIn("except Exception as err:", result)
 
     def test_matrix_transpose_arithmetic(self):
         code = "C = (A + B)' * 2;"
@@ -61,7 +60,7 @@ class TestUniLabTranspilerAdvanced(unittest.TestCase):
         # Test assignment to indexed matrix element
         code = "A(1, 2) = 10;"
         result, _, _ = self.transpiler.transpile(code)
-        self.assertIn("unilab_set(A, 10, 1, 2)", result)
+        self.assertIn("unilab_set(A if 'A' in locals() else globals().get('A', None), 10, 1, 2)", result)
 
     def test_cell_array(self):
         code = "C = {1, 'a'; 2, 'b'};"

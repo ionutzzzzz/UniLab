@@ -2,6 +2,8 @@ function [p] = poly_fit_linear(x, y)
     % POLY_FIT_LINEAR Simple linear least squares fit (y = ax + b)
     % Returns [a, b]
     
+    if nargin < 1, x = []; end
+    if nargin < 2, y = []; end
     n = length(x);
     sum_x = sum(x);
     sum_y = sum(y);

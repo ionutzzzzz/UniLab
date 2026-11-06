@@ -1,6 +1,10 @@
 function [x_min] = brent_method_min(f, a, b, tol)
     % BRENT_METHOD_MIN Robust 1D minimization
     % Implementation of Brent's algorithm for minimization
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, tol = []; end
     phi = (3 - sqrt(5)) / 2;
     x = a + phi * (b - a);
     w = x; v = x;

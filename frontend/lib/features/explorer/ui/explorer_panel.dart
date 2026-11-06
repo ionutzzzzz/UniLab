@@ -1,4 +1,4 @@
-import 'dart:io' as io;
+import '../../../utils/platform_io.dart' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +11,9 @@ import '../../../widgets/ui_text.dart';
 import '../../../providers/app_provider.dart';
 import 'package:flutter/services.dart';
 import '../../../widgets/ui_glass_container.dart';
+import '../../../widgets/ui_input_field.dart';
 import '../../../core/layout/shell_layout_state.dart';
+import '../../../providers/settings_provider.dart';
 
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
@@ -84,10 +86,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = p.Provider.of<AppProvider>(context);
+    final settingsProvider = p.Provider.of<SettingsProvider>(context);
+    final showHidden = settingsProvider.settings.showHiddenFiles;
+    final searchQuery = _searchController.text.trim().toLowerCase();
 
     // Rebuild the flat list for shift-click before building tree
     _flatVisiblePaths.clear();
-    _buildFlatPaths(appProvider.projectFiles);
+    _buildFlatPaths(appProvider.projectFiles, showHidden, searchQuery);
 
     return Container(
       color: ui.colors.panel,
@@ -234,6 +239,37 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               ],
             ),
           ),
+          if (_showSearch)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm, vertical: ui.spacing.xs),
+              decoration: BoxDecoration(
+                color: ui.colors.panelHeader,
+                border: Border(
+                  bottom: BorderSide(
+                    color: ui.colors.divider.withValues(alpha: 0.5),
+                    width: ui.spacing.strokeHair,
+                  ),
+                ),
+              ),
+              child: UiInputField(
+                controller: _searchController,
+                hintText: 'Filter files...',
+                prefixIcon: LucideIcons.search,
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(LucideIcons.x, size: 14),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                          });
+                        },
+                      )
+                    : null,
+                onChanged: (_) {
+                  setState(() {});
+                },
+              ),
+            ),
           // Tree View
           Expanded(
             child: LayoutBuilder(
@@ -253,6 +289,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                         0,
                         ui,
                         appProvider,
+                        showHidden,
+                        searchQuery,
                       ),
                   ],
                 );
@@ -264,24 +302,45 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
-  void _buildFlatPaths(List<dynamic> entities) {
-    for (var entity in entities) {
+  List<dynamic> _filterAndSortEntities(
+    List<dynamic> entities,
+    bool showHidden,
+  ) {
+    var list = entities.where((entity) {
+      final name = path_utils.basename(entity.path);
+      if (!showHidden && name.startsWith('.')) return false;
+      return true;
+    }).toList();
+
+    list.sort((a, b) {
+      final aIsDir = a is io.Directory;
+      final bIsDir = b is io.Directory;
+      if (aIsDir && !bIsDir) return -1;
+      if (!aIsDir && bIsDir) return 1;
+      return path_utils
+          .basename(a.path)
+          .toLowerCase()
+          .compareTo(path_utils.basename(b.path).toLowerCase());
+    });
+
+    return list;
+  }
+
+  void _buildFlatPaths(List<dynamic> entities, bool showHidden, String query) {
+    final sorted = _filterAndSortEntities(entities, showHidden);
+    for (var entity in sorted) {
       final isDir = entity is io.Directory;
       final path = entity.path;
-      _flatVisiblePaths.add(path);
+      final name = path_utils.basename(path);
+      final matches = query.isEmpty || name.toLowerCase().contains(query);
+      if (matches || isDir) {
+        _flatVisiblePaths.add(path);
+      }
 
       if (isDir && _expandedPaths.contains(path)) {
         try {
           final children = entity.listSync();
-          // Sort to match tree view
-          children.sort((a, b) {
-            if (a is io.Directory && b is! io.Directory) return -1;
-            if (a is! io.Directory && b is io.Directory) return 1;
-            return path_utils
-                .basename(a.path)
-                .compareTo(path_utils.basename(b.path));
-          });
-          _buildFlatPaths(children);
+          _buildFlatPaths(children, showHidden, query);
         } catch (e) {
           // Ignore
         }
@@ -294,82 +353,94 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     int depth,
     UiTheme ui,
     AppProvider appProvider,
+    bool showHidden,
+    String query,
   ) {
     List<Widget> items = [];
+    final sorted = _filterAndSortEntities(entities, showHidden);
 
-    for (var entity in entities) {
+    for (var entity in sorted) {
       final isDir = entity is io.Directory;
       final path = entity.path;
       final name = path_utils.basename(path);
       final isExpanded = _expandedPaths.contains(path);
+      final matches = query.isEmpty || name.toLowerCase().contains(query);
 
-      items.add(
-        _FileTreeRow(
-          key: ValueKey(path),
-          name: name,
-          path: path,
-          isDir: isDir,
-          depth: depth,
-          isExpanded: isExpanded,
-          isSelected: _selectedPaths.contains(path),
-          onSelect:
-              ({bool isCtrlPressed = false, bool isShiftPressed = false}) =>
-                  _handleSelect(
-                    path,
-                    isCtrlPressed: isCtrlPressed,
-                    isShiftPressed: isShiftPressed,
-                  ),
-          onToggle: () {
-            if (!HardwareKeyboard.instance.logicalKeysPressed.contains(
-                  LogicalKeyboardKey.controlLeft,
-                ) &&
-                !HardwareKeyboard.instance.logicalKeysPressed.contains(
-                  LogicalKeyboardKey.controlRight,
-                ) &&
-                !HardwareKeyboard.instance.logicalKeysPressed.contains(
-                  LogicalKeyboardKey.shiftLeft,
-                ) &&
-                !HardwareKeyboard.instance.logicalKeysPressed.contains(
-                  LogicalKeyboardKey.shiftRight,
-                )) {
-              _handleSelect(path);
-            }
-            if (isDir) {
-              _toggleExpand(path);
-            } else {
-              appProvider.openFile(entity);
-            }
-          },
-          onMove: (sourcePath, targetPath) async {
-            if (sourcePath == targetPath) return;
-            final sourceEntity = io.FileSystemEntity.isDirectorySync(sourcePath)
-                ? io.Directory(sourcePath)
-                : io.File(sourcePath);
-            final newPath = path_utils.join(
-              targetPath,
-              path_utils.basename(sourcePath),
-            );
-
-            if (sourcePath != newPath) {
-              try {
-                await sourceEntity.rename(newPath);
-                appProvider.refreshProjectFiles();
-                appProvider.updateMovedFilePaths(sourcePath, newPath);
-              } catch (e) {
-                // Handle error if necessary
-              }
-            }
-          },
-        ),
-      );
-
-      if (isDir && isExpanded) {
+      List<Widget> childrenWidgets = [];
+      if (isDir && (isExpanded || query.isNotEmpty)) {
         try {
           final children = entity.listSync();
-          items.addAll(_buildProjectTree(children, depth + 1, ui, appProvider));
+          childrenWidgets = _buildProjectTree(
+            children,
+            depth + 1,
+            ui,
+            appProvider,
+            showHidden,
+            query,
+          );
         } catch (e) {
           // Access denied or other error
         }
+      }
+
+      if (matches || childrenWidgets.isNotEmpty) {
+        items.add(
+          _FileTreeRow(
+            key: ValueKey(path),
+            name: name,
+            path: path,
+            isDir: isDir,
+            depth: depth,
+            isExpanded: isExpanded || (query.isNotEmpty && childrenWidgets.isNotEmpty),
+            isSelected: _selectedPaths.contains(path),
+            onSelect:
+                ({bool isCtrlPressed = false, bool isShiftPressed = false}) =>
+                    _handleSelect(
+                      path,
+                      isCtrlPressed: isCtrlPressed,
+                      isShiftPressed: isShiftPressed,
+                    ),
+            onToggle: () {
+              final keys = HardwareKeyboard.instance.logicalKeysPressed;
+              final isCtrlOrCmd = keys.contains(LogicalKeyboardKey.controlLeft) ||
+                  keys.contains(LogicalKeyboardKey.controlRight) ||
+                  keys.contains(LogicalKeyboardKey.metaLeft) ||
+                  keys.contains(LogicalKeyboardKey.metaRight);
+              final isShift = keys.contains(LogicalKeyboardKey.shiftLeft) ||
+                  keys.contains(LogicalKeyboardKey.shiftRight);
+              if (!isCtrlOrCmd && !isShift) {
+                _handleSelect(path);
+              }
+              if (isDir) {
+                _toggleExpand(path);
+              } else {
+                appProvider.openFile(entity);
+              }
+            },
+            onMove: (sourcePath, targetPath) async {
+              if (sourcePath == targetPath) return;
+              final sourceEntity = io.FileSystemEntity.isDirectorySync(sourcePath)
+                  ? io.Directory(sourcePath)
+                  : io.File(sourcePath);
+              final newPath = path_utils.join(
+                targetPath,
+                path_utils.basename(sourcePath),
+              );
+
+              if (sourcePath != newPath) {
+                try {
+                  await sourceEntity.rename(newPath);
+                  appProvider.refreshProjectFiles();
+                  appProvider.updateMovedFilePaths(sourcePath, newPath);
+                } catch (e) {
+                  // Handle error if necessary
+                }
+              }
+            },
+          ),
+        );
+
+        items.addAll(childrenWidgets);
       }
     }
 
@@ -821,6 +892,7 @@ class _FileTreeRowState extends State<_FileTreeRow> {
                     : io.File(widget.path);
                 await entity.rename(newPath);
                 appProvider.refreshProjectFiles();
+                appProvider.updateMovedFilePaths(widget.path, newPath);
               }
               if (context.mounted) Navigator.pop(context);
             },

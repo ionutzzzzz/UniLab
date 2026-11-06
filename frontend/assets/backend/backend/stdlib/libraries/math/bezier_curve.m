@@ -3,6 +3,8 @@ function [B] = bezier_curve(P, t)
     % P is control points [x1, y1; x2, y2; ...]
     % t is a vector of parameters from 0 to 1
     
+    if nargin < 1, P = []; end
+    if nargin < 2, t = []; end
     n = size(P, 1) - 1;
     m = length(t);
     B = zeros(m, size(P, 2));

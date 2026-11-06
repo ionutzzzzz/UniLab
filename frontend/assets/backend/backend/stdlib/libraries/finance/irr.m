@@ -1,4 +1,5 @@
 function r = irr(values)
+    if nargin < 1, values = []; end
     r = 0.1;
     for iter = 1:100
         npv_val = npv(r, values);

@@ -2,6 +2,7 @@ function [U, S] = pca(X)
     % PCA Principal Component Analysis
     % [U, S] = pca(X)
     
+    if nargin < 1, X = []; end
     [m, n] = size(X);
     
     % Normalize X

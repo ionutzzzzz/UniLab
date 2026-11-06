@@ -1,6 +1,7 @@
 function b = is_perfect_number(n)
     % IS_PERFECT_NUMBER Check if n is a perfect number
     % A perfect number is a positive integer that is equal to the sum of its positive divisors, excluding itself.
+    if nargin < 1, n = []; end
     if n <= 1
         b = false;
         return;

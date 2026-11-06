@@ -21,6 +21,12 @@ class FindReplaceBar extends StatefulWidget {
   State<FindReplaceBar> createState() => _FindReplaceBarState();
 }
 
+class _SearchMatch {
+  final int start;
+  final int length;
+  const _SearchMatch(this.start, this.length);
+}
+
 class _FindReplaceBarState extends State<FindReplaceBar> {
   final TextEditingController _findController = TextEditingController();
   final TextEditingController _replaceController = TextEditingController();
@@ -30,7 +36,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
   bool _matchWholeWord = false;
   
   int _currentMatchIndex = -1;
-  List<int> _matchPositions = [];
+  List<_SearchMatch> _matches = [];
 
   @override
   void initState() {
@@ -49,23 +55,23 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
     final query = _findController.text;
     if (query.isEmpty) {
       setState(() {
-        _matchPositions = [];
+        _matches = [];
         _currentMatchIndex = -1;
       });
       return;
     }
 
     final text = widget.controller.text;
-    final List<int> positions = [];
+    final List<_SearchMatch> matches = [];
     
     if (_useRegex) {
       try {
         final regex = RegExp(query, caseSensitive: _isCaseSensitive);
         for (final match in regex.allMatches(text)) {
-          positions.add(match.start);
+          matches.add(_SearchMatch(match.start, match.end - match.start));
         }
-      } catch (e) {
-        // Invalid regex
+      } on FormatException {
+        // Invalid regex, clear matches
       }
     } else {
       String searchText = _isCaseSensitive ? text : text.toLowerCase();
@@ -84,15 +90,15 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
         }
         
         if (isMatch) {
-          positions.add(index);
+          matches.add(_SearchMatch(index, query.length));
         }
         start = index + query.length;
       }
     }
 
     setState(() {
-      _matchPositions = positions;
-      if (positions.isNotEmpty) {
+      _matches = matches;
+      if (matches.isNotEmpty) {
         _currentMatchIndex = 0;
         _jumpToMatch(0);
       } else {
@@ -102,59 +108,56 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
   }
 
   void _jumpToMatch(int index) {
-    if (index < 0 || index >= _matchPositions.length) return;
-    final pos = _matchPositions[index];
+    if (index < 0 || index >= _matches.length) return;
+    final match = _matches[index];
     widget.controller.selection = TextSelection(
-      baseOffset: pos,
-      extentOffset: pos + _findController.text.length,
+      baseOffset: match.start,
+      extentOffset: match.start + match.length,
     );
   }
 
   void _nextMatch() {
-    if (_matchPositions.isEmpty) return;
+    if (_matches.isEmpty) return;
     setState(() {
-      _currentMatchIndex = (_currentMatchIndex + 1) % _matchPositions.length;
+      _currentMatchIndex = (_currentMatchIndex + 1) % _matches.length;
       _jumpToMatch(_currentMatchIndex);
     });
   }
 
   void _prevMatch() {
-    if (_matchPositions.isEmpty) return;
+    if (_matches.isEmpty) return;
     setState(() {
-      _currentMatchIndex = (_currentMatchIndex - 1 + _matchPositions.length) % _matchPositions.length;
+      _currentMatchIndex = (_currentMatchIndex - 1 + _matches.length) % _matches.length;
       _jumpToMatch(_currentMatchIndex);
     });
   }
 
   void _replace() {
-    if (_currentMatchIndex == -1) return;
-    final pos = _matchPositions[_currentMatchIndex];
+    if (_currentMatchIndex == -1 || _currentMatchIndex >= _matches.length) return;
+    final match = _matches[_currentMatchIndex];
     final text = widget.controller.text;
-    final newText = text.replaceRange(pos, pos + _findController.text.length, _replaceController.text);
+    final newText = text.replaceRange(match.start, match.start + match.length, _replaceController.text);
     widget.controller.text = newText;
     _onSearchChanged(); // Refresh matches
   }
 
   void _replaceAll() {
-    if (_matchPositions.isEmpty) return;
+    if (_matches.isEmpty) return;
     String text = widget.controller.text;
     final query = _findController.text;
     final replacement = _replaceController.text;
     
     if (_useRegex) {
-       text = text.replaceAll(RegExp(query, caseSensitive: _isCaseSensitive), replacement);
+      try {
+        text = text.replaceAll(RegExp(query, caseSensitive: _isCaseSensitive), replacement);
+      } on FormatException {
+        return;
+      }
     } else {
-       // Simple replace all can be complex if overlapping or Case insensitive
-       // For now keep it simple
-       if (_isCaseSensitive && !_matchWholeWord) {
-          text = text.replaceAll(query, replacement);
-       } else {
-          // Manual replace to handle whole word and case sensitivity
-          final sortedPositions = List<int>.from(_matchPositions)..sort((a, b) => b.compareTo(a));
-          for (final pos in sortedPositions) {
-            text = text.replaceRange(pos, pos + query.length, replacement);
-          }
-       }
+      final sortedMatches = List<_SearchMatch>.from(_matches)..sort((a, b) => b.start.compareTo(a.start));
+      for (final match in sortedMatches) {
+        text = text.replaceRange(match.start, match.start + match.length, replacement);
+      }
     }
     
     widget.controller.text = text;
@@ -199,7 +202,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
               ),
               SizedBox(width: ui.spacing.md),
               UiText(
-                text: _matchPositions.isEmpty ? '0 of 0' : '${_currentMatchIndex + 1} of ${_matchPositions.length}',
+                text: _matches.isEmpty ? '0 of 0' : '${_currentMatchIndex + 1} of ${_matches.length}',
                 variant: UiTextVariant.label,
                 fontSize: 10,
                 color: ui.colors.textMuted,
@@ -210,7 +213,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
                 tooltip: 'Previous Match', 
                 size: 24, 
                 iconSize: 14,
-                onPressed: _matchPositions.isNotEmpty ? _prevMatch : null,
+                onPressed: _matches.isNotEmpty ? _prevMatch : null,
               ),
               SizedBox(width: ui.spacing.xs),
               UiIconButton(
@@ -218,7 +221,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
                 tooltip: 'Next Match', 
                 size: 24, 
                 iconSize: 14,
-                onPressed: _matchPositions.isNotEmpty ? _nextMatch : null,
+                onPressed: _matches.isNotEmpty ? _nextMatch : null,
               ),
               SizedBox(width: ui.spacing.md),
               UiIconButton(icon: LucideIcons.x, tooltip: 'Close', size: 24, iconSize: 14, onPressed: widget.onClose),
@@ -246,7 +249,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
                   tooltip: 'Replace All', 
                   size: 24, 
                   iconSize: 14,
-                  onPressed: _matchPositions.isNotEmpty ? _replaceAll : null,
+                  onPressed: _matches.isNotEmpty ? _replaceAll : null,
                 ),
                 const SizedBox(width: 72), // Offset for navigation buttons
               ],

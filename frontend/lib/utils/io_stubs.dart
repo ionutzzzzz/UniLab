@@ -1,17 +1,41 @@
 // Mock/Stub classes for dart:io on Web
 import 'dart:async';
+import 'dart:typed_data';
+
+enum FileMode { read, write, append, writeOnly, writeOnlyAppend }
+
+class FileStat {
+  final int size;
+  final DateTime modified;
+  FileStat({this.size = 0, DateTime? modified})
+      : modified = modified ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+class IOSink {
+  void write(Object? object) {}
+  void writeln([Object? object = '']) {}
+  Future<void> flush() async {}
+  Future<void> close() async {}
+}
 
 abstract class FileSystemEntity {
   final String path;
   FileSystemEntity(this.path);
-  
+
   Future<bool> exists() async => false;
   bool existsSync() => false;
   FileSystemEntity get absolute;
-  Directory get parent => Directory(path.substring(0, path.lastIndexOf('/') == -1 ? 0 : path.lastIndexOf('/')));
+  Directory get parent => Directory(
+        path.substring(
+          0,
+          path.lastIndexOf('/') == -1 ? 0 : path.lastIndexOf('/'),
+        ),
+      );
   Future<FileSystemEntity> delete({bool recursive = false}) async => this;
-  Future<FileSystemEntity> rename(String newPath) async => Directory(newPath); // Placeholder
-  
+  Future<FileSystemEntity> rename(String newPath) async => Directory(newPath);
+  String resolveSymbolicLinksSync() => path;
+  FileStat statSync() => FileStat();
+
   static bool isFileSync(String path) => false;
   static bool isDirectorySync(String path) => false;
 }
@@ -23,6 +47,12 @@ class File extends FileSystemEntity {
   Future<void> writeAsString(String content) async {}
   Future<void> writeAsBytes(List<int> bytes) async {}
   Future<String> readAsString() async => '';
+  String readAsStringSync() => '';
+  Future<Uint8List> readAsBytes() async => Uint8List(0);
+  Uint8List readAsBytesSync() => Uint8List(0);
+  Future<int> length() async => 0;
+  int lengthSync() => 0;
+  IOSink openWrite({FileMode mode = FileMode.write}) => IOSink();
   Future<File> create({bool recursive = false}) async => this;
   @override
   Future<File> rename(String newPath) async => File(newPath);
@@ -33,7 +63,11 @@ class Directory extends FileSystemEntity {
   static Directory get current => Directory('/');
   @override
   Directory get absolute => this;
-  List<FileSystemEntity> listSync({bool recursive = false, bool followLinks = true}) => [];
+  List<FileSystemEntity> listSync({
+    bool recursive = false,
+    bool followLinks = true,
+  }) =>
+      [];
   Future<Directory> create({bool recursive = false}) async => this;
   @override
   Future<Directory> rename(String newPath) async => Directory(newPath);
@@ -46,5 +80,5 @@ class Platform {
   static bool get isAndroid => false;
   static bool get isIOS => false;
   static String get resolvedExecutable => '';
-  static Map<String, String> get environment => {};
+  static Map<String, String> get environment => const {};
 }

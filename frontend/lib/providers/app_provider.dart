@@ -10,14 +10,14 @@ import 'package:printing/printing.dart';
 import 'package:watcher/watcher.dart';
 import 'package:highlight/highlight.dart' as hl;
 import 'package:uuid/uuid.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
+import '../utils/platform_dmw.dart' as dmw;
 import '../models/models.dart';
 import '../models/editor_models.dart';
 import '../features/workspace/domain/workspace_variable.dart' as domain;
 import '../bridge/unilab_bridge.dart';
 import '../utils/file_manager.dart';
 import 'settings_provider.dart';
-import 'dart:io' as io;
+import '../utils/platform_io.dart' as io;
 
 enum BackendStatus { connecting, connected, error }
 
@@ -54,7 +54,7 @@ class AppProvider with ChangeNotifier {
   String _selectedWorkspaceSegment = 'Variables';
 
   String? _plotsWindowId;
-  String? _simulationWindowId;
+  int _untitledCounter = 0;
 
   BackendStatus _backendStatus = BackendStatus.connecting;
 
@@ -132,7 +132,17 @@ class AppProvider with ChangeNotifier {
     ) async {
       if (call.method == 'on_sim_control') {
         final data = jsonDecode(call.arguments);
-        await sendSimControlUpdate(data['id'], data['value']);
+        await sendSimControlUpdate(data['id']?.toString() ?? '', data['value']);
+      }
+      return null;
+    });
+
+    // Provide current plots to detached plots window
+    dmw.WindowMethodChannel('plots_window_channel').setMethodCallHandler((
+      call,
+    ) async {
+      if (call.method == 'get_plots') {
+        return jsonEncode(_generatedPlots.map((p) => p.toJson()).toList());
       }
       return null;
     });
@@ -202,6 +212,7 @@ class AppProvider with ChangeNotifier {
     _watcherSubscription?.cancel();
     _bridgeEventSubscription?.cancel();
     _windowsChangedSubscription?.cancel();
+    _editorActionController.close();
     super.dispose();
   }
 
@@ -315,6 +326,13 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> sendSimControlUpdate(String id, dynamic value) async {
+    for (var i = 0; i < _simulationControls.length; i++) {
+      if (_simulationControls[i]['id'] == id) {
+        _simulationControls[i]['value'] = value;
+        break;
+      }
+    }
+    notifyListeners();
     await UniLabBridge.instance.sendSimEvent({'id': id, 'value': value});
   }
 
@@ -343,7 +361,7 @@ class AppProvider with ChangeNotifier {
   void _syncSimWindow() {
     if (_simWindowId == null) return;
     try {
-      dmw.WindowController.fromWindowId(_simWindowId!).invokeMethod(
+      dmw.WindowMethodChannel('simulation_channel').invokeMethod(
         'update_sim_state',
         jsonEncode({
           'model': _simulationModel,
@@ -545,9 +563,10 @@ class AppProvider with ChangeNotifier {
   }
 
   void addNewFile() {
+    _untitledCounter++;
     final newFile = UniLabFile(
       id: const Uuid().v4(),
-      name: 'Untitled${_openFiles.length + 1}.m',
+      name: 'Untitled$_untitledCounter.m',
       path: '',
       content: '',
     );
@@ -673,8 +692,11 @@ class AppProvider with ChangeNotifier {
   }
 
   void closeFile(int index) {
+    if (index < 0 || index >= _openFiles.length) return;
     _openFiles.removeAt(index);
-    if (_activeFileIndex >= _openFiles.length) {
+    if (index < _activeFileIndex) {
+      _activeFileIndex -= 1;
+    } else if (_activeFileIndex >= _openFiles.length) {
       _activeFileIndex = _openFiles.length - 1;
     }
     notifyListeners();
@@ -691,10 +713,11 @@ class AppProvider with ChangeNotifier {
     _openFiles.insert(newIndex, file);
     if (_activeFileIndex == oldIndex) {
       _activeFileIndex = newIndex;
-    } else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex)
+    } else if (oldIndex < _activeFileIndex && newIndex >= _activeFileIndex) {
       _activeFileIndex -= 1;
-    else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex)
+    } else if (oldIndex > _activeFileIndex && newIndex <= _activeFileIndex) {
       _activeFileIndex += 1;
+    }
     notifyListeners();
   }
 
@@ -1102,7 +1125,7 @@ class AppProvider with ChangeNotifier {
     onPlotsUpdated?.call(List.from(_generatedPlots));
     if (_plotsWindowId != null) {
       try {
-        dmw.WindowController.fromWindowId(_plotsWindowId!).invokeMethod(
+        dmw.WindowMethodChannel('plots_window_channel').invokeMethod(
           'update_plots',
           jsonEncode(_generatedPlots.map((p) => p.toJson()).toList()),
         );
@@ -1117,35 +1140,33 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Future<void> openDetachedPlotsWindow() async {
-  //   if (_plotsWindowId != null) {
-  //     final controller = dmw.WindowController.fromWindowId(_plotsWindowId!);
-  //     await controller.show();
-  //   } else {
-  //     final window = await dmw.WindowController.create(
-  //       dmw.WindowConfiguration(arguments: jsonEncode({'type': 'plots'})),
-  //     );
-
-  //     _plotsWindowId = window.windowId.toString();
-
-  //     await window.show();
-  //   }
-  // }
-
   Future<void> openDetachedPlotsWindow() async {
-    if (_plotsWindowId != null) {
-      final controller = dmw.WindowController.fromWindowId(_plotsWindowId!);
-      await controller.show();
+    if (kIsWeb) return;
+    try {
+      if (_plotsWindowId != null) {
+        final controller = dmw.WindowController.fromWindowId(_plotsWindowId!);
+        await controller.show();
+      } else {
+        final window = await dmw.WindowController.create(
+          dmw.WindowConfiguration(
+            arguments: jsonEncode({
+              'type': 'plots',
+              'plots': _generatedPlots.map((p) => p.toJson()).toList(),
+            }),
+            hiddenAtLaunch: false,
+          ),
+        );
+        _plotsWindowId = window.windowId.toString();
+        await window.show();
+      }
+    } catch (e) {
+      debugPrint('Error creating plots window: $e');
+      _plotsWindowId = null;
     }
   }
 
   Future<void> openDetachedSimulationWindow() async {
-    if (_simulationWindowId != null) {
-      final controller = dmw.WindowController.fromWindowId(
-        _simulationWindowId!,
-      );
-      await controller.show();
-    }
+    await openDetachedSimWindow();
   }
 
   void clearConsole() {
@@ -1253,12 +1274,41 @@ class AppProvider with ChangeNotifier {
   Future<void> fetchWorkspaceVariables() async {
     try {
       _updateVariablesFromMap(await UniLabBridge.instance.getWorkspace());
-    } catch (e) {}
+    } catch (_) {}
+  }
+
+  Future<void> restartBackend() async {
+    _addConsoleMessage(
+      'Restarting backend server...',
+      ConsoleMessageType.output,
+      source: 'System',
+    );
+    _backendStatus = BackendStatus.connecting;
+    notifyListeners();
+    try {
+      UniLabBridge.resetInstance();
+      await _initBridge();
+      await fetchWorkspaceVariables();
+      _addConsoleMessage(
+        'Backend restarted successfully.',
+        ConsoleMessageType.success,
+        source: 'System',
+      );
+    } catch (e) {
+      _backendStatus = BackendStatus.error;
+      _addConsoleMessage(
+        'Failed to restart backend: $e',
+        ConsoleMessageType.error,
+        source: 'System',
+      );
+    }
+    notifyListeners();
   }
 
   Future<void> openFilePicker() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
+      withData: kIsWeb,
       allowedExtensions: [
         'm',
         'txt',
@@ -1286,18 +1336,22 @@ class AppProvider with ChangeNotifier {
         if (existingIndex != -1) {
           _activeFileIndex = existingIndex;
         } else {
+          final bytes = fileData.bytes;
+          final content =
+              bytes != null ? utf8.decode(bytes, allowMalformed: true) : '';
           _openFiles.add(
             UniLabFile(
               id: const Uuid().v4(),
               name: fileData.name,
               path: path,
-              content: String.fromCharCodes(fileData.bytes!),
+              content: content,
             ),
           );
           _activeFileIndex = _openFiles.length - 1;
         }
-      } else if (result.files.single.path != null)
+      } else if (result.files.single.path != null) {
         await openFile(io.File(result.files.single.path!));
+      }
       notifyListeners();
     }
   }
@@ -1313,7 +1367,7 @@ class AppProvider with ChangeNotifier {
       _workspaceVariables.clear();
       onVariablesUpdated?.call([]);
       notifyListeners();
-    } catch (e) {}
+    } catch (_) {}
   }
 
   void stopExecution() {

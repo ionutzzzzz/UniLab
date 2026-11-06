@@ -15,14 +15,10 @@ n1 = vector_norm_1(state_v);
 n2 = vector_norm_2(state_v);
 ninf = vector_norm_inf(state_v);
 
-fprintf('Vector: [%.1f, %.1f, %.1f]
-', state_v(1), state_v(2), state_v(3));
-fprintf('Manhattan (L1) Norm: %.2f
-', n1);
-fprintf('Euclidean (L2) Norm: %.2f
-', n2);
-fprintf('Maximum (L-inf) Norm: %.2f
-', ninf);
+fprintf('Vector: [%.1f, %.1f, %.1f]\n', state_v(1), state_v(2), state_v(3));
+fprintf('Manhattan (L1) Norm: %.2f\n', n1);
+fprintf('Euclidean (L2) Norm: %.2f\n', n2);
+fprintf('Maximum (L-inf) Norm: %.2f\n', ninf);
 
 disp('--- 2. Matrix Trace and Orthogonality ---');
 % Create a 3D Rotation matrix around the Z axis
@@ -33,8 +29,7 @@ disp('Rotation Matrix R_z(pi/3):');
 disp(R);
 
 tr = matrix_trace(R);
-fprintf('Trace of Rotation Matrix: %.4f
-', tr);
+fprintf('Trace of Rotation Matrix: %.4f\n', tr);
 
 if is_orthogonal(R)
     disp('Property Check: The rotation matrix is VERIFIED as Orthogonal (R^T * R = I).');

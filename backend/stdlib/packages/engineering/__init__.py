@@ -45,15 +45,16 @@ def finite_difference_1d(length=1.0, conductivity=50.0, boundary_temps=(100.0, 2
     Solves 1D steady-state heat equation: -k * d^2T/dx^2 = Q
     - length: length of the rod (meters)
     - conductivity: thermal conductivity (W/mK)
-    - boundary_temps: tuple of (T_left, T_right) (Celsius/Kelvin)
+    - boundary_temps: tuple or array of (T_left, T_right) (Celsius/Kelvin)
     - source_term: constant heat generation rate Q (W/m^3)
     - n_points: number of grid points
     """
-    L = float(length)
-    k = float(conductivity)
-    T_left, T_right = float(boundary_temps[0]), float(boundary_temps[1])
-    Q = float(source_term)
-    N = int(n_points)
+    L = float(np.asarray(length).item() if np.size(length) == 1 else length)
+    k = float(np.asarray(conductivity).item() if np.size(conductivity) == 1 else conductivity)
+    b_arr = np.asarray(boundary_temps).flatten()
+    T_left, T_right = float(b_arr[0]), float(b_arr[1])
+    Q = float(np.asarray(source_term).item() if np.size(source_term) == 1 else source_term)
+    N = int(np.asarray(n_points).item() if np.size(n_points) == 1 else n_points)
     
     dx = L / (N - 1)
     x = np.linspace(0, L, N)
@@ -231,8 +232,8 @@ def control_bode_plot(num=None, den=None):
     if num is None: num = [1.0]
     if den is None: den = [1.0, 1.0]
     
-    num_poly = np.poly1d(num)
-    den_poly = np.poly1d(den)
+    num_poly = np.poly1d(np.asarray(num, dtype=float).flatten())
+    den_poly = np.poly1d(np.asarray(den, dtype=float).flatten())
     
     # Generate frequencies logarithmically (0.01 to 1000 rad/s)
     w = np.logspace(-2, 3, 500)

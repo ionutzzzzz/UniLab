@@ -1,5 +1,6 @@
 function pairs = goldbach_conjecture_check(n)
     % GOLDBACH_CONJECTURE_CHECK Find all pairs of primes that sum to even n
+    if nargin < 1, n = []; end
     if mod(n, 2) ~= 0 || n <= 2
         pairs = [];
         return;

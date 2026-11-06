@@ -1,30 +1,54 @@
 // Mock/Stub classes for desktop-only features on Web
 import 'dart:async';
 
+enum ChannelMode { unidirectional, bidirectional }
+
 class WindowController {
-  final int windowId;
-  WindowController(this.windowId);
-  
-  static Future<WindowController> fromCurrentEngine() async => WindowController(0);
-  static Future<WindowController> create(dynamic config) async => WindowController(0);
-  static WindowController fromWindowId(String id) => WindowController(0);
+  final String windowId;
+  final String arguments;
+
+  WindowController({required this.windowId, this.arguments = ''});
+
+  static Future<WindowController> fromCurrentEngine() async =>
+      WindowController(windowId: '0');
+  static Future<WindowController> create(WindowConfiguration config) async =>
+      WindowController(windowId: '0', arguments: config.arguments);
+  static WindowController fromWindowId(String id) =>
+      WindowController(windowId: id);
   static Future<List<WindowController>> getAll() async => [];
-  
-  String get arguments => '';
+
   Future<void> show() async {}
   Future<void> hide() async {}
-  Future<void> close() async {}
-  Future<dynamic> invokeMethod(String method, [dynamic arguments]) async => null;
+  Future<dynamic> invokeMethod(String method, [dynamic arguments]) async =>
+      null;
+  Future<void> setWindowMethodHandler(
+    Future<dynamic> Function(dynamic call)? handler,
+  ) async {}
 }
 
 class WindowConfiguration {
-  const WindowConfiguration({dynamic arguments, bool hiddenAtLaunch = false});
+  final String arguments;
+  final bool hiddenAtLaunch;
+
+  const WindowConfiguration({
+    this.arguments = '',
+    this.hiddenAtLaunch = false,
+  });
 }
 
 class WindowMethodChannel {
   final String name;
-  WindowMethodChannel(this.name);
-  void setMethodCallHandler(Future<dynamic> Function(dynamic call)? handler) {}
+  final ChannelMode mode;
+
+  const WindowMethodChannel(
+    this.name, {
+    this.mode = ChannelMode.bidirectional,
+  });
+
+  Future<void> setMethodCallHandler(
+    Future<dynamic> Function(dynamic call)? handler,
+  ) async {}
+
   Future<T?> invokeMethod<T>(String method, [dynamic arguments]) async => null;
 }
 

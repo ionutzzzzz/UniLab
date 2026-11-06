@@ -2,6 +2,8 @@ function [r] = snr(signal, noise)
     % SNR Signal-to-Noise Ratio in dB
     % r = snr(signal, noise) where noise can be the noise signal or its power
     
+    if nargin < 1, signal = []; end
+    if nargin < 2, noise = []; end
     p_signal = mean(signal.^2);
     if length(noise) == length(signal)
         p_noise = mean(noise.^2);

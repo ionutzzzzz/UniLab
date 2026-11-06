@@ -2,6 +2,8 @@ function [g, x, y] = extended_gcd(a, b)
     % EXTENDED_GCD Extended Euclidean Algorithm
     % Returns [g, x, y] such that ax + by = g = gcd(a, b)
     
+    if nargin < 1, a = []; end
+    if nargin < 2, b = []; end
     if a == 0
         g = b; x = 0; y = 1;
         return;

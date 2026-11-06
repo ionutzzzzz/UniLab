@@ -2,6 +2,8 @@ function [gbm_model] = gradient_boosting_train(X, y, n_estimators, lr, max_depth
     % GRADIENT_BOOSTING_TRAIN Train a gradient boosting ensemble
     % gbm_model = gradient_boosting_train(X, y, n_estimators, lr, max_depth, task)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
     if nargin < 6, task = 'regression'; end
     if nargin < 5, max_depth = 3; end
     if nargin < 4, lr = 0.1; end

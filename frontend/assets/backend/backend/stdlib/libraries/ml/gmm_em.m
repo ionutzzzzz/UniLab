@@ -1,5 +1,9 @@
 function [weights, means, covs] = gmm_em(X, K, max_iters, tol)
     % GMM_EM Gaussian Mixture Model using Expectation-Maximization
+    if nargin < 1, X = []; end
+    if nargin < 2, K = []; end
+    if nargin < 3, max_iters = []; end
+    if nargin < 4, tol = []; end
     [m, n] = size(X);
     if nargin < 4, tol = 1e-6; end
     if nargin < 3, max_iters = 100; end

@@ -2,6 +2,9 @@ function [W, b, loss_history] = nn_train(X, Y, epochs, lr, lambda, activation)
     % NN_TRAIN Train a simple neural network using gradient descent
     % [W, b, loss_history] = nn_train(X, Y, epochs, lr, lambda, activation)
     
+    if nargin < 1, X = []; end
+    if nargin < 2, Y = []; end
+    if nargin < 3, epochs = []; end
     if nargin < 6, activation = 'sigmoid'; end
     if nargin < 5, lambda = 0; end
     if nargin < 4, lr = 0.01; end

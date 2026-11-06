@@ -2,6 +2,10 @@ function [pulses] = interleaved_pwm(v_ref, fs, f_carrier, num_phases)
     % INTERLEAVED_PWM Generates interleaved PWM pulses
     % num_phases: number of parallel phases (e.g., for interleaved buck)
     
+    if nargin < 1, v_ref = []; end
+    if nargin < 2, fs = []; end
+    if nargin < 3, f_carrier = []; end
+    if nargin < 4, num_phases = []; end
     t = (0:length(v_ref)-1) / fs;
     pulses = zeros(length(v_ref), num_phases);
     

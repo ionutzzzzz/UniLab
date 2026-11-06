@@ -3,6 +3,8 @@ function [R, L, C] = power_lineparam(length_km, rho, r, D_eq)
     % [R, L, C] = power_lineparam(length_km, rho, r, D_eq)
     % rho: resistivity, r: conductor radius, D_eq: equivalent distance between phases
     
+    if nargin < 1, length_km = []; end
+    if nargin < 2, rho = []; end
     if nargin < 3, r = 0.01; end % 1cm
     if nargin < 4, D_eq = 1.0; end % 1m
     

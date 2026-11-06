@@ -1,6 +1,8 @@
 function model = varm(num_series, lags)
     % VARM Returns a VAR model struct
     
+    if nargin < 1, num_series = []; end
+    if nargin < 2, lags = []; end
     model.Type = 'VAR';
     model.NumSeries = num_series;
     model.Lags = lags;

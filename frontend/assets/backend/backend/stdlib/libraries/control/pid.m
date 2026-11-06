@@ -1,6 +1,7 @@
 function [sys] = pid(Kp, Ki, Kd)
     % PID Create a Proportional-Integral-Derivative controller
     % sys = pid(Kp, Ki, Kd) returns a transfer function model
+    if nargin < 1, Kp = []; end
     if nargin < 2, Ki = 0; end
     if nargin < 3, Kd = 0; end
     

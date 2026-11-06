@@ -1,4 +1,5 @@
 function d = graph_density(A, directed)
+    if nargin < 1, A = []; end
     if nargin < 2, directed = false; end
     n = size(A, 1);
     E = sum(sum(A ~= 0));

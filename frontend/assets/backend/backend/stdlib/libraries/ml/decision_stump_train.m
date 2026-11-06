@@ -1,6 +1,9 @@
 function [stump] = decision_stump_train(X, y, weights)
     % DECISION_STUMP_TRAIN Train a one-level decision tree with weighted samples
     
+    if nargin < 1, X = []; end
+    if nargin < 2, y = []; end
+    if nargin < 3, weights = []; end
     [m, n] = size(X);
     best_err = 1e9;
     stump = struct();

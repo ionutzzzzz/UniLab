@@ -7,7 +7,7 @@ import '../../../../widgets/ui_text.dart';
 import '../../../../widgets/ui_button.dart';
 import '../../../../widgets/ui_glass_container.dart';
 import '../../../../providers/app_provider.dart';
-import 'dart:io' as io;
+import '../../../../utils/platform_io.dart' as io;
 
 class FileBackstage extends StatefulWidget {
   const FileBackstage({super.key});
@@ -264,7 +264,19 @@ class _FileBackstageState extends State<FileBackstage> {
               LucideIcons.functionSquare, 
               'Template for reusable logic',
               onTap: () {
-                appProvider.createProjectFile('new_function.m', 'function [out] = new_function(in)\n\t% NEW_FUNCTION Summary of this function goes here\n\t% Detailed explanation goes here\n\tout = in;\nend');
+                int counter = 1;
+                String fileName = 'new_function.m';
+                final existingNames = appProvider.projectFiles
+                    .map((f) => p.basename(f.path.toString()))
+                    .toSet();
+                final openNames = appProvider.openFiles.map((f) => f.name).toSet();
+                while (existingNames.contains(fileName) || openNames.contains(fileName)) {
+                  counter++;
+                  fileName = 'new_function_$counter.m';
+                }
+                final fn = fileName.replaceAll('.m', '');
+                final content = 'function [out] = $fn(in)\n\t% ${fn.toUpperCase()} Summary of this function goes here\n\t% Detailed explanation goes here\n\tout = in;\nend';
+                appProvider.createProjectFile(fileName, content);
                 Navigator.pop(context);
               }
             ),

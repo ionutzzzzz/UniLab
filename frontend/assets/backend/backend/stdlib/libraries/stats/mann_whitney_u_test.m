@@ -1,5 +1,7 @@
 function [U, p_val] = mann_whitney_u_test(x1, x2)
     % MANN_WHITNEY_U_TEST Non-parametric test for two independent samples
+    if nargin < 1, x1 = []; end
+    if nargin < 2, x2 = []; end
     n1 = length(x1);
     n2 = length(x2);
     combined = [x1(:); x2(:)];

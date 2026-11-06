@@ -1,6 +1,7 @@
 function L = cholesky_decomposition(A)
     % CHOLESKY_DECOMPOSITION Compute Cholesky factor L such that A = L*L'
     % A must be Hermitian and positive-definite
+    if nargin < 1, A = []; end
     n = size(A, 1);
     L = zeros(n, n);
     for i = 1:n

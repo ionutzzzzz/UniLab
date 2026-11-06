@@ -6,10 +6,7 @@ final terminalSessionsProvider = NotifierProvider<TerminalSessionsNotifier, List
   TerminalSessionsNotifier.new,
 );
 
-final activeTerminalSessionIdProvider = StateProvider<String?>((ref) {
-  final sessions = ref.watch(terminalSessionsProvider);
-  return sessions.isNotEmpty ? sessions.first.id : null;
-});
+final activeTerminalSessionIdProvider = StateProvider<String?>((ref) => null);
 
 class TerminalSessionsNotifier extends Notifier<List<TerminalSession>> {
   @override

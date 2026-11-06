@@ -10,14 +10,14 @@ services:
     environment:
       - UNILAB_WORKSPACE_ROOT=/app/workspaces
       - LOG_LEVEL=INFO
-    restart: always
+    restart: unless-stopped
 
   unilab-core:
     build:
       context: ..
       dockerfile: docker/Dockerfile.core
     volumes:
-      - ./samples:/samples
+      - ../sample:/samples:ro
     restart: "no"
 
 volumes:

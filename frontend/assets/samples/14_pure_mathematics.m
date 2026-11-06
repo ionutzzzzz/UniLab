@@ -28,7 +28,5 @@ hands = nchoosek_custom(n_cards, k_hand);
 % Calculate Royal Flush probability (4 possible suits out of total hands)
 prob_royal = 4 / hands;
 
-fprintf('Total possible 5-card poker hands: %d
-', hands);
-fprintf('Probability of getting a Royal Flush: %.8f%%
-', prob_royal * 100);
+fprintf('Total possible 5-card poker hands: %d\n', hands);
+fprintf('Probability of getting a Royal Flush: %.8f%%\n', prob_royal * 100);

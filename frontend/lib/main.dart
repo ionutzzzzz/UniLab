@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:io';
+import 'utils/platform_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart' as p_provider;
 import 'package:window_manager/window_manager.dart';
 import 'package:context_menus/context_menus.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart' as dmw;
+import 'utils/platform_dmw.dart' as dmw;
 import 'dart:convert';
 import 'theme/app_theme.dart';
 import 'providers/app_provider.dart';

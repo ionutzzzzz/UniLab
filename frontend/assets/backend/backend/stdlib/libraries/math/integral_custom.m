@@ -2,10 +2,18 @@ function [I] = integral_custom(f, a, b, tol)
     % INTEGRAL_CUSTOM Adaptive Simpson's numerical integration
     % I = integral_custom(f, a, b)
     
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
     if nargin < 4, tol = 1e-6; end
     
     % Helper for recursive adaptive Simpson
     function [S] = adaptive_simpson(f, a, b, tol, whole)
+    if nargin < 1, f = []; end
+    if nargin < 2, a = []; end
+    if nargin < 3, b = []; end
+    if nargin < 4, tol = []; end
+    if nargin < 5, whole = []; end
         c = (a + b) / 2;
         left = (a + c) / 2;
         right = (c + b) / 2;

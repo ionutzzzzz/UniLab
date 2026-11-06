@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math' as math;
 import '../../models/editor_models.dart';
 
 class PlotWidget extends StatefulWidget {
@@ -175,92 +176,97 @@ class _PlotWidgetState extends State<PlotWidget> {
     }
 
     // Default to line chart for structured data
+    final spots = _getSpots();
+    if (spots.isEmpty) {
+      return const SizedBox(
+        height: 180,
+        child: Center(child: Text('No plot data available')),
+      );
+    }
+    final safeWidth = math.max(1.0, availableWidth * _zoom);
+    final safeHeight = math.max(1.0, (availableWidth * 0.6) * _zoom);
+
     return SizedBox(
-      height: (availableWidth * 0.6) * _zoom,
-      width: availableWidth * _zoom,
+      height: safeHeight,
+      width: safeWidth,
       child: LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: true,
-          horizontalInterval: 1,
-          verticalInterval: 1,
-          getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: Theme.of(context).dividerColor,
-              strokeWidth: 1,
-            );
-          },
-          getDrawingVerticalLine: (value) {
-            return FlLine(
-              color: Theme.of(context).dividerColor,
-              strokeWidth: 1,
-            );
-          },
-        ),
-        titlesData: const FlTitlesData(
-          show: true,
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: Theme.of(context).dividerColor),
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: _getSpots(),
-            isCurved: true,
-            color: Theme.of(context).primaryColor,
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: false),
+        LineChartData(
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: true,
+            getDrawingHorizontalLine: (value) {
+              return FlLine(
+                color: Theme.of(context).dividerColor,
+                strokeWidth: 1,
+              );
+            },
+            getDrawingVerticalLine: (value) {
+              return FlLine(
+                color: Theme.of(context).dividerColor,
+                strokeWidth: 1,
+              );
+            },
           ),
-        ],
+          titlesData: const FlTitlesData(
+            show: true,
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          borderData: FlBorderData(
+            show: true,
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: Theme.of(context).primaryColor,
+              barWidth: 2,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(show: false),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
   List<FlSpot> _getSpots() {
     if (widget.plot != null) {
       if (widget.plot!.xData.isEmpty || widget.plot!.yData.isEmpty) {
-        return const [
-          FlSpot(0, 3),
-          FlSpot(2.6, 2),
-          FlSpot(4.9, 5),
-          FlSpot(6.8, 3.1),
-          FlSpot(8, 4),
-          FlSpot(9.5, 3),
-          FlSpot(11, 4),
-        ];
+        return const [];
       }
 
       final List<FlSpot> spots = [];
-      final int len = widget.plot!.xData.length < widget.plot!.yData.length
-          ? widget.plot!.xData.length
-          : widget.plot!.yData.length;
+      final int len = math.min(
+        widget.plot!.xData.length,
+        widget.plot!.yData.length,
+      );
 
       for (int i = 0; i < len; i++) {
-        spots.add(FlSpot(widget.plot!.xData[i], widget.plot!.yData[i]));
+        final x = widget.plot!.xData[i];
+        final y = widget.plot!.yData[i];
+        if (x.isFinite && y.isFinite) {
+          spots.add(FlSpot(x, y));
+        }
       }
       return spots;
     }
 
     if (widget.data != null && widget.data!.isNotEmpty) {
-      return widget.data!.map((e) => FlSpot(e['x']!, e['y']!)).toList();
+      final List<FlSpot> spots = [];
+      for (final e in widget.data!) {
+        final x = e['x'];
+        final y = e['y'];
+        if (x != null && y != null && x.isFinite && y.isFinite) {
+          spots.add(FlSpot(x, y));
+        }
+      }
+      return spots;
     }
 
-    return const [
-      FlSpot(0, 3),
-      FlSpot(2.6, 2),
-      FlSpot(4.9, 5),
-      FlSpot(6.8, 3.1),
-      FlSpot(8, 4),
-      FlSpot(9.5, 3),
-      FlSpot(11, 4),
-    ];
+    return const [];
   }
 
   void _showZoomedPlot(BuildContext context) {

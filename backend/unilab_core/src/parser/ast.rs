@@ -22,6 +22,7 @@ pub enum Expr {
     Identifier(String),
     End,
     Colon,
+    Ignore,
     Matrix(Vec<Vec<Expr>>),
     CellArray(Vec<Vec<Expr>>),
     BinaryOp(Box<Expr>, BinaryOperator, Box<Expr>),
@@ -39,6 +40,7 @@ pub enum Expr {
         property: String,
     },
     Transpose(Box<Expr>),
+    ArrayTranspose(Box<Expr>),
     AnonymousFunc {
         params: Vec<String>,
         body: Box<Expr>,
@@ -49,10 +51,14 @@ pub enum Expr {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Stmt {
-    Expression(Expr),
+    Expression {
+        expr: Expr,
+        suppressed: bool,
+    },
     Assignment {
         lhs: Vec<Expr>,
         rhs: Expr,
+        suppressed: bool,
     },
     If {
         condition: Expr,

@@ -15,10 +15,8 @@ kg_water = 0.500; % Approx 1kg/L for water
 
 M = molarity(moles_NaCl, liters_water);
 m = molality(moles_NaCl, kg_water);
-fprintf('NaCl Solution Molarity: %.3f M
-', M);
-fprintf('NaCl Solution Molality: %.3f m
-', m);
+fprintf('NaCl Solution Molarity: %.3f M\n', M);
+fprintf('NaCl Solution Molality: %.3f m\n', m);
 
 disp('--- 2. pH Titration Curve Simulation ---');
 % Simulate adding strong base (OH-) to strong acid (H+)

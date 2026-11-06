@@ -1,6 +1,7 @@
 function [phi] = phi_euler(n)
     % PHI_EULER Euler's totient function
     
+    if nargin < 1, n = []; end
     phi = n;
     temp = n;
     d = 2;

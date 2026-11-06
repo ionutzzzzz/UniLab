@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_neural_network(layers, title="Neural Network Architecture"):
+def plot_neural_network(layers=None, title="Neural Network Architecture"):
     """
     Plots a professional neural network architecture.
     layers: list of integers representing the number of neurons in each layer.

@@ -2,6 +2,7 @@ function [val] = thd(x, fs)
     % THD Calculates Total Harmonic Distortion of a signal
     % val = thd(x, fs)
     
+    if nargin < 1, x = []; end
     if nargin < 2, fs = 1; end
     
     X = fft(x);

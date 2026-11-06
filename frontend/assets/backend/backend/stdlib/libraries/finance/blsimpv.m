@@ -1,5 +1,10 @@
 function iv = blsimpv(S, K, T, r, market_price, type)
     % BLSIMPV Implied volatility of an option
+    if nargin < 1, S = []; end
+    if nargin < 2, K = []; end
+    if nargin < 3, T = []; end
+    if nargin < 4, r = []; end
+    if nargin < 5, market_price = []; end
     if nargin < 6, type = 'call'; end
     
     % Simple Newton-Raphson to find volatility

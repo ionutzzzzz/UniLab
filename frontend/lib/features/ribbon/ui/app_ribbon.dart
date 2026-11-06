@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart' as p;
-import 'dart:io';
+import '../../../utils/platform_io.dart';
 import 'package:path/path.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
@@ -219,7 +219,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
         PopupMenuItem(value: 'Live Script (.mlx)', child: Text('Live Script (.mlx)', style: TextStyle(color: ui.colors.textPrimary, fontSize: 13))),
       ],
     ).then((value) {
-      if (value != null) {
+      if (value != null && context.mounted) {
         _showNameDialog(context, value);
       }
     });
