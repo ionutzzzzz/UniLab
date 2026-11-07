@@ -19,6 +19,7 @@ class RibbonBody extends StatelessWidget {
     final ui = UiTheme.of(context);
     
     return Container(
+      width: double.infinity,
       height: 92,
       color: ui.colors.panelHeader,
       padding: EdgeInsets.only(
@@ -31,6 +32,7 @@ class RibbonBody extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: groups,
         ),
       ),

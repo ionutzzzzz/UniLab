@@ -7,7 +7,7 @@ pub mod ffi;
 
 pub use parser::ast;
 pub use parser::parse_unilab;
-pub use api::{run_code, UniLabEngine, ExecutionResult};
+pub use api::{run_code, UniLabEngine};
 pub use runtime::value::Value;
 pub use runtime::env::Environment;
 pub use runtime::eval::Evaluator;
@@ -22,6 +22,14 @@ pub struct PlotData {
     pub title: Option<String>,
     pub xlabel: Option<String>,
     pub ylabel: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExecutionResult {
+    pub success: bool,
+    pub output: String,
+    pub error: Option<String>,
+    pub plots: Vec<PlotData>,
 }
 
 #[cfg(feature = "python-bridge")]

@@ -463,6 +463,7 @@ impl Evaluator {
         match l {
             Expr::Identifier(name) => {
                 self.env.write().unwrap_or_else(|e| e.into_inner()).define(name.clone(), val);
+                Ok(())
             }
             Expr::FunctionCall { func, args } => {
                 if let Expr::Identifier(name) = &**func {
@@ -1203,7 +1204,7 @@ impl Evaluator {
             }
             (Value::String(a), BinaryOperator::Eq, Value::String(b)) => Ok(Value::Bool(*a == *b)),
             (Value::String(a), BinaryOperator::Ne, Value::String(b)) => Ok(Value::Bool(*a != *b)),
-            _ => Err(format!("Binary operation {:?} not yet implemented for these types: {:?} and {:?}", op, left, right)),
+            (l, _, r) => Err(format!("Binary operation {:?} not yet implemented for these types: {:?} and {:?}", op, l, r)),
         }
     }
 
@@ -1497,7 +1498,7 @@ impl Evaluator {
                             _ => return Err("Invalid rand args count".to_string()),
                         };
                         let mut rng = rand::thread_rng();
-                        let data: Vec<f64> = (0..rows * cols).map(|_| rng.gen::<f64>()).collect();
+                        let data: Vec<f64> = (0..rows * cols).map(|_| rng.r#gen::<f64>()).collect();
                         Ok(Value::Matrix(Arc::new(Array2::from_shape_vec((rows, cols), data).unwrap())))
                     }
                     "randn" => {

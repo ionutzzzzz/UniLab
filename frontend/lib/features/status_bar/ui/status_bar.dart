@@ -85,6 +85,7 @@ class _AppStatusBarState extends ConsumerState<AppStatusBar> {
       ..sort((a, b) => a.priority.compareTo(b.priority));
 
     return Container(
+      width: double.infinity,
       height: 24,
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,

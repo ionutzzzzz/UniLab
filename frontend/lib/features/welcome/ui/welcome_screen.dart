@@ -19,6 +19,7 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: ui.colors.canvas,
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const TitleStrip(),
           Expanded(

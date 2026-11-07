@@ -39,4 +39,23 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
   end
+
+  # Strip FileProvider FinderInfo detritus before Xcode codesign
+  pods_runner_frameworks = File.join(installer.sandbox.target_support_files_dir('Pods-Runner'), 'Pods-Runner-frameworks.sh')
+  if File.exist?(pods_runner_frameworks)
+    text = File.read(pods_runner_frameworks)
+    unless text.include?('xattr -cr')
+      File.open(pods_runner_frameworks, 'a') do |f|
+        f.puts "\nxattr -cr \"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}\" 2>/dev/null || true\n"
+      end
+    end
+
+    # Ensure libunilab_core.dylib is embedded and codesigned in the app bundle
+    dylib_hook = 'install_unilab_bridge'
+    unless text.include?(dylib_hook)
+      File.open(pods_runner_frameworks, 'a') do |f|
+        f.puts "\n# #{dylib_hook}\nUNILAB_BRIDGE=\"${PODS_ROOT}/../../macos/Frameworks/libunilab_core.dylib\"\nif [ -f \"$UNILAB_BRIDGE\" ]; then\n  FRAMEWORKS_DIR=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/Frameworks\"\n  mkdir -p \"$FRAMEWORKS_DIR\"\n  cp -f \"$UNILAB_BRIDGE\" \"$FRAMEWORKS_DIR/\"\n  codesign --force --sign - --timestamp=none \"$FRAMEWORKS_DIR/libunilab_core.dylib\" 2>/dev/null || true\nfi\n"
+      end
+    end
+  end
 end

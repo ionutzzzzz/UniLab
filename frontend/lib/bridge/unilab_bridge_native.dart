@@ -179,10 +179,19 @@ class UniLabBridge {
       p.join(backendPath, 'backend', 'target', 'debug', libName),
       p.join(backendPath, 'target', 'release', libName),
       p.join(backendPath, 'target', 'debug', libName),
+      p.join(backendPath, 'frontend', 'macos', 'Frameworks', libName),
+      p.join(backendPath, 'frontend', 'linux', libName),
+      p.join(backendPath, 'frontend', 'windows', libName),
       p.join(cwd, 'backend', 'target', 'release', libName),
       p.join(cwd, 'backend', 'target', 'debug', libName),
+      p.join(cwd, 'macos', 'Frameworks', libName),
+      p.join(cwd, 'linux', libName),
+      p.join(cwd, 'windows', libName),
       p.join(parentCwd, 'backend', 'target', 'release', libName),
       p.join(parentCwd, 'backend', 'target', 'debug', libName),
+      p.join(parentCwd, 'frontend', 'macos', 'Frameworks', libName),
+      p.join(parentCwd, 'frontend', 'linux', libName),
+      p.join(parentCwd, 'frontend', 'windows', libName),
       p.join(cwd, libName),
       libName,
     ]);
@@ -191,7 +200,9 @@ class UniLabBridge {
       try {
         debugPrint('[UniLabBridge] Attempting to load library from: $loc');
         return DynamicLibrary.open(loc);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[UniLabBridge] Failed to load from $loc: $e');
+      }
     }
     throw Exception('Could not load library $libName. Searched in: $candidates');
   }

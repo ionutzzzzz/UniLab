@@ -15,10 +15,11 @@ class TitleStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = Provider.of<AppProvider>(context);
+    final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
     Widget content = Row(
       children: [
-        SizedBox(width: ui.spacing.md),
+        SizedBox(width: isMac ? 78 : ui.spacing.md),
         // MATLAB-inspired Brand Pill
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -99,6 +100,7 @@ class TitleStrip extends StatelessWidget {
     );
 
     return Container(
+      width: double.infinity,
       height: 40, // Slightly taller
       decoration: BoxDecoration(
         color: ui.colors.panelHeader,
@@ -142,6 +144,7 @@ class WindowButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -153,28 +156,30 @@ class WindowButtons extends StatelessWidget {
             hoverColor: ui.colors.hover,
             tooltip: 'Close Project',
           ),
-        _WindowButton(
-          icon: LucideIcons.minus,
-          onTap: () => windowManager.minimize(),
-          hoverColor: ui.colors.hover,
-        ),
-        _WindowButton(
-          icon: LucideIcons.square,
-          onTap: () async {
-            if (await windowManager.isMaximized()) {
-              windowManager.unmaximize();
-            } else {
-              windowManager.maximize();
-            }
-          },
-          hoverColor: ui.colors.hover,
-        ),
-        _WindowButton(
-          icon: LucideIcons.x,
-          onTap: () => windowManager.close(),
-          hoverColor: ui.colors.danger.withValues(alpha: 0.8),
-          isClose: true,
-        ),
+        if (!isMac) ...[
+          _WindowButton(
+            icon: LucideIcons.minus,
+            onTap: () => windowManager.minimize(),
+            hoverColor: ui.colors.hover,
+          ),
+          _WindowButton(
+            icon: LucideIcons.square,
+            onTap: () async {
+              if (await windowManager.isMaximized()) {
+                windowManager.unmaximize();
+              } else {
+                windowManager.maximize();
+              }
+            },
+            hoverColor: ui.colors.hover,
+          ),
+          _WindowButton(
+            icon: LucideIcons.x,
+            onTap: () => windowManager.close(),
+            hoverColor: ui.colors.danger.withValues(alpha: 0.8),
+            isClose: true,
+          ),
+        ],
       ],
     );
   }

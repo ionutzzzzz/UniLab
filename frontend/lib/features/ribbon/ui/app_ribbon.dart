@@ -514,8 +514,10 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
 
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
+          width: double.infinity,
           decoration: BoxDecoration(
             color: ui.colors.ribbonTabs,
             border: Border(
@@ -574,6 +576,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
           ),
         ),
         Container(
+          width: double.infinity,
           decoration: BoxDecoration(
             color: ui.colors.panelHeader,
             boxShadow: [

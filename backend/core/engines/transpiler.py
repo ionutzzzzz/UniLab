@@ -76,6 +76,16 @@ class AutoloadDict(dict):
         return super().__getitem__(key)
 
 
+DEFAULT_SYSTEM_VARIABLES = {
+    'np', 'plt', 'signal', 'unilab_workspace_ctx', 'unilab_update_ctx', '_unilab_3d_data_store',
+    'unilab_simulate', 'simulate', 'scipy_fft', 'scipy_ifft', 'scipy_fftshift', 
+    'scipy_ifftshift', 'builtins', 'inspect', 'io', 'os', 'pathlib', 'time',
+    'UnilabEnd', 'unilab_end', 'UnilabHandle', 'UnilabCVPartition', 'ContextVar',
+    'pi', 'inf', 'Inf', 'nan', 'NaN', 'eps', 'i', 'j', 'realmax', 'realmin', 
+    'true', 'false', 'unilab_set', 'unilab_get', 'addpath', 'abs', 'stats', 'ml',
+    'IS_HEADLESS', 'unilab_cwd_ctx', 'ans'
+}
+
 class TranspilerEngine(BaseEngine):
     def __init__(self, session: SessionInfo):
         super().__init__(session)
@@ -854,7 +864,7 @@ class TranspilerEngine(BaseEngine):
         import types
         
         for k, v in self.globals.items():
-            if k.startswith('_') or k in ('np', 'plt', 'ans', 'addpath'):
+            if k.startswith('_') or k.lower().startswith('unilab') or k in DEFAULT_SYSTEM_VARIABLES:
                 continue
             
             # Skip core modules

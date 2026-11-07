@@ -131,6 +131,15 @@ if check_gui_availability; then
     log_success "GUI detected! Launching Flutter application (-d $TARGET_DEVICE)..."
 
     if [ -d "$FRONTEND_DIR" ] && command -v flutter >/dev/null 2>&1; then
+        # Ensure native bridge is compiled before launching Flutter desktop
+        if [ "$TARGET_DEVICE" = "macos" ] && [ ! -f "$FRONTEND_DIR/macos/Frameworks/libunilab_core.dylib" ]; then
+            log_info "Native macOS bridge not found. Building bridge..."
+            "$SCRIPT_DIR/script/build_bridge.sh" || log_warn "Bridge build failed, continuing anyway..."
+        elif [ "$TARGET_DEVICE" = "linux" ] && [ ! -f "$FRONTEND_DIR/linux/libunilab_core.so" ]; then
+            log_info "Native Linux bridge not found. Building bridge..."
+            "$SCRIPT_DIR/script/build_bridge.sh" || log_warn "Bridge build failed, continuing anyway..."
+        fi
+
         cd "$FRONTEND_DIR" || exit 1
         exec flutter run -d "$TARGET_DEVICE"
     else

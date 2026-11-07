@@ -104,6 +104,7 @@ class MainShell extends ConsumerWidget {
               final bool showRight = layoutState.showRightPanel;
               
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const TitleStrip(),
                   if (settings.showToolbar)

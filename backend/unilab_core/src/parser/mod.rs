@@ -375,13 +375,14 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>, suppressed: bool) -> Optio
 fn parse_lhs_item(pair: pest::iterators::Pair<Rule>) -> Expr {
     if pair.as_rule() == Rule::lhs_item {
         if let Some(inner) = pair.into_inner().next() {
-            return match inner.as_rule() {
+            match inner.as_rule() {
                 Rule::ignore_arg => Expr::Ignore,
                 _ => parse_expression(inner),
-            };
+            }
+        } else {
+            Expr::Ignore
         }
-    }
-    if pair.as_rule() == Rule::ignore_arg || pair.as_str().trim() == "~" {
+    } else if pair.as_rule() == Rule::ignore_arg || pair.as_str().trim() == "~" {
         Expr::Ignore
     } else {
         parse_expression(pair)

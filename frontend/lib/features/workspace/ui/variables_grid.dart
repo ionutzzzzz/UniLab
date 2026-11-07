@@ -203,40 +203,83 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final variables = ref.watch(workspaceVariablesProvider);
+    final showDefaults = ref.watch(showDefaultVariablesProvider);
+    final allVariables = ref.watch(workspaceVariablesProvider);
+    final variables = ref.watch(filteredWorkspaceVariablesProvider);
 
     if (variables.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: ui.colors.panelHeader.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
+      final hasHiddenSystemVars = allVariables.isNotEmpty && !showDefaults;
+      return Column(
+        children: [
+          Container(
+            height: 28,
+            padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
+            decoration: BoxDecoration(
+              color: ui.colors.panelHeader.withValues(alpha: 0.5),
+              border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.3))),
+            ),
+            child: Row(
+              children: [
+                const Spacer(),
+                UiIconButton(
+                  icon: showDefaults ? LucideIcons.eye : LucideIcons.eyeOff,
+                  tooltip: showDefaults ? 'Hide Default Variables' : 'Show Default Variables',
+                  size: 20,
+                  iconSize: 12,
+                  isActive: showDefaults,
+                  onPressed: () {
+                    ref.read(showDefaultVariablesProvider.notifier).state = !showDefaults;
+                  },
                 ),
-                child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),
-              ),
-              const SizedBox(height: 20),
-              UiText(
-                text: 'Workspace is empty',
-                variant: UiTextVariant.body,
-                fontWeight: FontWeight.bold,
-                color: ui.colors.textSecondary,
-              ),
-              const SizedBox(height: 8),
-              UiText(
-                text: 'Execute a script to see variables and matrices populated here.',
-                variant: UiTextVariant.label,
-                color: ui.colors.textMuted,
-                textAlign: TextAlign.center,
-              ),
-            ],
+                const SizedBox(width: 4),
+                UiIconButton(
+                  key: _columnPickerKey,
+                  icon: LucideIcons.columns2,
+                  tooltip: 'Select Columns',
+                  size: 20,
+                  iconSize: 12,
+                  onPressed: () => _showColumnPicker(context, ui),
+                ),
+              ],
+            ),
           ),
-        ),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: ui.colors.panelHeader.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.table_rows_outlined, size: 40, color: ui.colors.textDisabled),
+                    ),
+                    const SizedBox(height: 20),
+                    UiText(
+                      text: hasHiddenSystemVars ? 'No User Variables' : 'Workspace is empty',
+                      variant: UiTextVariant.body,
+                      fontWeight: FontWeight.bold,
+                      color: ui.colors.textSecondary,
+                    ),
+                    const SizedBox(height: 8),
+                    UiText(
+                      text: hasHiddenSystemVars
+                          ? 'Default system variables are hidden. Click the eye icon above to show them, or run a script to create variables.'
+                          : 'Execute a script to see variables and matrices populated here.',
+                      variant: UiTextVariant.label,
+                      color: ui.colors.textMuted,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -281,6 +324,17 @@ class _VariablesGridState extends ConsumerState<VariablesGrid> {
           child: Row(
             children: [
               const Spacer(),
+              UiIconButton(
+                icon: showDefaults ? LucideIcons.eye : LucideIcons.eyeOff,
+                tooltip: showDefaults ? 'Hide Default Variables' : 'Show Default Variables',
+                size: 20,
+                iconSize: 12,
+                isActive: showDefaults,
+                onPressed: () {
+                  ref.read(showDefaultVariablesProvider.notifier).state = !showDefaults;
+                },
+              ),
+              const SizedBox(width: 4),
               UiIconButton(
                 key: _columnPickerKey,
                 icon: LucideIcons.columns2,
