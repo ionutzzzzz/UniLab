@@ -56,6 +56,10 @@ class SettingsProvider with ChangeNotifier {
     
     final showToolbar = prefs.getBool('showToolbar') ?? true;
     final showStatusBar = prefs.getBool('showStatusBar') ?? true;
+    final glassmorphismEnabled = prefs.getBool('glassmorphismEnabled') ?? true;
+    final plotShowGrid = prefs.getBool('plotShowGrid') ?? true;
+    final plotShowLabels = prefs.getBool('plotShowLabels') ?? true;
+    final plotShowLegend = prefs.getBool('plotShowLegend') ?? true;
     
     Map<String, bool> panelVisibility = {
       'fileExplorer': prefs.getBool('panel_fileExplorer') ?? true,
@@ -102,6 +106,10 @@ class SettingsProvider with ChangeNotifier {
       syntaxHighlightTheme: syntaxHighlightTheme,
       showToolbar: showToolbar,
       showStatusBar: showStatusBar,
+      glassmorphismEnabled: glassmorphismEnabled,
+      plotShowGrid: plotShowGrid,
+      plotShowLabels: plotShowLabels,
+      plotShowLegend: plotShowLegend,
     );
     notifyListeners();
   }
@@ -144,6 +152,10 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setString('syntaxHighlightTheme', _settings.syntaxHighlightTheme);
     await prefs.setBool('showToolbar', _settings.showToolbar);
     await prefs.setBool('showStatusBar', _settings.showStatusBar);
+    await prefs.setBool('glassmorphismEnabled', _settings.glassmorphismEnabled);
+    await prefs.setBool('plotShowGrid', _settings.plotShowGrid);
+    await prefs.setBool('plotShowLabels', _settings.plotShowLabels);
+    await prefs.setBool('plotShowLegend', _settings.plotShowLegend);
     
     // Save panel visibility
     for (final entry in _settings.panelVisibility.entries) {
@@ -165,6 +177,7 @@ class SettingsProvider with ChangeNotifier {
       'networkAccess', 'telemetry', 'kernelAddress', 'connectionTimeout', 'executionTimeout',
       'showWhitespace', 'enableAutocomplete', 'defaultProjectPath', 'plotColormap',
       'syntaxHighlightTheme', 'showToolbar', 'showStatusBar',
+      'glassmorphismEnabled', 'plotShowGrid', 'plotShowLabels', 'plotShowLegend',
       'panel_fileExplorer', 'panel_workspace', 'panel_console',
       'panelSize_left', 'panelSize_right',
     ];

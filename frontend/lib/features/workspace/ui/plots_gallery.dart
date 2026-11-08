@@ -23,38 +23,115 @@ class PlotsGallery extends ConsumerStatefulWidget {
 
 class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
   String? _selectedPlotId;
+  bool _isListView = false;
+  bool _showGallery = false;
+
+  Widget _buildSimulationControlsBar(UiTheme ui, AppProvider appProvider) {
+    if (!appProvider.isSimulationActive && appProvider.simulationControls.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: EdgeInsets.all(ui.spacing.sm),
+      decoration: BoxDecoration(
+        color: ui.colors.panelHeader,
+        border: Border(
+          top: BorderSide(color: ui.colors.divider.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.activity, size: 14, color: ui.colors.accent),
+              const SizedBox(width: 6),
+              UiText(
+                text: 'LIVE SIMULATION (${(appProvider.simulationModel ?? "model").toUpperCase()})',
+                variant: UiTextVariant.label,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: ui.colors.accent,
+              ),
+              const Spacer(),
+              if (appProvider.isSimulationActive)
+                TextButton.icon(
+                  onPressed: () => appProvider.stopExecution(),
+                  icon: Icon(LucideIcons.square, size: 12, color: ui.colors.danger),
+                  label: UiText(
+                    text: 'Stop',
+                    variant: UiTextVariant.caption,
+                    color: ui.colors.danger,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
+          ...appProvider.simulationControls.map((ctrl) {
+            final id = ctrl['id']?.toString() ?? '';
+            final label = ctrl['label']?.toString() ?? id;
+            final type = ctrl['type']?.toString() ?? '';
+            if (type == 'slider') {
+              final minVal = (ctrl['min'] as num?)?.toDouble() ?? 0.0;
+              final maxVal = (ctrl['max'] as num?)?.toDouble() ?? 100.0;
+              final val = ((ctrl['value'] as num?)?.toDouble() ?? minVal).clamp(minVal, maxVal);
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: UiText(
+                      text: label,
+                      variant: UiTextVariant.caption,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: val,
+                      min: minVal,
+                      max: maxVal > minVal ? maxVal : minVal + 1.0,
+                      activeColor: ui.colors.accent,
+                      onChanged: (v) => appProvider.sendSimControlUpdate(id, v),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 44,
+                    child: UiText(
+                      text: val.toStringAsFixed(2),
+                      variant: UiTextVariant.codeBody,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              );
+            } else if (type == 'button') {
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: OutlinedButton(
+                  onPressed: () => appProvider.sendSimControlUpdate(id, true),
+                  child: Text(label, style: const TextStyle(fontSize: 11)),
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    
-    // Automatically update the view to the new plot if the list is refreshed
+    final appProvider = p.Provider.of<AppProvider>(context);
+
+    // Automatically select the newest plot when plots are generated
     ref.listen(plotGalleryProvider, (previous, next) {
       if (previous != next && next.isNotEmpty) {
-        // Check if our current selection still exists
-        final exists = _selectedPlotId != null && next.any((p) => p.id == _selectedPlotId);
-        
-        if (!exists) {
-          // If it doesn't exist, maybe we can find a plot with the same title in the new list
-          String? oldTitle;
-          if (_selectedPlotId != null && previous != null) {
-             try {
-               oldTitle = previous.firstWhere((p) => p.id == _selectedPlotId).title;
-             } catch (_) {}
-          }
-
-          setState(() {
-            if (oldTitle != null) {
-              final newPlotWithSameTitle = next.where((p) => p.title == oldTitle).firstOrNull;
-              if (newPlotWithSameTitle != null) {
-                _selectedPlotId = newPlotWithSameTitle.id;
-                return;
-              }
-            }
-            // Fallback to the first plot if title search fails
-            _selectedPlotId = next.first.id;
-          });
-        }
+        setState(() {
+          _selectedPlotId = next.last.id;
+          _showGallery = false;
+        });
       } else if (next.isEmpty && _selectedPlotId != null) {
         setState(() {
           _selectedPlotId = null;
@@ -64,119 +141,167 @@ class _PlotsGalleryState extends ConsumerState<PlotsGallery> {
 
     final plots = ref.watch(plotGalleryProvider);
 
-    if (_selectedPlotId != null) {
-      final plot = plots.firstWhere(
-        (p) => p.id == _selectedPlotId,
-        orElse: () => plots.isNotEmpty ? plots.first : PlotData(title: '', type: '', xData: [], yData: []),
-      );
-      return FigureView(
-        key: ValueKey(plot.id),
-        plotData: plot,
-        onBack: () => setState(() => _selectedPlotId = null),
+    if (plots.isEmpty) {
+      return Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: ui.colors.panelHeader.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(LucideIcons.lineChart, size: 40, color: ui.colors.textDisabled),
+                    ),
+                    const SizedBox(height: 20),
+                    UiText(
+                      text: 'No plots generated',
+                      variant: UiTextVariant.body,
+                      fontWeight: FontWeight.bold,
+                      color: ui.colors.textSecondary,
+                    ),
+                    const SizedBox(height: 8),
+                    UiText(
+                      text: 'Run scripts or use the Engineering Toolbox to render interactive plots here.',
+                      variant: UiTextVariant.label,
+                      color: ui.colors.textMuted,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _buildSimulationControlsBar(ui, appProvider),
+        ],
       );
     }
 
-    if (plots.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: ui.colors.panelHeader.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(LucideIcons.lineChart, size: 40, color: ui.colors.textDisabled),
-              ),
-              const SizedBox(height: 20),
-              UiText(
-                text: 'No plots generated',
-                variant: UiTextVariant.body,
-                fontWeight: FontWeight.bold,
-                color: ui.colors.textSecondary,
-              ),
-              const SizedBox(height: 8),
-              UiText(
-                text: 'Run simulation scripts that generate visual outputs to see them here.',
-                variant: UiTextVariant.label,
-                color: ui.colors.textMuted,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    // Ensure _selectedPlotId defaults to latest plot when not in gallery mode
+    final activePlotId = _selectedPlotId != null && plots.any((p) => p.id == _selectedPlotId)
+        ? _selectedPlotId!
+        : plots.last.id;
 
     return Column(
       children: [
-        // Toolbar for Plots
+        // Local Figure Tab Bar & Controls
         Container(
-          padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: ui.spacing.xs),
+          height: 34,
+          padding: EdgeInsets.symmetric(horizontal: ui.spacing.sm),
           decoration: BoxDecoration(
+            color: ui.colors.panelHeader,
             border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
           ),
           child: Row(
             children: [
               Expanded(
-                child: UiText(
-                  text: 'Plot History',
-                  variant: UiTextVariant.label,
-                  fontWeight: FontWeight.bold,
-                  overflow: TextOverflow.ellipsis,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: List.generate(plots.length, (i) {
+                      final pItem = plots[i];
+                      final isSelected = !_showGallery && pItem.id == activePlotId;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => setState(() {
+                            _selectedPlotId = pItem.id;
+                            _showGallery = false;
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? ui.colors.accent.withValues(alpha: 0.18)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: isSelected
+                                    ? ui.colors.accent
+                                    : ui.colors.divider.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: UiText(
+                              text: pItem.figNum != null ? 'Fig ${pItem.figNum}' : 'Fig ${i + 1}',
+                              variant: UiTextVariant.caption,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? ui.colors.accent : ui.colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
                 ),
               ),
               UiIconButton(
-                icon: LucideIcons.refreshCcw, 
-                tooltip: 'Refresh', 
-                size: 24, 
+                icon: LucideIcons.layoutGrid,
+                tooltip: _showGallery ? 'Show Active Figure' : 'Show Thumbnail Gallery (${plots.length})',
+                isActive: _showGallery,
+                size: 24,
                 iconSize: 14,
-                onPressed: () {
-                  setState(() {});
-                },
+                onPressed: () => setState(() => _showGallery = !_showGallery),
               ),
-              SizedBox(width: ui.spacing.xs),
-              UiIconButton(icon: LucideIcons.layoutGrid, tooltip: 'Grid View', size: 24, iconSize: 14),
+              if (_showGallery) ...[
+                SizedBox(width: ui.spacing.xs),
+                UiIconButton(
+                  icon: _isListView ? LucideIcons.list : LucideIcons.columns2,
+                  tooltip: _isListView ? '2-Column Grid' : 'Single-Column List',
+                  isActive: _isListView,
+                  size: 24,
+                  iconSize: 14,
+                  onPressed: () => setState(() => _isListView = !_isListView),
+                ),
+              ],
               SizedBox(width: ui.spacing.xs),
               UiIconButton(
-                icon: LucideIcons.externalLink, 
-                tooltip: 'Detach Window', 
-                size: 24, 
+                icon: LucideIcons.trash2,
+                tooltip: 'Clear All Plots',
+                size: 24,
                 iconSize: 14,
-                onPressed: () => p.Provider.of<AppProvider>(context, listen: false).openDetachedPlotsWindow(),
-              ),
-              SizedBox(width: ui.spacing.xs),
-              UiIconButton(
-                icon: LucideIcons.trash2, 
-                tooltip: 'Clear All', 
-                size: 24, 
-                iconSize: 14,
-                onPressed: () => p.Provider.of<AppProvider>(context, listen: false).clearPlots(),
+                onPressed: () => appProvider.clearPlots(),
               ),
             ],
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: EdgeInsets.all(ui.spacing.md),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.2,
-            ),
-            itemCount: plots.length,
-            itemBuilder: (context, index) {
-              return _PlotThumbnail(
-                plotData: plots[index],
-                onTap: () => setState(() => _selectedPlotId = plots[index].id),
-              );
-            },
-          ),
+          child: _showGallery
+              ? GridView.builder(
+                  padding: EdgeInsets.all(ui.spacing.md),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _isListView ? 1 : 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: _isListView ? 1.8 : 1.2,
+                  ),
+                  itemCount: plots.length,
+                  itemBuilder: (context, index) {
+                    return _PlotThumbnail(
+                      plotData: plots[index],
+                      onTap: () => setState(() {
+                        _selectedPlotId = plots[index].id;
+                        _showGallery = false;
+                      }),
+                    );
+                  },
+                )
+              : FigureView(
+                  key: ValueKey(activePlotId),
+                  plotData: plots.firstWhere(
+                    (p) => p.id == activePlotId,
+                    orElse: () => plots.last,
+                  ),
+                  onBack: () => setState(() => _showGallery = true),
+                ),
         ),
+        _buildSimulationControlsBar(ui, appProvider),
       ],
     );
   }

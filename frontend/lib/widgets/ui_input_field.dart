@@ -11,6 +11,7 @@ class UiInputField extends StatefulWidget {
     this.prefixIcon,
     this.suffixIcon,
     this.isDense = true,
+    this.obscureText = false,
   });
 
   final TextEditingController? controller;
@@ -20,6 +21,7 @@ class UiInputField extends StatefulWidget {
   final IconData? prefixIcon;
   final Widget? suffixIcon;
   final bool isDense;
+  final bool obscureText;
 
   @override
   State<UiInputField> createState() => _UiInputFieldState();
@@ -72,6 +74,7 @@ class _UiInputFieldState extends State<UiInputField> {
               focusNode: _focusNode,
               onChanged: widget.onChanged,
               onSubmitted: widget.onSubmitted,
+              obscureText: widget.obscureText,
               style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
               cursorColor: ui.colors.textPrimary,
               cursorWidth: 1.0,

@@ -9,8 +9,15 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../models/editor_models.dart';
 
-class ProblemsView extends StatelessWidget {
+class ProblemsView extends StatefulWidget {
   const ProblemsView({super.key});
+
+  @override
+  State<ProblemsView> createState() => _ProblemsViewState();
+}
+
+class _ProblemsViewState extends State<ProblemsView> {
+  _ProblemType? _filterType;
 
   @override
   Widget build(BuildContext context) {
@@ -59,13 +66,16 @@ class ProblemsView extends StatelessWidget {
 
     final errorCount = problems.where((p) => p.type == _ProblemType.error).length;
     final warningCount = problems.where((p) => p.type == _ProblemType.warning).length;
+    final filteredProblems = _filterType == null
+        ? problems
+        : problems.where((p) => p.type == _filterType).toList();
 
     if (problems.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.checkCircle2, size: 40, color: ui.colors.success.withValues(alpha: 0.5)),
+            Icon(LucideIcons.circleCheck, size: 40, color: ui.colors.success.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             UiText(
               text: 'No problems detected in your workspace.',
@@ -86,7 +96,6 @@ class ProblemsView extends StatelessWidget {
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
           if (isCtrlPressed) {
             final currentSize = settings.fontSize;
-            // scrollDelta.dy > 0 means scroll down (zoom out), < 0 means scroll up (zoom in)
             final newSize = (currentSize - (pointerSignal.scrollDelta.dy > 0 ? 1 : -1)).clamp(8.0, 48.0);
             if (newSize != currentSize) {
               settingsProvider.updateSettings(settings.copyWith(fontSize: newSize));
@@ -105,23 +114,43 @@ class ProblemsView extends StatelessWidget {
             child: Row(
               children: [
                 UiText(
-                  text: '${problems.length} Problems',
+                  text: '${filteredProblems.length} Problems',
                   variant: UiTextVariant.label,
                   fontWeight: FontWeight.bold,
                 ),
                 const Spacer(),
-                _FilterPill(label: 'Errors', count: errorCount, color: ui.colors.danger),
+                _FilterPill(
+                  label: 'Errors',
+                  count: errorCount,
+                  color: ui.colors.danger,
+                  isActive: _filterType == _ProblemType.error,
+                  onTap: () {
+                    setState(() {
+                      _filterType = _filterType == _ProblemType.error ? null : _ProblemType.error;
+                    });
+                  },
+                ),
                 const SizedBox(width: 8),
-                _FilterPill(label: 'Warnings', count: warningCount, color: ui.colors.warning),
+                _FilterPill(
+                  label: 'Warnings',
+                  count: warningCount,
+                  color: ui.colors.warning,
+                  isActive: _filterType == _ProblemType.warning,
+                  onTap: () {
+                    setState(() {
+                      _filterType = _filterType == _ProblemType.warning ? null : _ProblemType.warning;
+                    });
+                  },
+                ),
               ],
             ),
           ),
           Expanded(
             child: SelectionArea(
               child: ListView.builder(
-                itemCount: problems.length,
+                itemCount: filteredProblems.length,
                 itemBuilder: (context, index) {
-                  return _ProblemRow(problem: problems[index], fontSize: settings.fontSize);
+                  return _ProblemRow(problem: filteredProblems[index], fontSize: settings.fontSize);
                 },
               ),
             ),
@@ -188,7 +217,13 @@ class _ProblemRowState extends State<_ProblemRow> {
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () {},
+        onTap: () {
+          Provider.of<AppProvider>(context, listen: false).navigateToFileLine(
+            widget.problem.file,
+            widget.problem.line,
+            widget.problem.column,
+          );
+        },
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: ui.spacing.md, vertical: 8),
           decoration: BoxDecoration(
@@ -242,27 +277,41 @@ class _ProblemRowState extends State<_ProblemRow> {
 
 
 class _FilterPill extends StatelessWidget {
-  const _FilterPill({required this.label, required this.count, required this.color});
+  const _FilterPill({
+    required this.label,
+    required this.count,
+    required this.color,
+    this.isActive = false,
+    this.onTap,
+  });
   final String label;
   final int count;
   final Color color;
+  final bool isActive;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          UiText(text: label, variant: UiTextVariant.label, fontSize: 9, color: color, fontWeight: FontWeight.bold),
-          const SizedBox(width: 4),
-          UiText(text: count.toString(), variant: UiTextVariant.label, fontSize: 9, color: color),
-        ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isActive ? 0.25 : 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: isActive ? 0.8 : 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              UiText(text: label, variant: UiTextVariant.label, fontSize: 9, color: color, fontWeight: FontWeight.bold),
+              const SizedBox(width: 4),
+              UiText(text: count.toString(), variant: UiTextVariant.label, fontSize: 9, color: color),
+            ],
+          ),
+        ),
       ),
     );
   }

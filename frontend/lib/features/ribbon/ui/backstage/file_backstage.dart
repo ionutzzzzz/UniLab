@@ -286,7 +286,26 @@ class _FileBackstageState extends State<FileBackstage> {
               LucideIcons.sparkles, 
               'Rich text and embedded code',
               onTap: () {
-                appProvider.addNewFile();
+                int counter = 1;
+                String fileName = 'live_script.m';
+                final existingNames = appProvider.projectFiles
+                    .map((f) => p.basename(f.path.toString()))
+                    .toSet();
+                final openNames = appProvider.openFiles.map((f) => f.name).toSet();
+                while (existingNames.contains(fileName) || openNames.contains(fileName)) {
+                  counter++;
+                  fileName = 'live_script_$counter.m';
+                }
+                const content =
+                    '%% Live Script: Data Exploration\n'
+                    '% Section 1: Generate sample signal\n'
+                    'x = linspace(0, 2*pi, 200);\n'
+                    'y = sin(x) .* exp(-0.15 * x);\n\n'
+                    '%% Section 2: Visualization\n'
+                    'figure;\n'
+                    'plot(x, y);\n'
+                    'title("Damped Sine Wave");\n';
+                appProvider.createProjectFile(fileName, content);
                 Navigator.pop(context);
               }
             ),
@@ -439,7 +458,8 @@ class _FileBackstageState extends State<FileBackstage> {
                Navigator.pop(context);
             }),
             _buildTemplateCard(ui, 'HTML Report', LucideIcons.fileJson, 'Generate interactive report', onTap: () {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report generation coming soon.')));
+               appProvider.exportToHtmlReport();
+               Navigator.pop(context);
             }),
           ],
         ),

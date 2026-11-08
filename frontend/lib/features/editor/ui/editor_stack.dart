@@ -34,10 +34,11 @@ class _EditorStackState extends State<EditorStack> {
   final Map<String, CodeController> _controllers = {};
   final Map<String, ChangeStack> _undoStacks = {};
   final FocusNode _focusNode = FocusNode();
+  final FocusNode _secondaryFocusNode = FocusNode();
   bool _showFindReplace = false;
+  bool _isReplaceMode = true;
   Timer? _autoSaveTimer;
   Timer? _undoTimer;
-  String? _lastFileId;
   StreamSubscription? _actionSubscription;
   bool _isUndoingOrRedoing = false;
 
@@ -47,10 +48,20 @@ class _EditorStackState extends State<EditorStack> {
         text: file.content,
         language: matlab,
       );
+      controller.addListener(_onCodeChanged);
       _controllers[file.id] = controller;
       _undoStacks[file.id] = ChangeStack();
     }
     return _controllers[file.id]!;
+  }
+
+  void _flushControllersToProvider() {
+    if (!mounted) return;
+    _debounceTimer?.cancel();
+    final appProvider = context.read<AppProvider>();
+    for (final entry in _controllers.entries) {
+      appProvider.updateFileContent(entry.key, entry.value.text);
+    }
   }
 
   CodeController? get _activeController {
@@ -65,7 +76,9 @@ class _EditorStackState extends State<EditorStack> {
 
     // Listen to actions from Ribbon via AppProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final appProvider = context.read<AppProvider>();
+      appProvider.registerEditorFlushCallback(_flushControllersToProvider);
       _actionSubscription = appProvider.editorActions.listen((action) {
         debugPrint('EditorStack: Received editor action: $action');
         if (!mounted) {
@@ -75,17 +88,72 @@ class _EditorStackState extends State<EditorStack> {
         
         final activeFile = appProvider.activeFile;
         if (activeFile == null) return;
+
+        if (action == 'file.save') {
+          _flushControllersToProvider();
+          appProvider.saveActiveFile();
+          return;
+        }
+
+        if (action == 'file.saveAs') {
+          _flushControllersToProvider();
+          appProvider.saveActiveFileAs();
+          return;
+        }
+
+        if (action == 'editor.syncFromProvider') {
+          final ctrl = _controllers[activeFile.id];
+          if (ctrl != null && ctrl.text != activeFile.content) {
+            ctrl.text = activeFile.content;
+            ctrl.selection = TextSelection.collapsed(offset: ctrl.text.length);
+          }
+          setState(() {});
+          return;
+        }
         
         final controller = _controllers[activeFile.id];
         final stack = _undoStacks[activeFile.id];
         if (controller == null || stack == null) return;
 
+        if (action.startsWith('editor.gotoLine:')) {
+          final parts = action.split(':');
+          final line = parts.length > 1 ? int.tryParse(parts[1]) : null;
+          final col = parts.length > 2 ? (int.tryParse(parts[2]) ?? 1) : 1;
+          if (line != null) {
+            _goToLine(controller, line, col);
+          }
+          return;
+        }
+
         switch (action) {
           case 'editor.find':
-            _toggleFindReplace();
+            setState(() {
+              if (_showFindReplace && !_isReplaceMode) {
+                _showFindReplace = false;
+              } else {
+                _showFindReplace = true;
+                _isReplaceMode = false;
+              }
+            });
+            break;
+          case 'editor.replace':
+            setState(() {
+              if (_showFindReplace && _isReplaceMode) {
+                _showFindReplace = false;
+              } else {
+                _showFindReplace = true;
+                _isReplaceMode = true;
+              }
+            });
             break;
           case 'editor.gotoLine':
             _showGoToLineDialog();
+            break;
+          case 'editor.autoIndent':
+            _autoIndentCode(activeFile.id, controller, stack);
+            break;
+          case 'editor.comment':
+            _toggleCommentSelection(activeFile.id, controller, stack);
             break;
           case 'editor.undo':
             if (stack.canUndo) {
@@ -104,6 +172,128 @@ class _EditorStackState extends State<EditorStack> {
         }
       });
     });
+  }
+
+  void _applyControllerEdit(
+    String fileId,
+    CodeController controller,
+    ChangeStack stack,
+    String newText, {
+    TextSelection? selection,
+  }) {
+    final oldText = controller.text;
+    if (oldText == newText) return;
+    final appProvider = context.read<AppProvider>();
+
+    _isUndoingOrRedoing = true;
+    controller.text = newText;
+    if (selection != null) {
+      controller.selection = selection;
+    }
+    appProvider.updateFileContent(fileId, newText);
+    _isUndoingOrRedoing = false;
+
+    stack.add(
+      Change(
+        oldText,
+        () {
+          if (controller.text != newText) {
+            _isUndoingOrRedoing = true;
+            controller.text = newText;
+            appProvider.updateFileContent(fileId, newText);
+            _isUndoingOrRedoing = false;
+          }
+        },
+        (old) {
+          if (controller.text != old) {
+            _isUndoingOrRedoing = true;
+            controller.text = old;
+            appProvider.updateFileContent(fileId, old);
+            _isUndoingOrRedoing = false;
+          }
+        },
+      ),
+    );
+  }
+
+  void _autoIndentCode(String fileId, CodeController controller, ChangeStack stack) {
+    final tabSize = context.read<SettingsProvider>().settings.tabSize;
+    final indentUnit = ' ' * tabSize;
+    final lines = controller.text.split('\n');
+    final formatted = <String>[];
+    int depth = 0;
+
+    final increaseRx = RegExp(r'^(function|for|while|if|switch|try)\b');
+    final middleRx = RegExp(r'^(else|elseif|case|otherwise|catch)\b');
+    final decreaseRx = RegExp(r'^end\b');
+
+    for (final rawLine in lines) {
+      final trimmed = rawLine.trim();
+      if (trimmed.isEmpty) {
+        formatted.add('');
+        continue;
+      }
+      final codeOnly = trimmed.replaceAll(RegExp(r'%.*$'), '').trim();
+      int lineDepth = depth;
+      if (decreaseRx.hasMatch(codeOnly) || middleRx.hasMatch(codeOnly)) {
+        lineDepth = math.max(0, depth - 1);
+      }
+      formatted.add('${indentUnit * lineDepth}$trimmed');
+
+      if (decreaseRx.hasMatch(codeOnly)) {
+        depth = math.max(0, depth - 1);
+      } else if (increaseRx.hasMatch(codeOnly)) {
+        final inlineEnd = RegExp(r'\bend\s*;?\s*$').hasMatch(codeOnly);
+        if (!inlineEnd) {
+          depth++;
+        }
+      }
+    }
+
+    _applyControllerEdit(fileId, controller, stack, formatted.join('\n'));
+  }
+
+  void _toggleCommentSelection(String fileId, CodeController controller, ChangeStack stack) {
+    final text = controller.text;
+    final sel = controller.selection;
+    final startOffset = sel.isValid ? math.min(sel.start, sel.end) : 0;
+    final endOffset = sel.isValid ? math.max(sel.start, sel.end) : 0;
+
+    final lines = text.split('\n');
+    int charCount = 0;
+    int startLine = 0;
+    int endLine = 0;
+
+    for (int i = 0; i < lines.length; i++) {
+      final lineStart = charCount;
+      final lineEnd = charCount + lines[i].length;
+      if (startOffset >= lineStart && startOffset <= lineEnd) {
+        startLine = i;
+      }
+      if (endOffset >= lineStart && endOffset <= lineEnd) {
+        endLine = i;
+      }
+      charCount = lineEnd + 1;
+    }
+
+    bool allCommented = true;
+    for (int i = startLine; i <= endLine; i++) {
+      final t = lines[i].trimLeft();
+      if (t.isNotEmpty && !t.startsWith('%')) {
+        allCommented = false;
+        break;
+      }
+    }
+
+    for (int i = startLine; i <= endLine; i++) {
+      if (allCommented) {
+        lines[i] = lines[i].replaceFirst(RegExp(r'%\s?'), '');
+      } else {
+        lines[i] = '% ${lines[i]}';
+      }
+    }
+
+    _applyControllerEdit(fileId, controller, stack, lines.join('\n'));
   }
 
   void _showGoToLineDialog() {
@@ -154,16 +344,18 @@ class _EditorStackState extends State<EditorStack> {
     );
   }
 
-  void _goToLine(CodeController controller, int line) {
+  void _goToLine(CodeController controller, int line, [int column = 1]) {
     if (line < 1) return;
     final text = controller.text;
     final lines = text.split('\n');
-    if (line > lines.length) return;
+    final targetLine = line.clamp(1, lines.length);
 
     int pos = 0;
-    for (int i = 0; i < line - 1; i++) {
+    for (int i = 0; i < targetLine - 1; i++) {
       pos += lines[i].length + 1;
     }
+    final colOffset = (column - 1).clamp(0, lines[targetLine - 1].length);
+    pos += colOffset;
     
     controller.selection = TextSelection.collapsed(offset: pos);
     _focusNode.requestFocus();
@@ -240,10 +432,6 @@ class _EditorStackState extends State<EditorStack> {
     final activeFile = context.read<AppProvider>().activeFile;
     
     if (activeFile != null) {
-      if (_lastFileId != null && _controllers.containsKey(_lastFileId) && _lastFileId != activeFile.id) {
-        _controllers[_lastFileId]!.removeListener(_onCodeChanged);
-      }
-      
       final controller = _getOrCreateController(activeFile);
       
       // Sync from provider if not modified by editor
@@ -254,11 +442,6 @@ class _EditorStackState extends State<EditorStack> {
             controller.selection = currentSelection;
          }
       }
-      
-      if (_lastFileId != activeFile.id) {
-        controller.addListener(_onCodeChanged);
-      }
-      _lastFileId = activeFile.id;
     }
   }
 
@@ -269,9 +452,11 @@ class _EditorStackState extends State<EditorStack> {
     _debounceTimer?.cancel();
     _actionSubscription?.cancel();
     for (final controller in _controllers.values) {
+      controller.removeListener(_onCodeChanged);
       controller.dispose();
     }
     _focusNode.dispose();
+    _secondaryFocusNode.dispose();
     super.dispose();
   }
 
@@ -286,6 +471,8 @@ class _EditorStackState extends State<EditorStack> {
     final ui = UiTheme.of(context);
     final activeFile = context.select<AppProvider, UniLabFile?>((p) => p.activeFile);
     final openFiles = context.select<AppProvider, List<UniLabFile>>((p) => p.openFiles);
+    final isSplitEditor = context.select<AppProvider, bool>((p) => p.isSplitEditor);
+    final secondaryFile = context.select<AppProvider, UniLabFile?>((p) => p.secondaryFile);
     final isShowMinimap = context.select<SettingsProvider, bool>((s) => s.settings.showMinimap);
 
     if (activeFile == null) {
@@ -368,7 +555,7 @@ class _EditorStackState extends State<EditorStack> {
                               );
                             },
                           ),
-                          if (_showFindReplace) 
+                           if (_showFindReplace) 
                             Positioned(
                               top: 8,
                               right: 20,
@@ -378,6 +565,7 @@ class _EditorStackState extends State<EditorStack> {
                               ),
                               child: FindReplaceBar(
                                 onClose: _toggleFindReplace,
+                                isReplaceMode: _isReplaceMode,
                                 controller: controller,
                               ),
                             ),
@@ -385,7 +573,74 @@ class _EditorStackState extends State<EditorStack> {
                       ),
                     ),
                     if (effectiveShowMinimap)
-                      _EditorMinimap(controller: controller),
+                      _EditorMinimap(
+                        controller: controller,
+                        onLineSelected: (line) => _goToLine(controller, line),
+                      ),
+                    if (isSplitEditor && secondaryFile != null) ...[
+                      Container(width: 1, color: ui.colors.divider),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Container(
+                              height: 28,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: ui.colors.panelHeader.withValues(alpha: 0.6),
+                                border: Border(
+                                  bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5)),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.vertical_split, size: 13, color: ui.colors.accent),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: secondaryFile.id,
+                                        isDense: true,
+                                        dropdownColor: ui.colors.panel,
+                                        style: TextStyle(color: ui.colors.textPrimary, fontSize: 11),
+                                        items: openFiles
+                                            .map(
+                                              (f) => DropdownMenuItem(
+                                                value: f.id,
+                                                child: Text(f.name),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (selectedId) {
+                                          if (selectedId == null) return;
+                                          final idx = openFiles.indexWhere((f) => f.id == selectedId);
+                                          if (idx != -1) {
+                                            appProvider.setSecondaryFile(idx);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(Icons.close, size: 13, color: ui.colors.textMuted),
+                                    tooltip: 'Close Split View',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                                    onPressed: () => appProvider.toggleSplitEditor(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: EditorSurface(
+                                key: ValueKey('split_surface_${secondaryFile.id}'),
+                                controller: _getOrCreateController(secondaryFile),
+                                focusNode: _secondaryFocusNode,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -413,8 +668,18 @@ class _EditorStackState extends State<EditorStack> {
 }
 
 class _EditorMinimap extends StatelessWidget {
-  const _EditorMinimap({required this.controller});
+  const _EditorMinimap({
+    required this.controller,
+    required this.onLineSelected,
+  });
   final CodeController controller;
+  final ValueChanged<int> onLineSelected;
+
+  void _handlePosition(Offset localPosition, int totalLines) {
+    if (totalLines <= 0) return;
+    final clickedLine = ((localPosition.dy - 8.0) / 3.0).round() + 1;
+    onLineSelected(clickedLine.clamp(1, totalLines));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -444,8 +709,13 @@ class _EditorMinimap extends StatelessWidget {
               Positioned.fill(
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
-                  child: Container(
-                    color: Colors.transparent,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) => _handlePosition(details.localPosition, lines.length),
+                    onVerticalDragUpdate: (details) => _handlePosition(details.localPosition, lines.length),
+                    child: Container(
+                      color: Colors.transparent,
+                    ),
                   ),
                 ),
               ),

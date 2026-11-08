@@ -125,6 +125,7 @@ class ConsoleMessage {
 class PlotData {
   final String id;
   final String title;
+  final String? plotTitle;
   final String type; // 'line', 'scatter', 'bar', 'surface', 'image', etc.
   final List<double> xData;
   final List<double> yData;
@@ -133,11 +134,23 @@ class PlotData {
   final String? imageDataUri; // For base64 PNG images from backend
   final String? sourceScript; // The script that generated this plot
   final String? figNum; // Figure number
+  final String? xlabel;
+  final String? ylabel;
+  final bool? showGrid;
+  final bool? showLegend;
+  final bool? showLabels;
+  final String? colormap;
+  final double? lineWidth;
+  final double? fontSize;
+  final String? themeMode;
+  final int? numSubplots;
+  final bool? is3d;
   DateTime createdAt;
 
   PlotData({
     String? id,
     required this.title,
+    this.plotTitle,
     required this.type,
     required this.xData,
     required this.yData,
@@ -146,6 +159,17 @@ class PlotData {
     this.imageDataUri,
     this.sourceScript,
     this.figNum,
+    this.xlabel,
+    this.ylabel,
+    this.showGrid,
+    this.showLegend,
+    this.showLabels,
+    this.colormap,
+    this.lineWidth,
+    this.fontSize,
+    this.themeMode,
+    this.numSubplots,
+    this.is3d,
     DateTime? createdAt,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -154,6 +178,7 @@ class PlotData {
     return PlotData(
       id: json['id'] as String?,
       title: (json['title'] ?? json['name']) as String? ?? 'Figure',
+      plotTitle: json['plotTitle'] as String?,
       type: (json['type'] ?? json['plot_type']) as String? ?? 'line',
       xData: ((json['x_data'] ?? json['xData'] ?? json['x']) as List?)
               ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
@@ -166,6 +191,17 @@ class PlotData {
       imageDataUri: json['imageDataUri'] as String?,
       sourceScript: json['sourceScript'] as String?,
       figNum: json['figNum']?.toString(),
+      xlabel: json['xlabel'] as String?,
+      ylabel: json['ylabel'] as String?,
+      showGrid: json['showGrid'] as bool?,
+      showLegend: json['showLegend'] as bool?,
+      showLabels: json['showLabels'] as bool?,
+      colormap: json['colormap'] as String?,
+      lineWidth: (json['lineWidth'] as num?)?.toDouble(),
+      fontSize: (json['fontSize'] as num?)?.toDouble(),
+      themeMode: json['themeMode'] as String?,
+      numSubplots: (json['numSubplots'] as num?)?.toInt(),
+      is3d: json['is3d'] as bool?,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
@@ -175,6 +211,7 @@ class PlotData {
   PlotData copyWith({
     String? id,
     String? title,
+    String? plotTitle,
     String? type,
     List<double>? xData,
     List<double>? yData,
@@ -183,11 +220,23 @@ class PlotData {
     String? imageDataUri,
     String? sourceScript,
     String? figNum,
+    String? xlabel,
+    String? ylabel,
+    bool? showGrid,
+    bool? showLegend,
+    bool? showLabels,
+    String? colormap,
+    double? lineWidth,
+    double? fontSize,
+    String? themeMode,
+    int? numSubplots,
+    bool? is3d,
     DateTime? createdAt,
   }) {
     return PlotData(
       id: id ?? this.id,
       title: title ?? this.title,
+      plotTitle: plotTitle ?? this.plotTitle,
       type: type ?? this.type,
       xData: xData ?? this.xData,
       yData: yData ?? this.yData,
@@ -196,6 +245,17 @@ class PlotData {
       imageDataUri: imageDataUri ?? this.imageDataUri,
       sourceScript: sourceScript ?? this.sourceScript,
       figNum: figNum ?? this.figNum,
+      xlabel: xlabel ?? this.xlabel,
+      ylabel: ylabel ?? this.ylabel,
+      showGrid: showGrid ?? this.showGrid,
+      showLegend: showLegend ?? this.showLegend,
+      showLabels: showLabels ?? this.showLabels,
+      colormap: colormap ?? this.colormap,
+      lineWidth: lineWidth ?? this.lineWidth,
+      fontSize: fontSize ?? this.fontSize,
+      themeMode: themeMode ?? this.themeMode,
+      numSubplots: numSubplots ?? this.numSubplots,
+      is3d: is3d ?? this.is3d,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -204,12 +264,24 @@ class PlotData {
     return {
       'id': id,
       'title': title,
+      'plotTitle': plotTitle,
       'type': type,
       'xData': xData,
       'yData': yData,
       'imageDataUri': imageDataUri,
       'sourceScript': sourceScript,
       'figNum': figNum,
+      'xlabel': xlabel,
+      'ylabel': ylabel,
+      'showGrid': showGrid,
+      'showLegend': showLegend,
+      'showLabels': showLabels,
+      'colormap': colormap,
+      'lineWidth': lineWidth,
+      'fontSize': fontSize,
+      'themeMode': themeMode,
+      'numSubplots': numSubplots,
+      'is3d': is3d,
       'createdAt': createdAt.toIso8601String(),
     };
   }

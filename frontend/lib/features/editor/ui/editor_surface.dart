@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../theme/syntax_themes.dart';
+import '../../../widgets/ui_text.dart';
+import '../../../widgets/ui_button.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../providers/riverpod_providers.dart';
@@ -78,12 +80,188 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
     }
   }
 
+  String _extractWordAtCursor() {
+    final text = widget.controller.text;
+    if (text.isEmpty) return '';
+    final sel = widget.controller.selection;
+    if (sel.isValid && !sel.isCollapsed) {
+      return text.substring(sel.start, sel.end).trim();
+    }
+    final offset = sel.isValid ? sel.baseOffset.clamp(0, text.length) : 0;
+    final wordRx = RegExp(r'[a-zA-Z_]\w*');
+    for (final m in wordRx.allMatches(text)) {
+      if (offset >= m.start && offset <= m.end) {
+        return m.group(0)!;
+      }
+    }
+    return '';
+  }
+
+  Future<void> _peekDefinition(BuildContext context) async {
+    final ui = UiTheme.of(context);
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final symbol = _extractWordAtCursor();
+    if (symbol.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Place the cursor on a function or variable name to peek definition.')),
+      );
+      return;
+    }
+
+    // 1. Check active or open files for function definition
+    final fnDefRx = RegExp(
+      r'^\s*function\s+(?:(?:\[[^\]]*\]|[a-zA-Z_]\w*)\s*=\s*)?' + RegExp.escape(symbol) + r'\b',
+      multiLine: true,
+    );
+
+    String? matchedFileName;
+    int? matchedLine;
+    String? snippet;
+
+    for (final file in appProvider.openFiles) {
+      final lines = file.content.split('\n');
+      for (int i = 0; i < lines.length; i++) {
+        if (fnDefRx.hasMatch(lines[i])) {
+          matchedFileName = file.name;
+          matchedLine = i + 1;
+          final end = (i + 12).clamp(0, lines.length);
+          snippet = lines.sublist(i, end).join('\n');
+          break;
+        }
+      }
+      if (snippet != null) break;
+    }
+
+    // 2. If not found in open files, query backend help
+    snippet ??= await appProvider.fetchHelp(symbol);
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            Icon(Icons.code, size: 18, color: ui.colors.accent),
+            const SizedBox(width: 8),
+            UiText(
+              text: matchedFileName != null
+                  ? 'Definition: $symbol ($matchedFileName:$matchedLine)'
+                  : 'Documentation: $symbol',
+              variant: UiTextVariant.body,
+              fontWeight: FontWeight.bold,
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: ui.colors.canvas,
+              borderRadius: ui.spacing.radiusSm,
+              border: Border.all(color: ui.colors.border),
+            ),
+            child: SingleChildScrollView(
+              child: UiText(
+                text: (snippet == null || snippet.trim().isEmpty)
+                    ? 'No definition or help documentation found for "$symbol".'
+                    : snippet,
+                variant: UiTextVariant.codeBody,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          if (matchedFileName != null && matchedLine != null)
+            UiButton(
+              label: 'Go to Line $matchedLine',
+              variant: UiButtonVariant.primary,
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                appProvider.navigateToFileLine(matchedFileName, matchedLine!);
+              },
+            ),
+          UiButton(
+            label: 'Close',
+            variant: UiButtonVariant.ghost,
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+        ],
+      ),
+    );
+  }
+
+  KeyEventResult _handleEditorKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final isCtrlOrMeta = pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight);
+    final isShift = pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight);
+
+    final appProvider = context.read<AppProvider>();
+
+    if (event.logicalKey == LogicalKeyboardKey.f5 ||
+        (isCtrlOrMeta && event.logicalKey == LogicalKeyboardKey.enter)) {
+      appProvider.updateActiveFileContent(widget.controller.text);
+      appProvider.runActiveFile();
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlOrMeta && event.logicalKey == LogicalKeyboardKey.keyS) {
+      appProvider.updateActiveFileContent(widget.controller.text);
+      if (isShift) {
+        appProvider.saveActiveFileAs();
+      } else {
+        appProvider.saveActiveFile().then((_) {
+          if (mounted) {
+            final name = appProvider.activeFile?.name ?? 'file';
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Saved $name'),
+                duration: const Duration(milliseconds: 1200),
+              ),
+            );
+          }
+        });
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlOrMeta && !isShift && event.logicalKey == LogicalKeyboardKey.keyF) {
+      appProvider.triggerEditorAction('editor.find');
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlOrMeta && !isShift && event.logicalKey == LogicalKeyboardKey.keyH) {
+      appProvider.triggerEditorAction('editor.replace');
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlOrMeta && !isShift && event.logicalKey == LogicalKeyboardKey.keyG) {
+      appProvider.triggerEditorAction('editor.gotoLine');
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlOrMeta && !isShift && event.logicalKey == LogicalKeyboardKey.slash) {
+      appProvider.triggerEditorAction('editor.comment');
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final ui = UiTheme.of(context);
     final settings = p.Provider.of<SettingsProvider>(context).settings;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Get selected syntax theme colors
     final highlightTheme = SyntaxHighlightTheme.all.firstWhere(
@@ -91,31 +269,9 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
       orElse: () => SyntaxHighlightTheme.all.first,
     );
     final colors = highlightTheme.colors;
-    
-    final isInterfaceLight = !isDark;
-    final editorBg = isInterfaceLight ? Colors.white : highlightTheme.backgroundColor;
-    
-    Color editorFg = highlightTheme.foregroundColor;
-    List<Color> syntaxColors = List.from(highlightTheme.colors);
-
-    if (isInterfaceLight) {
-      // Force default text to be dark in light mode if it's too light
-      if (editorFg.computeLuminance() > 0.6) {
-        editorFg = const Color(0xFF24292E); // Dark gray/black
-      }
-      
-      // Darken syntax colors if they are too light for a white background
-      for (int i = 0; i < syntaxColors.length; i++) {
-        if (syntaxColors[i].computeLuminance() > 0.7) {
-          final hsl = HSLColor.fromColor(syntaxColors[i]);
-          syntaxColors[i] = hsl.withLightness((hsl.lightness - 0.3).clamp(0.0, 0.7)).toColor();
-        } else if (syntaxColors[i].computeLuminance() > 0.4 && syntaxColors[i].computeLuminance() < 0.7) {
-          // Slightly darken mid-range colors for better contrast
-          final hsl = HSLColor.fromColor(syntaxColors[i]);
-          syntaxColors[i] = hsl.withLightness((hsl.lightness - 0.15).clamp(0.0, 0.7)).toColor();
-        }
-      }
-    }
+    final editorBg = highlightTheme.backgroundColor;
+    final Color editorFg = highlightTheme.foregroundColor;
+    final List<Color> syntaxColors = List.from(highlightTheme.colors);
 
     // Custom Syntax Theme
     final Map<String, TextStyle> customSyntaxTheme = {
@@ -141,8 +297,10 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
 
     final isExecuting = context.select<AppProvider, bool>((p) => p.isExecuting);
 
-    return Listener(
-      onPointerSignal: (pointerSignal) {
+    return Focus(
+      onKeyEvent: _handleEditorKeyEvent,
+      child: Listener(
+        onPointerSignal: (pointerSignal) {
         if (pointerSignal is PointerScrollEvent) {
           final isCtrlPressed = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
                                 HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight) ||
@@ -159,44 +317,6 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
           }
         }
       },
-      child: ContextMenuRegion(
-      contextMenu: GenericContextMenu(
-        buttonConfigs: [
-          ContextMenuButtonConfig(
-            'Cut',
-            icon: Icon(Icons.content_cut, size: 16, color: ui.colors.textMuted),
-            onPressed: () {},
-          ),
-          ContextMenuButtonConfig(
-            'Copy',
-            icon: Icon(
-              Icons.content_copy,
-              size: 16,
-              color: ui.colors.textMuted,
-            ),
-            onPressed: () {},
-          ),
-          ContextMenuButtonConfig(
-            'Paste',
-            icon: Icon(
-              Icons.content_paste,
-              size: 16,
-              color: ui.colors.textMuted,
-            ),
-            onPressed: () {},
-          ),
-          ContextMenuButtonConfig(
-            'Run Selection',
-            icon: Icon(Icons.play_arrow, size: 16, color: isExecuting ? ui.colors.textDisabled : ui.colors.accent),
-            onPressed: isExecuting ? null : () {},
-          ),
-          ContextMenuButtonConfig(
-            'Peek Definition',
-            icon: Icon(Icons.search, size: 16, color: ui.colors.info),
-            onPressed: () {},
-          ),
-        ],
-      ),
       child: CodeTheme(
         data: CodeThemeData(styles: customSyntaxTheme),
         child: Container(
@@ -259,23 +379,54 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
                     ),
                     ContextMenuButtonConfig(
                       'Run Selection',
-                      icon: const Icon(Icons.play_arrow, size: 16),
+                      icon: Icon(
+                        Icons.play_arrow,
+                        size: 16,
+                        color: isExecuting ? ui.colors.textDisabled : ui.colors.accent,
+                      ),
+                      onPressed: isExecuting
+                          ? null
+                          : () {
+                              final sel = widget.controller.selection;
+                              if (sel.isValid && !sel.isCollapsed) {
+                                final selectedText = widget.controller.text
+                                    .substring(sel.start, sel.end);
+                                p.Provider.of<AppProvider>(
+                                  context,
+                                  listen: false,
+                                ).runConsoleCommand(selectedText);
+                              } else {
+                                p.Provider.of<AppProvider>(
+                                  context,
+                                  listen: false,
+                                ).runActiveFile();
+                              }
+                            },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Toggle Comment',
+                      icon: const Icon(Icons.comment, size: 16),
                       onPressed: () {
-                        final sel = widget.controller.selection;
-                        if (sel.isValid && !sel.isCollapsed) {
-                          final selectedText = widget.controller.text
-                              .substring(sel.start, sel.end);
-                          p.Provider.of<AppProvider>(
-                            context,
-                            listen: false,
-                          ).runConsoleCommand(selectedText);
-                        } else {
-                          p.Provider.of<AppProvider>(
-                            context,
-                            listen: false,
-                          ).runActiveFile();
-                        }
+                        p.Provider.of<AppProvider>(
+                          context,
+                          listen: false,
+                        ).triggerEditorAction('editor.comment');
                       },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Auto Indent',
+                      icon: const Icon(Icons.format_indent_increase, size: 16),
+                      onPressed: () {
+                        p.Provider.of<AppProvider>(
+                          context,
+                          listen: false,
+                        ).triggerEditorAction('editor.autoIndent');
+                      },
+                    ),
+                    ContextMenuButtonConfig(
+                      'Peek Definition',
+                      icon: Icon(Icons.code, size: 16, color: ui.colors.info),
+                      onPressed: () => _peekDefinition(context),
                     ),
                     ContextMenuButtonConfig(
                       'Find',
@@ -344,6 +495,7 @@ class _EditorSurfaceState extends ConsumerState<EditorSurface> with AutomaticKee
           ),
         ),
       ),
-    ));
+    ),
+    );
   }
 }

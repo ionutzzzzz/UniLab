@@ -46,7 +46,18 @@ class MainShell extends ConsumerWidget {
       },
       // Save: Ctrl/Cmd+S
       SingleActivator(LogicalKeyboardKey.keyS, control: !isMac, meta: isMac): () {
-        appProvider.saveActiveFile();
+        appProvider.saveActiveFile().then((_) {
+          if (context.mounted) {
+            final name = appProvider.activeFile?.name ?? 'file';
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Saved $name'),
+                duration: const Duration(milliseconds: 1200),
+              ),
+            );
+          }
+        });
       },
       // Save As: Ctrl/Cmd+Shift+S
       SingleActivator(LogicalKeyboardKey.keyS, control: !isMac, meta: isMac, shift: true): () {
@@ -87,6 +98,26 @@ class MainShell extends ConsumerWidget {
       // Replace: Ctrl/Cmd+H
       SingleActivator(LogicalKeyboardKey.keyH, control: !isMac, meta: isMac): () {
         appProvider.triggerEditorAction('editor.replace');
+      },
+      // Go to Line: Ctrl/Cmd+G
+      SingleActivator(LogicalKeyboardKey.keyG, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.gotoLine');
+      },
+      // Toggle Comment: Ctrl/Cmd+/
+      SingleActivator(LogicalKeyboardKey.slash, control: !isMac, meta: isMac): () {
+        appProvider.triggerEditorAction('editor.comment');
+      },
+      // Auto Indent: Ctrl/Cmd+Shift+I
+      SingleActivator(LogicalKeyboardKey.keyI, control: !isMac, meta: isMac, shift: true): () {
+        appProvider.triggerEditorAction('editor.autoIndent');
+      },
+      // Toggle Left Panel: Ctrl/Cmd+B
+      SingleActivator(LogicalKeyboardKey.keyB, control: !isMac, meta: isMac): () {
+        ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
+      },
+      // Toggle Bottom Panel: Ctrl/Cmd+J
+      SingleActivator(LogicalKeyboardKey.keyJ, control: !isMac, meta: isMac): () {
+        ref.read(shellLayoutProvider.notifier).toggleBottomPanel();
       },
     };
 

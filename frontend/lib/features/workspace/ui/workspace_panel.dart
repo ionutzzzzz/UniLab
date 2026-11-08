@@ -11,6 +11,7 @@ import 'variables_grid.dart';
 import 'plots_gallery.dart';
 import 'property_inspector.dart';
 import 'help_view.dart';
+import 'toolbox_view.dart';
 import '../../../widgets/ui_icon_button.dart';
 
 class WorkspacePanel extends ConsumerStatefulWidget {
@@ -21,7 +22,7 @@ class WorkspacePanel extends ConsumerStatefulWidget {
 }
 
 class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
-  final List<String> _segments = ['Variables', 'Inspector', 'Plots', 'Help'];
+  final List<String> _segments = ['Variables', 'Plots', 'Toolbox', 'Inspector', 'Help'];
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +40,9 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
         break;
       case 'Plots':
         activeView = const PlotsGallery();
+        break;
+      case 'Toolbox':
+        activeView = const ToolboxView();
         break;
       case 'Help':
         activeView = const HelpView();

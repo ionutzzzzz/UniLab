@@ -76,8 +76,11 @@ fn get_sim_event_sender() -> &'static std::sync::mpsc::Sender<String> {
                                 }
                             }
                             if event_str.contains("STOP") {
-                                let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
-                                for engine in sessions.values() {
+                                let engines: Vec<Py<PyAny>> = {
+                                    let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
+                                    sessions.values().map(|e| e.clone_ref(py)).collect()
+                                };
+                                for engine in engines {
                                     let bound = engine.bind(py);
                                     if bound.hasattr("request_cancel").unwrap_or(false) {
                                         let _ = bound.call_method0("request_cancel");
@@ -108,17 +111,34 @@ pub extern "C" fn unilab_set_workspace_callback(callback: Option<WorkspaceCallba
     });
 }
 
-fn add_venv_site_packages(pypath: &Bound<'_, PyAny>, venv_path: &std::path::Path) {
+fn add_venv_site_packages(py: Python<'_>, pypath: &Bound<'_, PyAny>, venv_path: &std::path::Path) {
     if !venv_path.exists() {
         return;
     }
-    // Unix: lib/python*/site-packages
+    let expected_py_dir = py
+        .import("sys")
+        .and_then(|s| s.getattr("version_info"))
+        .and_then(|vi| {
+            let major: u32 = vi.getattr("major")?.extract()?;
+            let minor: u32 = vi.getattr("minor")?.extract()?;
+            Ok(format!("python{}.{}", major, minor))
+        })
+        .ok();
+
+    // Unix: lib/pythonX.Y/site-packages (only matching the active Python major.minor version)
     let venv_lib = venv_path.join("lib");
     if venv_lib.exists() {
         if let Ok(entries) = std::fs::read_dir(&venv_lib) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
+                    if let (Some(expected), Some(dir_name)) =
+                        (&expected_py_dir, path.file_name().and_then(|n| n.to_str()))
+                    {
+                        if dir_name != expected {
+                            continue;
+                        }
+                    }
                     let sp = path.join("site-packages");
                     if sp.exists() {
                         if let Some(s) = sp.to_str() {
@@ -182,30 +202,39 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
                 }
             }
 
-            if let Ok(m) = py.import("matplotlib") {
-                let _ = m.call_method1("use", ("Agg",));
-            }
-
             let sys = py.import("sys")?;
             let pypath = sys.getattr("path")?;
 
-            pypath.call_method1("insert", (0, &abs_path_str))?;
-
             // Discover and add virtualenvs to sys.path (both venv and .venv, Unix and Windows)
-            let base_dirs = [
-                std::path::PathBuf::from("/opt/unilab"),
-                abs_backend_parent.clone(),
-                abs_backend_parent.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
-                abs_backend_parent.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()).unwrap_or_default(),
-                abs_backend_parent.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.to_path_buf()).unwrap_or_default(),
-            ];
+            // Walk ancestors from /opt/unilab, current_dir, and abs_backend_parent so the closest
+            // workspace venv ends up at index 0 of sys.path before importing matplotlib/numpy/scipy.
+            let mut base_dirs: Vec<std::path::PathBuf> = vec![std::path::PathBuf::from("/opt/unilab")];
+            if let Ok(cwd) = std::env::current_dir() {
+                let mut ancestors: Vec<std::path::PathBuf> =
+                    cwd.ancestors().take(8).map(|p| p.to_path_buf()).collect();
+                ancestors.reverse();
+                base_dirs.extend(ancestors);
+            }
+            let mut backend_ancestors: Vec<std::path::PathBuf> = abs_backend_parent
+                .ancestors()
+                .take(8)
+                .map(|p| p.to_path_buf())
+                .collect();
+            backend_ancestors.reverse();
+            base_dirs.extend(backend_ancestors);
 
             for base in &base_dirs {
                 if base.as_os_str().is_empty() {
                     continue;
                 }
-                add_venv_site_packages(&pypath, &base.join("venv"));
-                add_venv_site_packages(&pypath, &base.join(".venv"));
+                add_venv_site_packages(py, &pypath, &base.join("venv"));
+                add_venv_site_packages(py, &pypath, &base.join(".venv"));
+            }
+
+            pypath.call_method1("insert", (0, &abs_path_str))?;
+
+            if let Ok(m) = py.import("matplotlib") {
+                let _ = m.call_method1("use", ("Agg",));
             }
 
             Ok(())
@@ -436,9 +465,13 @@ pub extern "C" fn unilab_execute(
             .to_string();
 
         let py_res = Python::with_gil(|py| -> Result<String, String> {
-            let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
-            let engine = sessions.get(&session_id_str)
-                .ok_or_else(|| "Session not found".to_string())?;
+            let engine = {
+                let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
+                sessions
+                    .get(&session_id_str)
+                    .map(|e| e.clone_ref(py))
+                    .ok_or_else(|| "Session not found".to_string())?
+            };
             let engine = engine.bind(py);
 
             let py_result = engine.call_method1("run_code_sync", (&code_str, timeout)).map_err(|e| e.to_string())?;
@@ -484,9 +517,13 @@ pub extern "C" fn unilab_execute_with_filename(
         };
 
         let py_res = Python::with_gil(|py| -> Result<String, String> {
-            let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
-            let engine = sessions.get(&session_id_str)
-                .ok_or_else(|| "Session not found".to_string())?;
+            let engine = {
+                let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
+                sessions
+                    .get(&session_id_str)
+                    .map(|e| e.clone_ref(py))
+                    .ok_or_else(|| "Session not found".to_string())?
+            };
             let engine = engine.bind(py);
 
             let py_result = engine.call_method1("run_code_sync", (&code_str, timeout, filename_str)).map_err(|e| e.to_string())?;
@@ -519,9 +556,13 @@ pub extern "C" fn unilab_get_workspace(session_id: *const c_char) -> *mut c_char
             .to_string();
 
         let py_res = Python::with_gil(|py| -> Result<String, String> {
-            let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
-            let engine = sessions.get(&session_id_str)
-                .ok_or_else(|| "Session not found".to_string())?;
+            let engine = {
+                let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
+                sessions
+                    .get(&session_id_str)
+                    .map(|e| e.clone_ref(py))
+                    .ok_or_else(|| "Session not found".to_string())?
+            };
             let engine = engine.bind(py);
 
             let vars_dict = engine.call_method0("_get_variables").map_err(|e| e.to_string())?;
@@ -560,8 +601,11 @@ pub extern "C" fn unilab_get_autocomplete(
             .to_string();
 
         let opt_json = Python::with_gil(|py| -> Option<String> {
-            let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
-            let engine = sessions.get(&session_id_str)?.bind(py);
+            let engine = {
+                let sessions = get_sessions_map().lock().unwrap_or_else(|e| e.into_inner());
+                sessions.get(&session_id_str).map(|e| e.clone_ref(py))?
+            };
+            let engine = engine.bind(py);
 
             let suggestions: Vec<String> = engine
                 .call_method1("complete", (text_str.clone(), line_str.clone()))

@@ -39,6 +39,7 @@ class WorkspaceSegmented extends StatelessWidget {
             case 'Variables': icon = LucideIcons.variable; break;
             case 'Inspector': icon = LucideIcons.info; break;
             case 'Plots': icon = LucideIcons.lineChart; break;
+            case 'Toolbox': icon = LucideIcons.wrench; break;
             case 'Help': icon = LucideIcons.helpCircle; break;
             default: icon = LucideIcons.box;
           }

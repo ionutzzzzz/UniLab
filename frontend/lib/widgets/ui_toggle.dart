@@ -17,7 +17,7 @@ class UiToggle extends StatelessWidget {
     return Switch(
       value: value,
       onChanged: onChanged,
-      activeColor: ui.colors.accent,
+      activeThumbColor: ui.colors.accent,
       activeTrackColor: ui.colors.accentMuted,
       inactiveThumbColor: ui.colors.textMuted,
       inactiveTrackColor: ui.colors.divider,

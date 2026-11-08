@@ -151,6 +151,29 @@ class KeyboardShortcutsNotifier extends StateNotifier<Map<String, String>> {
   void updateShortcut(String action, String keys) {
     state = {...state, action: keys};
   }
+
+  void replaceAll(Map<String, String> shortcuts) {
+    state = Map<String, String>.from(shortcuts);
+  }
+
+  void resetDefaults() {
+    state = {
+      'new_file': 'Ctrl+N',
+      'open_file': 'Ctrl+O',
+      'save_file': 'Ctrl+S',
+      'find': 'Ctrl+F',
+      'find_replace': 'Ctrl+H',
+      'command_palette': 'Ctrl+Shift+P',
+      'run': 'Ctrl+Enter',
+      'stop': 'Ctrl+.',
+      'comment': 'Ctrl+/',
+      'indent': 'Tab',
+      'dedent': 'Shift+Tab',
+      'format': 'Ctrl+Shift+I',
+      'undo': 'Ctrl+Z',
+      'redo': 'Ctrl+Y',
+    };
+  }
 }
 
 class CommandHistoryNotifier extends StateNotifier<List<String>> {

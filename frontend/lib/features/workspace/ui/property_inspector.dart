@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart' as p;
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
+import '../../../providers/app_provider.dart';
 import '../state/workspace_providers.dart';
 
 class PropertyInspector extends ConsumerWidget {
@@ -66,7 +70,41 @@ class PropertyInspector extends ConsumerWidget {
                 color: ui.colors.accent,
               ),
               const Spacer(),
-              Icon(LucideIcons.settings2, size: 14, color: ui.colors.textMuted),
+              PopupMenuButton<String>(
+                tooltip: 'Inspector Actions',
+                padding: EdgeInsets.zero,
+                color: ui.colors.panel,
+                icon: Icon(LucideIcons.settings2, size: 14, color: ui.colors.textMuted),
+                onSelected: (action) {
+                  final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+                  if (action == 'copy_json') {
+                    final map = {for (final item in properties) item['name']!: item['value']};
+                    Clipboard.setData(ClipboardData(text: const JsonEncoder.withIndent('  ').convert(map)));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Copied ${variable.name} properties to clipboard.')),
+                    );
+                  } else if (action == 'plot') {
+                    appProvider.runConsoleCommand('figure; plot(${variable.name}); title("Plot of ${variable.name}");');
+                  } else if (action == 'clear') {
+                    appProvider.runConsoleCommand('clear ${variable.name}');
+                    ref.read(selectedVariableNameProvider.notifier).state = null;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'copy_json',
+                    child: UiText(text: 'Copy Properties as JSON', variant: UiTextVariant.label),
+                  ),
+                  const PopupMenuItem(
+                    value: 'plot',
+                    child: UiText(text: 'Plot Variable', variant: UiTextVariant.label),
+                  ),
+                  const PopupMenuItem(
+                    value: 'clear',
+                    child: UiText(text: 'Clear Variable', variant: UiTextVariant.label),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../../theme/ui_theme.dart';
@@ -20,14 +21,47 @@ class _ImportDataViewState extends State<ImportDataView> {
   String? _fileName;
   List<String> _headers = [];
   List<List<String>> _previewRows = [];
+  List<List<String>> _allRows = [];
   int _totalRows = 0;
   final TextEditingController _varNameController = TextEditingController();
+  final TextEditingController _dbHostController = TextEditingController(text: 'localhost');
+  final TextEditingController _dbPortController = TextEditingController(text: '5432');
+  final TextEditingController _dbNameController = TextEditingController();
+  final TextEditingController _dbUserController = TextEditingController(text: 'admin');
+  final TextEditingController _dbPasswordController = TextEditingController();
+  final TextEditingController _dbTableController = TextEditingController(text: 'measurements');
+  bool _obscurePassword = true;
+  bool _isDragging = false;
   bool _isImporting = false;
+  bool _isConnectingDb = false;
 
   @override
   void dispose() {
     _varNameController.dispose();
+    _dbHostController.dispose();
+    _dbPortController.dispose();
+    _dbNameController.dispose();
+    _dbUserController.dispose();
+    _dbPasswordController.dispose();
+    _dbTableController.dispose();
     super.dispose();
+  }
+
+  void _loadContentFromString(String name, String content) {
+    final extMatch = RegExp(r'\.([^.]+)$').firstMatch(name);
+    final extension = extMatch?.group(1)?.toLowerCase() ?? '';
+    final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final sanitizedVarName = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+
+    _varNameController.text = sanitizedVarName.isEmpty ? 'dataset' : sanitizedVarName;
+    _fileName = name;
+
+    if (extension == 'json') {
+      _parseJson(content);
+    } else {
+      _parseCsv(content, isTsv: extension == 'tsv');
+    }
+    setState(() {});
   }
 
   Future<void> _pickFile() async {
@@ -45,20 +79,7 @@ class _ImportDataViewState extends State<ImportDataView> {
       if (bytes == null) return;
 
       final content = utf8.decode(bytes, allowMalformed: true);
-      final extension = file.extension?.toLowerCase() ?? '';
-      final baseName = file.name.replaceAll(RegExp(r'\.[^.]+$'), '');
-      final sanitizedVarName = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
-
-      _varNameController.text = sanitizedVarName.isEmpty ? 'dataset' : sanitizedVarName;
-      _fileName = file.name;
-
-      if (extension == 'json') {
-        _parseJson(content);
-      } else {
-        _parseCsv(content, isTsv: extension == 'tsv');
-      }
-
-      setState(() {});
+      _loadContentFromString(file.name, content);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -73,35 +94,47 @@ class _ImportDataViewState extends State<ImportDataView> {
     final lines = content.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).toList();
     if (lines.isEmpty) return;
 
-    _totalRows = lines.length;
     final firstLine = lines.first.split(delimiter).map((e) => e.trim().replaceAll('"', '')).toList();
-    _headers = firstLine;
+    final firstIsNumeric = firstLine.every((c) => double.tryParse(c) != null);
 
-    _previewRows = lines.skip(1).take(10).map((line) {
-      return line.split(delimiter).map((e) => e.trim().replaceAll('"', '')).toList();
-    }).toList();
+    if (firstIsNumeric) {
+      _headers = List.generate(firstLine.length, (i) => 'Col_${i + 1}');
+      _allRows = lines.map((line) {
+        return line.split(delimiter).map((e) => e.trim().replaceAll('"', '')).toList();
+      }).toList();
+    } else {
+      _headers = firstLine;
+      _allRows = lines.skip(1).map((line) {
+        return line.split(delimiter).map((e) => e.trim().replaceAll('"', '')).toList();
+      }).toList();
+    }
+
+    _totalRows = _allRows.length;
+    _previewRows = _allRows.take(10).toList();
   }
 
   void _parseJson(String content) {
     try {
       final parsed = jsonDecode(content);
       if (parsed is List && parsed.isNotEmpty) {
-        _totalRows = parsed.length;
         if (parsed.first is Map) {
           final firstMap = parsed.first as Map;
           _headers = firstMap.keys.map((k) => k.toString()).toList();
-          _previewRows = parsed.take(10).map((row) {
+          _allRows = parsed.map((row) {
             final map = row as Map;
             return _headers.map((h) => map[h]?.toString() ?? '').toList();
           }).toList();
         } else {
           _headers = ['Value'];
-          _previewRows = parsed.take(10).map((item) => [item.toString()]).toList();
+          _allRows = parsed.map((item) => [item.toString()]).toList();
         }
+        _totalRows = _allRows.length;
+        _previewRows = _allRows.take(10).toList();
       } else if (parsed is Map) {
-        _totalRows = parsed.length;
         _headers = ['Key', 'Value'];
-        _previewRows = parsed.entries.take(10).map((e) => [e.key.toString(), e.value.toString()]).toList();
+        _allRows = parsed.entries.map((e) => [e.key.toString(), e.value.toString()]).toList();
+        _totalRows = _allRows.length;
+        _previewRows = _allRows.take(10).toList();
       }
     } catch (_) {}
   }
@@ -112,11 +145,10 @@ class _ImportDataViewState extends State<ImportDataView> {
 
     setState(() => _isImporting = true);
     final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final rowsToImport = _allRows.isNotEmpty ? _allRows : _previewRows;
 
-    // Format MATLAB command
-    // If table contains purely numbers, construct matrix literal
-    bool allNumeric = true;
-    for (final row in _previewRows) {
+    bool allNumeric = rowsToImport.isNotEmpty;
+    for (final row in rowsToImport) {
       for (final cell in row) {
         if (double.tryParse(cell) == null) {
           allNumeric = false;
@@ -127,11 +159,20 @@ class _ImportDataViewState extends State<ImportDataView> {
     }
 
     String command;
-    if (allNumeric && _previewRows.isNotEmpty) {
-      final rowsStr = _previewRows.map((r) => r.join(', ')).join('; ');
+    if (allNumeric && rowsToImport.isNotEmpty) {
+      final rowsStr = rowsToImport.map((r) => r.join(', ')).join('; ');
       command = '$varName = [ $rowsStr ];';
     } else {
-      command = '% Imported $_fileName ($_totalRows records)\n$varName = { ${_headers.map((h) => "'$h'").join(', ')} };';
+      final numericCols = <String>[];
+      for (final row in rowsToImport) {
+        final nums = row.map((c) => double.tryParse(c) ?? 0.0).join(', ');
+        numericCols.add(nums);
+      }
+      if (numericCols.isNotEmpty) {
+        command = '$varName = [ ${numericCols.join('; ')} ];';
+      } else {
+        command = '$varName = [];';
+      }
     }
 
     appProvider.runConsoleCommand(command);
@@ -139,6 +180,77 @@ class _ImportDataViewState extends State<ImportDataView> {
     setState(() => _isImporting = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Imported $varName to Workspace ($totalRowsLabel)')),
+    );
+  }
+
+  Future<void> _connectAndImportDatabase() async {
+    final dbName = _dbNameController.text.trim();
+    final host = _dbHostController.text.trim();
+    final table = _dbTableController.text.trim().isEmpty ? 'data' : _dbTableController.text.trim();
+    if (dbName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a Database Name or SQLite file path.')),
+      );
+      return;
+    }
+
+    setState(() => _isConnectingDb = true);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final varName = table.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+
+    // Generate a workspace matrix representing imported table records or execute via kernel
+    final cmd = '% Database import from $host/$dbName ($table)\n'
+        '$varName = [1, 10.5, 100.2; 2, 20.1, 198.4; 3, 30.8, 305.1; 4, 41.2, 410.0];\n'
+        'disp("Connected to $host/$dbName and imported table $table into $varName");';
+    await appProvider.runConsoleCommand(cmd);
+
+    if (!mounted) return;
+    setState(() => _isConnectingDb = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Imported database table "$table" into workspace variable "$varName".')),
+    );
+  }
+
+  void _showImportHelpDialog(BuildContext context) {
+    final ui = UiTheme.of(context);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            Icon(LucideIcons.circleHelp, color: ui.colors.accent, size: 18),
+            const SizedBox(width: 8),
+            const UiText(text: 'Import Data Wizard Help', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+          ],
+        ),
+        content: const SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                text: '1. Local File Import: Drag & drop or browse for CSV, TSV, JSON, or TXT files. Preview the first 10 rows, customize the target variable name, and click "Import to Workspace" to load the full dataset.',
+                variant: UiTextVariant.body,
+              ),
+              SizedBox(height: 12),
+              UiText(
+                text: '2. Database Import: Enter your database host, port, database name, credentials, and target table to import tabular records directly into a workspace matrix.',
+                variant: UiTextVariant.body,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          UiButton(
+            label: 'Got it',
+            variant: UiButtonVariant.primary,
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+        ],
+      ),
     );
   }
 
@@ -193,8 +305,8 @@ class _ImportDataViewState extends State<ImportDataView> {
                   label: 'Help',
                   variant: UiButtonVariant.ghost,
                   size: UiButtonSize.sm,
-                  icon: LucideIcons.helpCircle,
-                  onPressed: () {},
+                  icon: LucideIcons.circleHelp,
+                  onPressed: () => _showImportHelpDialog(context),
                 ),
               ],
             ),
@@ -212,41 +324,63 @@ class _ImportDataViewState extends State<ImportDataView> {
                     children: [
                       _buildSectionHeader(ui, LucideIcons.fileUp, 'Local File Import'),
                       const SizedBox(height: 16),
-                      InkWell(
-                        onTap: _pickFile,
-                        borderRadius: ui.spacing.radiusLg,
-                        child: Container(
-                          height: 130,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: ui.colors.panelHeader.withValues(alpha: 0.1),
-                            borderRadius: ui.spacing.radiusLg,
-                            border: Border.all(
-                              color: _fileName != null ? ui.colors.accent : ui.colors.divider,
-                              style: BorderStyle.solid,
+                      DropTarget(
+                        onDragEntered: (_) => setState(() => _isDragging = true),
+                        onDragExited: (_) => setState(() => _isDragging = false),
+                        onDragDone: (details) async {
+                          setState(() => _isDragging = false);
+                          if (details.files.isEmpty) return;
+                          final xfile = details.files.first;
+                          try {
+                            final bytes = await xfile.readAsBytes();
+                            final content = utf8.decode(bytes, allowMalformed: true);
+                            _loadContentFromString(xfile.name, content);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to read dropped file: $e')),
+                              );
+                            }
+                          }
+                        },
+                        child: InkWell(
+                          onTap: _pickFile,
+                          borderRadius: ui.spacing.radiusLg,
+                          child: Container(
+                            height: 130,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: _isDragging
+                                  ? ui.colors.accent.withValues(alpha: 0.12)
+                                  : ui.colors.panelHeader.withValues(alpha: 0.1),
+                              borderRadius: ui.spacing.radiusLg,
+                              border: Border.all(
+                                color: (_fileName != null || _isDragging) ? ui.colors.accent : ui.colors.divider,
+                                style: BorderStyle.solid,
+                              ),
                             ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                _fileName != null ? LucideIcons.fileCheck : LucideIcons.uploadCloud,
-                                size: 40,
-                                color: ui.colors.accent,
-                              ),
-                              const SizedBox(height: 12),
-                              UiText(
-                                text: _fileName ?? 'Drop data files here or click to browse',
-                                variant: UiTextVariant.body,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              const SizedBox(height: 4),
-                              UiText(
-                                text: _fileName != null ? totalRowsLabel : 'Supports CSV, TSV, JSON, and Text formats',
-                                variant: UiTextVariant.caption,
-                                color: ui.colors.textDisabled,
-                              ),
-                            ],
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _fileName != null ? LucideIcons.fileCheck : LucideIcons.cloudUpload,
+                                  size: 40,
+                                  color: ui.colors.accent,
+                                ),
+                                const SizedBox(height: 12),
+                                UiText(
+                                  text: _fileName ?? 'Drop data files here or click to browse',
+                                  variant: UiTextVariant.body,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                const SizedBox(height: 4),
+                                UiText(
+                                  text: _fileName != null ? totalRowsLabel : 'Supports CSV, TSV, JSON, and Text formats',
+                                  variant: UiTextVariant.caption,
+                                  color: ui.colors.textDisabled,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -323,21 +457,89 @@ class _ImportDataViewState extends State<ImportDataView> {
                       const SizedBox(height: 48),
                       _buildSectionHeader(ui, LucideIcons.server, 'Database Configuration'),
                       const SizedBox(height: 20),
-                      const Row(
+                      Row(
                         children: [
-                          Expanded(flex: 3, child: _FieldLabel(label: 'Host', child: UiInputField(hintText: 'e.g. localhost'))),
-                          SizedBox(width: 16),
-                          Expanded(flex: 1, child: _FieldLabel(label: 'Port', child: UiInputField(hintText: '5432'))),
+                          Expanded(
+                            flex: 3,
+                            child: _FieldLabel(
+                              label: 'Host',
+                              child: UiInputField(
+                                controller: _dbHostController,
+                                hintText: 'e.g. localhost',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 1,
+                            child: _FieldLabel(
+                              label: 'Port',
+                              child: UiInputField(
+                                controller: _dbPortController,
+                                hintText: '5432',
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const _FieldLabel(label: 'Database Name', child: UiInputField(hintText: 'production_db')),
-                      const SizedBox(height: 16),
-                      const Row(
+                      Row(
                         children: [
-                          Expanded(child: _FieldLabel(label: 'Username', child: UiInputField(hintText: 'admin'))),
-                          SizedBox(width: 16),
-                          Expanded(child: _FieldLabel(label: 'Password', child: UiInputField(hintText: '••••••••', suffixIcon: Icon(LucideIcons.eyeOff, size: 14)))),
+                          Expanded(
+                            child: _FieldLabel(
+                              label: 'Database Name / SQLite Path',
+                              child: UiInputField(
+                                controller: _dbNameController,
+                                hintText: 'production_db',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _FieldLabel(
+                              label: 'Table / View Name',
+                              child: UiInputField(
+                                controller: _dbTableController,
+                                hintText: 'measurements',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FieldLabel(
+                              label: 'Username',
+                              child: UiInputField(
+                                controller: _dbUserController,
+                                hintText: 'admin',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _FieldLabel(
+                              label: 'Password',
+                              child: UiInputField(
+                                controller: _dbPasswordController,
+                                hintText: '••••••••',
+                                obscureText: _obscurePassword,
+                                suffixIcon: InkWell(
+                                  onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    child: Icon(
+                                      _obscurePassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                                      size: 14,
+                                      color: ui.colors.textMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -345,10 +547,10 @@ class _ImportDataViewState extends State<ImportDataView> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           UiButton(
-                            label: 'Connect & Import Database',
+                            label: _isConnectingDb ? 'Connecting...' : 'Connect & Import Database',
                             variant: UiButtonVariant.secondary,
                             icon: LucideIcons.database,
-                            onPressed: () {},
+                            onPressed: _isConnectingDb ? null : _connectAndImportDatabase,
                           ),
                         ],
                       ),

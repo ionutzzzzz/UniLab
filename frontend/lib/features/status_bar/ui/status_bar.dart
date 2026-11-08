@@ -8,6 +8,8 @@ import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../providers/app_provider.dart';
 import '../../../providers/riverpod_providers.dart';
+import '../../../core/layout/shell_layout_state.dart';
+import '../../../models/editor_models.dart';
 import '../../../utils/platform_io.dart' as io;
 import '../domain/status_bar_slot.dart';
 
@@ -55,28 +57,61 @@ class _AppStatusBarState extends ConsumerState<AppStatusBar> {
     }
 
     final branchName = _getGitBranch(appProvider.projectRoot);
+    final problemCount = appProvider.consoleMessages
+        .where((m) => m.type == ConsoleMessageType.error || m.type == ConsoleMessageType.warning)
+        .length;
     
     final slots = [
       StatusBarSlot(
         id: 'status',
         label: statusLabel,
+        tooltip: 'Click to Restart Computation Kernel',
         alignment: StatusBarSlotAlignment.left,
         priority: 100,
+        onTap: () => appProvider.restartBackend(),
       ),
       StatusBarSlot(
         id: 'branch', 
         label: branchName, 
         icon: LucideIcons.gitBranch, 
+        tooltip: 'Git Branch ($branchName)',
         alignment: StatusBarSlotAlignment.left, 
-        priority: 90
+        priority: 90,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Active Git Branch: $branchName (${appProvider.projectRoot ?? "No project folder"})'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
       ),
       StatusBarSlot(
         id: 'cursor', 
         label: 'Ln ${cursorPosition['line']}, Col ${cursorPosition['column']}', 
+        tooltip: 'Go to Line (Ctrl+G)',
         alignment: StatusBarSlotAlignment.right, 
-        priority: 100
+        priority: 100,
+        onTap: () => appProvider.triggerEditorAction('editor.gotoLine'),
       ),
-      const StatusBarSlot(id: 'encoding', label: 'UTF-8', alignment: StatusBarSlotAlignment.right, priority: 90),
+      StatusBarSlot(
+        id: 'encoding',
+        label: 'UTF-8',
+        tooltip: 'File Encoding & Statistics',
+        alignment: StatusBarSlotAlignment.right,
+        priority: 90,
+        onTap: () {
+          final active = appProvider.activeFile;
+          final linesCount = active != null ? active.content.split('\n').length : 0;
+          final charsCount = active?.content.length ?? 0;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${active?.name ?? "No active file"} — UTF-8 • $linesCount lines • $charsCount chars'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+      ),
     ];
 
     final leftSlots = slots.where((s) => s.alignment == StatusBarSlotAlignment.left).toList()
@@ -123,7 +158,40 @@ class _AppStatusBarState extends ConsumerState<AppStatusBar> {
               children: [
                 ...rightSlots.map((s) => _SlotWidget(slot: s)),
                 SizedBox(width: ui.spacing.sm),
-                Icon(LucideIcons.bell, size: 14, color: ui.colors.textMuted),
+                Tooltip(
+                  message: problemCount > 0 ? '$problemCount Problems (Click to view)' : 'Notifications & Problems',
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!ref.read(shellLayoutProvider).showBottomPanel) {
+                          ref.read(shellLayoutProvider.notifier).toggleBottomPanel();
+                        }
+                        appProvider.setSelectedConsoleTab('problems');
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.bell,
+                            size: 14,
+                            color: problemCount > 0 ? ui.colors.warning : ui.colors.textMuted,
+                          ),
+                          if (problemCount > 0) ...[
+                            const SizedBox(width: 4),
+                            UiText(
+                              text: '$problemCount',
+                              variant: UiTextVariant.label,
+                              fontSize: 9,
+                              color: ui.colors.warning,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],

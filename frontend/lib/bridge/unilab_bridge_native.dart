@@ -117,6 +117,7 @@ class UniLabBridge {
   static UnilabSetEventCallback? _mainSetEventCallback;
 
   String? _sessionId;
+  String? _backendPath;
   bool _initialized = false;
   bool _disposed = false;
 
@@ -125,9 +126,11 @@ class UniLabBridge {
   NativeCallable<EventCallbackNative>? _eventCallback;
 
   // Worker isolate communication
+  Isolate? _workerIsolate;
   SendPort? _workerSendPort;
-  final ReceivePort _mainReceivePort = ReceivePort();
-  final Completer<void> _workerReady = Completer<void>();
+  ReceivePort _mainReceivePort = ReceivePort();
+  Completer<void> _workerReady = Completer<void>();
+  final Set<SendPort> _inFlightReplyPorts = {};
 
   UniLabBridge._() {
     _startWorker();
@@ -208,7 +211,7 @@ class UniLabBridge {
   }
 
   Future<void> _startWorker() async {
-    await Isolate.spawn(_workerEntry, _mainReceivePort.sendPort);
+    _workerIsolate = await Isolate.spawn(_workerEntry, _mainReceivePort.sendPort);
 
     _mainReceivePort.listen((message) {
       if (message is SendPort) {
@@ -234,10 +237,14 @@ class UniLabBridge {
     }
     await _workerReady.future;
     final responsePort = ReceivePort();
+    final replySendPort = responsePort.sendPort;
+    if (command == 'execute') {
+      _inFlightReplyPorts.add(replySendPort);
+    }
     _workerSendPort!.send({
       'command': command,
       'params': params,
-      'replyPort': responsePort.sendPort,
+      'replyPort': replySendPort,
     });
 
     try {
@@ -249,6 +256,7 @@ class UniLabBridge {
     } on TimeoutException {
       throw Exception('Command $command timed out after ${timeout.inSeconds}s');
     } finally {
+      _inFlightReplyPorts.remove(replySendPort);
       responsePort.close();
     }
   }
@@ -261,6 +269,7 @@ class UniLabBridge {
     final backendPath = (customBackendPath != null && customBackendPath.isNotEmpty)
         ? customBackendPath
         : await findBackendPath();
+    _backendPath = backendPath;
     debugPrint('[UniLabBridge] Resolved backend path: $backendPath');
 
     // Load library in main isolate for callbacks, non-blocking sim events, and cleanup
@@ -570,6 +579,57 @@ class UniLabBridge {
     await _sendCommand('send_sim_event', {'event': jsonEncode(event)});
   }
 
+  /// Immediately cancel any running script or simulation and ensure the worker
+  /// isolate is ready to execute the next script without delay.
+  Future<void> cancelExecution() async {
+    await sendSimEvent({'type': 'STOP'});
+    if (_inFlightReplyPorts.isEmpty) return;
+
+    // Wait up to 350ms for Python's async KeyboardInterrupt to return cleanly.
+    final deadline = DateTime.now().add(const Duration(milliseconds: 350));
+    while (_inFlightReplyPorts.isNotEmpty && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 20));
+    }
+
+    // If the worker is still blocked in a native call, release pending callers
+    // and recycle the worker isolate so the next script executes immediately.
+    if (_inFlightReplyPorts.isNotEmpty) {
+      for (final port in _inFlightReplyPorts.toList()) {
+        try {
+          port.send({
+            'success': false,
+            'stdout': '',
+            'stderr': 'Execution stopped by user.',
+            'return_code': 130,
+            'execution_time': 0.0,
+            'variables': <String, dynamic>{},
+            'plots': <dynamic>[],
+          });
+        } catch (_) {}
+      }
+      _inFlightReplyPorts.clear();
+
+      try {
+        _workerIsolate?.kill(priority: Isolate.immediate);
+      } catch (_) {}
+      _workerIsolate = null;
+      _workerSendPort = null;
+      try {
+        _mainReceivePort.close();
+      } catch (_) {}
+      _mainReceivePort = ReceivePort();
+      _workerReady = Completer<void>();
+      await _startWorker();
+      if (_backendPath != null) {
+        await _sendCommand(
+          'initialize',
+          {'backendPath': _backendPath!},
+          timeout: const Duration(seconds: 15),
+        );
+      }
+    }
+  }
+
   Future<void> createFile(String filename, String content) async {
     if (_sessionId == null) return;
     await _sendCommand('create_file', {
@@ -596,6 +656,13 @@ class UniLabBridge {
       locations.add(envPath);
     }
 
+    final cwd = Directory.current.path;
+    final parentCwd = p.dirname(cwd);
+    locations.addAll([
+      cwd,
+      parentCwd,
+    ]);
+
     try {
       if (Platform.resolvedExecutable.isNotEmpty) {
         final exePath =
@@ -619,13 +686,7 @@ class UniLabBridge {
       }
     } catch (_) {}
 
-    final cwd = Directory.current.path;
-    final parentCwd = p.dirname(cwd);
-    locations.addAll([
-      cwd,
-      parentCwd,
-      p.join(cwd, 'assets', 'backend'),
-    ]);
+    locations.add(p.join(cwd, 'assets', 'backend'));
 
     for (final candidate in locations) {
       // Case 1: candidate contains a 'backend/' subdirectory

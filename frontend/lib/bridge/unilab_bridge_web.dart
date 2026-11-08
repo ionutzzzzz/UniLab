@@ -228,6 +228,10 @@ class UniLabBridge {
     await _client.sendSimEvent(event);
   }
 
+  Future<void> cancelExecution() async {
+    await sendSimEvent({'type': 'STOP'});
+  }
+
   Future<void> createFile(String filename, String content) async {
     if (_sessionId == null || _useWasmFallback) return;
     await _client.createFile(filename, content);

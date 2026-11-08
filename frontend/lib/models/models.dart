@@ -35,6 +35,10 @@ class UserSettings {
   final String? _syntaxHighlightTheme;
   final bool? _showToolbar;
   final bool? _showStatusBar;
+  final bool? _glassmorphismEnabled;
+  final bool? _plotShowGrid;
+  final bool? _plotShowLabels;
+  final bool? _plotShowLegend;
 
   ThemeMode get themeMode => _themeMode ?? ThemeMode.system;
   String get fontFamily => _fontFamily ?? 'JetBrains Mono';
@@ -76,6 +80,10 @@ class UserSettings {
   String get syntaxHighlightTheme => _syntaxHighlightTheme ?? 'Seaborn Deep';
   bool get showToolbar => _showToolbar ?? true;
   bool get showStatusBar => _showStatusBar ?? true;
+  bool get glassmorphismEnabled => _glassmorphismEnabled ?? true;
+  bool get plotShowGrid => _plotShowGrid ?? true;
+  bool get plotShowLabels => _plotShowLabels ?? true;
+  bool get plotShowLegend => _plotShowLegend ?? true;
 
   UserSettings({
     ThemeMode? themeMode,
@@ -111,6 +119,10 @@ class UserSettings {
     String? syntaxHighlightTheme,
     bool? showToolbar,
     bool? showStatusBar,
+    bool? glassmorphismEnabled,
+    bool? plotShowGrid,
+    bool? plotShowLabels,
+    bool? plotShowLegend,
   })  : _themeMode = themeMode,
         _fontFamily = fontFamily,
         _fontSize = fontSize,
@@ -143,7 +155,11 @@ class UserSettings {
         _plotColormap = plotColormap,
         _syntaxHighlightTheme = syntaxHighlightTheme,
         _showToolbar = showToolbar,
-        _showStatusBar = showStatusBar;
+        _showStatusBar = showStatusBar,
+        _glassmorphismEnabled = glassmorphismEnabled,
+        _plotShowGrid = plotShowGrid,
+        _plotShowLabels = plotShowLabels,
+        _plotShowLegend = plotShowLegend;
 
   UserSettings copyWith({
     ThemeMode? themeMode,
@@ -179,6 +195,10 @@ class UserSettings {
     String? syntaxHighlightTheme,
     bool? showToolbar,
     bool? showStatusBar,
+    bool? glassmorphismEnabled,
+    bool? plotShowGrid,
+    bool? plotShowLabels,
+    bool? plotShowLegend,
   }) {
     return UserSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -214,6 +234,10 @@ class UserSettings {
       syntaxHighlightTheme: syntaxHighlightTheme ?? this.syntaxHighlightTheme,
       showToolbar: showToolbar ?? this.showToolbar,
       showStatusBar: showStatusBar ?? this.showStatusBar,
+      glassmorphismEnabled: glassmorphismEnabled ?? this.glassmorphismEnabled,
+      plotShowGrid: plotShowGrid ?? this.plotShowGrid,
+      plotShowLabels: plotShowLabels ?? this.plotShowLabels,
+      plotShowLegend: plotShowLegend ?? this.plotShowLegend,
     );
   }
 }

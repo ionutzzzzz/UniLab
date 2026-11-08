@@ -98,7 +98,7 @@ class _RibbonButtonState extends State<RibbonButton> {
                   children: [
                     AnimatedContainer(
                       duration: animDuration,
-                      transform: Matrix4.identity()..translate(0.0, _isHovered ? -1.0 : 0.0),
+                      transform: Matrix4.translationValues(0.0, _isHovered ? -1.0 : 0.0, 0.0),
                       child: widget.loading
                         ? SizedBox(
                             width: widget.isLarge ? 24 : 18,

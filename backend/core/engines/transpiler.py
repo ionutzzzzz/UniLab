@@ -6,6 +6,8 @@ import json
 import time
 import re
 import pickle
+import ctypes
+import threading
 import importlib.util
 import pathlib
 import linecache
@@ -95,6 +97,8 @@ class TranspilerEngine(BaseEngine):
         self._workspace_changed_timer = None
         self._runtime_names = set(dir(runtime))
         self._last_ws_update = 0
+        self._cancel_requested = False
+        self._executing_thread_id: Optional[int] = None
         
         # Set initial CWD to sample folder in web mode
         if os.environ.get('UNILAB_WEB_MODE') == '1':
@@ -249,7 +253,30 @@ class TranspilerEngine(BaseEngine):
         pass
 
     async def stop(self):
+        self.request_cancel()
         self._save_workspace()
+
+    def request_cancel(self):
+        """Immediately interrupt any running script or simulation in this session."""
+        self._cancel_requested = True
+        try:
+            from ..simulation import engine as sim_engine
+            if hasattr(sim_engine, 'stop_active_simulation'):
+                sim_engine.stop_active_simulation()
+            elif hasattr(sim_engine, 'push_sim_event'):
+                sim_engine.push_sim_event('{"type": "STOP"}')
+        except Exception:
+            pass
+
+        tid = self._executing_thread_id
+        if tid is not None:
+            try:
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_ulong(tid),
+                    ctypes.py_object(KeyboardInterrupt),
+                )
+            except Exception:
+                pass
 
     async def run_code(self, code: str, timeout: Optional[float] = 300.0, filename: Optional[str] = None) -> ExecutionResult:
         # Handle 'help topic' style calls specifically
@@ -430,6 +457,15 @@ class TranspilerEngine(BaseEngine):
                 err = io.StringIO()
                 
                 success = True
+                current_tid = threading.get_ident()
+                if self._executing_thread_id is not None and self._executing_thread_id != current_tid:
+                    self.request_cancel()
+                    wait_start = time.time()
+                    while self._executing_thread_id is not None and (time.time() - wait_start) < 0.25:
+                        time.sleep(0.01)
+
+                self._cancel_requested = False
+                self._executing_thread_id = current_tid
                 try:
                     # Register in linecache to support inspect/nargout
                     # Use a descriptive pseudo-filename if real one not available
@@ -453,6 +489,13 @@ class TranspilerEngine(BaseEngine):
 
                     # Final workspace update push
                     self._trigger_workspace_changed()
+                except KeyboardInterrupt:
+                    success = False
+                    try:
+                        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(current_tid), None)
+                    except Exception:
+                        pass
+                    err.write("Execution stopped by user.")
                 except NameError as ne:
                     success = False
                     var_name = str(ne).split("'")[1] if "'" in str(ne) else "unknown"
@@ -493,6 +536,13 @@ class TranspilerEngine(BaseEngine):
                         err.write(f"{err_msg}")
                     else:
                         err.write(f"{type(e).__name__}")
+                finally:
+                    try:
+                        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(current_tid), None)
+                    except Exception:
+                        pass
+                    if self._executing_thread_id == current_tid:
+                        self._executing_thread_id = None
                 
                 duration = time.time() - start_ts
                 stdout = out.getvalue()
@@ -536,21 +586,31 @@ class TranspilerEngine(BaseEngine):
                     for idx, filename, script_path, fig_num in all_plot_files:
                         is_final = idx in final_render_indices
                         p = self.workspace_path / filename
-                        if not p.exists(): p = self.cwd / filename
+                        if not p.exists():
+                            p = self.workspace_path / "plots" / filename
+                        if not p.exists():
+                            p = self.cwd / filename
                         
                         data_3d_entry = None
                         
                         # Handle metadata/3D data sidecar (always look for it)
                         base_name = os.path.splitext(filename)[0]
                         for ext in ['.json', '.3d.json']:
-                            meta_path = self.workspace_path / (base_name + ext)
-                            if not meta_path.exists(): meta_path = self.cwd / (base_name + ext)
+                            meta_path = p.parent / (base_name + ext)
+                            if not meta_path.exists():
+                                meta_path = self.workspace_path / (base_name + ext)
+                            if not meta_path.exists():
+                                meta_path = self.cwd / (base_name + ext)
                             
                             if meta_path.exists():
                                 try:
                                     if is_final:
                                         with open(str(meta_path), 'r') as f:
-                                            data_3d_entry = json.load(f)
+                                            loaded_meta = json.load(f)
+                                            if isinstance(data_3d_entry, dict) and isinstance(loaded_meta, dict):
+                                                data_3d_entry.update(loaded_meta)
+                                            else:
+                                                data_3d_entry = loaded_meta
                                     
                                     if os.environ.get('UNILAB_WEB_MODE') == '1':
                                         meta_path.unlink()
@@ -565,7 +625,7 @@ class TranspilerEngine(BaseEngine):
 
                         if p.exists():
                             try:
-                                if is_final and os.environ.get('UNILAB_WEB_MODE') == '1':
+                                if is_final:
                                     b64 = base64.b64encode(p.read_bytes()).decode('utf-8')
                                     plot_data_b64.append(f"data:image/png;base64,{b64}")
                                 

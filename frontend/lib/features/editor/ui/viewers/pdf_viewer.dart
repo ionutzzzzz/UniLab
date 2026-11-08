@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:printing/printing.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../theme/ui_theme.dart';
 import '../../../../widgets/ui_text.dart';
 import '../../../../widgets/ui_icon_button.dart';
+import '../../../../utils/platform_io.dart' as io;
 
 class UniLabPdfViewer extends StatefulWidget {
   final String path;
@@ -17,6 +19,9 @@ class UniLabPdfViewer extends StatefulWidget {
 
 class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
   late PdfViewerController _controller;
+  late final PdfTextSearcher _textSearcher = PdfTextSearcher(_controller)..addListener(_onSearcherUpdated);
+  final TextEditingController _searchController = TextEditingController();
+  bool _showSearchBar = false;
   int _currentPage = 1;
   int _totalPages = 0;
   
@@ -29,11 +34,34 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
     _controller = PdfViewerController();
   }
 
+  void _onSearcherUpdated() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     // Save current page before disposing
     _lastPageCache[widget.path] = _currentPage;
+    _textSearcher.removeListener(_onSearcherUpdated);
+    _textSearcher.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _printDocument() async {
+    try {
+      final bytes = await io.File(widget.path).readAsBytes();
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: widget.name,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to print PDF: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -46,6 +74,7 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
         children: [
           // Navigation Toolbar
           _buildToolbar(ui),
+          if (_showSearchBar) _buildSearchBar(ui),
           
           Expanded(
             child: PdfViewer.file(
@@ -54,6 +83,9 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
               params: PdfViewerParams(
                 enableTextSelection: true,
                 maxScale: 8.0,
+                pagePaintCallbacks: [
+                  _textSearcher.pageTextMatchPaintCallback,
+                ],
                 loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
                   return Center(
                     child: CircularProgressIndicator(
@@ -213,8 +245,14 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
           UiIconButton(
             icon: LucideIcons.search,
             tooltip: 'Search in Document',
+            isActive: _showSearchBar,
             onPressed: () {
-              // Implementation would require more pdfrx search logic
+              setState(() {
+                _showSearchBar = !_showSearchBar;
+                if (!_showSearchBar) {
+                  _textSearcher.resetTextSearch();
+                }
+              });
             },
             size: 28,
             iconSize: 16,
@@ -222,9 +260,81 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
           UiIconButton(
             icon: LucideIcons.printer,
             tooltip: 'Print Document',
-            onPressed: () {},
+            onPressed: _printDocument,
             size: 28,
             iconSize: 16,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(UiTheme ui) {
+    final matchesCount = _textSearcher.matches.length;
+    final currentIdx = (_textSearcher.currentIndex ?? -1) + 1;
+    return Container(
+      height: 36,
+      padding: EdgeInsets.symmetric(horizontal: ui.spacing.md),
+      decoration: BoxDecoration(
+        color: ui.colors.panel,
+        border: Border(bottom: BorderSide(color: ui.colors.divider.withValues(alpha: 0.5))),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.search, size: 14, color: ui.colors.textMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: TextStyle(color: ui.colors.textPrimary, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'Find text in PDF...',
+                hintStyle: TextStyle(color: ui.colors.textMuted, fontSize: 12),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              onChanged: (val) {
+                if (val.trim().isEmpty) {
+                  _textSearcher.resetTextSearch();
+                } else {
+                  _textSearcher.startTextSearch(val, caseInsensitive: true);
+                }
+              },
+              onSubmitted: (_) => _textSearcher.goToNextMatch(),
+            ),
+          ),
+          UiText(
+            text: matchesCount == 0 ? '0 matches' : '$currentIdx / $matchesCount',
+            variant: UiTextVariant.caption,
+            color: ui.colors.textMuted,
+          ),
+          const SizedBox(width: 8),
+          UiIconButton(
+            icon: LucideIcons.chevronUp,
+            tooltip: 'Previous Match',
+            size: 24,
+            iconSize: 14,
+            onPressed: matchesCount > 0 ? () => _textSearcher.goToPrevMatch() : null,
+          ),
+          UiIconButton(
+            icon: LucideIcons.chevronDown,
+            tooltip: 'Next Match',
+            size: 24,
+            iconSize: 14,
+            onPressed: matchesCount > 0 ? () => _textSearcher.goToNextMatch() : null,
+          ),
+          UiIconButton(
+            icon: LucideIcons.x,
+            tooltip: 'Close Search',
+            size: 24,
+            iconSize: 14,
+            onPressed: () {
+              setState(() {
+                _showSearchBar = false;
+                _textSearcher.resetTextSearch();
+              });
+            },
           ),
         ],
       ),

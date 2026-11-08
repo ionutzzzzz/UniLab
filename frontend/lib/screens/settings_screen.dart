@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart' as p;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import '../providers/settings_provider.dart';
 import '../providers/app_provider.dart';
+import '../providers/riverpod_providers.dart';
 import '../theme/ui_theme.dart';
 import '../theme/syntax_themes.dart';
 import '../widgets/ui_text.dart';
 import '../widgets/ui_button.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _selectedIndex = 0;
   final TextEditingController _hexController = TextEditingController();
   late final TextEditingController _defaultProjectPathController;
@@ -35,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final settings = Provider.of<SettingsProvider>(context, listen: false).settings;
+    final settings = p.Provider.of<SettingsProvider>(context, listen: false).settings;
     _defaultProjectPathController = TextEditingController(text: settings.defaultProjectPath);
     _kernelAddressController = TextEditingController(text: settings.kernelAddress);
   }
@@ -51,7 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settingsProvider = p.Provider.of<SettingsProvider>(context);
 
     return Scaffold(
       backgroundColor: ui.colors.canvas,
@@ -198,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildBackendSettings(UiTheme ui) {
-    return Consumer<AppProvider>(
+    return p.Consumer<AppProvider>(
       builder: (context, appProvider, _) {
         final info = appProvider.serverInfo;
         final capabilities = (info['capabilities'] as List<dynamic>?)?.cast<String>() ?? [];
@@ -270,7 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               variant: UiButtonVariant.secondary,
               icon: LucideIcons.refreshCw,
               onPressed: () async {
-                final appProvider = Provider.of<AppProvider>(context, listen: false);
+                final appProvider = p.Provider.of<AppProvider>(context, listen: false);
                 await appProvider.restartBackend();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -291,6 +294,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(ui, 'Theme Selection'),
+        _buildSettingItem(
+          ui,
+          'IDE & Code Highlight Theme',
+          'Select a unified color theme for the entire application and code editor.',
+          DropdownButton<String>(
+            value: SyntaxHighlightTheme.all.any((m) => m.name == settings.syntaxHighlightTheme)
+                ? settings.syntaxHighlightTheme
+                : SyntaxHighlightTheme.all.first.name,
+            dropdownColor: ui.colors.panel,
+            style: ui.typography.body.copyWith(color: ui.colors.textPrimary),
+            underline: Container(),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                final chosen = SyntaxHighlightTheme.all.firstWhere(
+                  (m) => m.name == newValue,
+                  orElse: () => SyntaxHighlightTheme.all.first,
+                );
+                final isLightTheme = chosen.backgroundColor.computeLuminance() > 0.5;
+                settingsProvider.updateSettings(
+                  settings.copyWith(
+                    syntaxHighlightTheme: newValue,
+                    accentColor: chosen.colors.first,
+                    themeMode: isLightTheme ? ThemeMode.light : ThemeMode.dark,
+                  ),
+                );
+              }
+            },
+            items: SyntaxHighlightTheme.all.map((map) {
+              return DropdownMenuItem(
+                value: map.name,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: map.backgroundColor,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(map.name, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(width: 12),
+                    Row(
+                      children: map.colors
+                          .take(4)
+                          .map((c) => Container(width: 6, height: 6, color: c))
+                          .toList(),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
         _buildSettingItem(
           ui,
           'Interface Theme',
@@ -376,8 +436,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ui,
           'Glassmorphism Effects',
           'Enable backdrop blur on transient surfaces for a premium feel.',
-          true,
-          (val) {},
+          settings.glassmorphismEnabled,
+          (val) => settingsProvider.updateSettings(settings.copyWith(glassmorphismEnabled: val)),
         ),
         _buildSettingToggle(
           ui,
@@ -539,8 +599,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _buildSettingItem(
           ui,
-          'Highlight Theme',
-          'Theme colors used for code syntax highlighting.',
+          'Highlight & Application Theme',
+          'Color theme applied across the code editor and the entire IDE interface.',
           DropdownButton<String>(
             value: SyntaxHighlightTheme.all.any((m) => m.name == settings.syntaxHighlightTheme)
                 ? settings.syntaxHighlightTheme
@@ -550,7 +610,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             underline: Container(),
             onChanged: (String? newValue) {
               if (newValue != null) {
-                settingsProvider.updateSettings(settings.copyWith(syntaxHighlightTheme: newValue));
+                final chosen = SyntaxHighlightTheme.all.firstWhere(
+                  (m) => m.name == newValue,
+                  orElse: () => SyntaxHighlightTheme.all.first,
+                );
+                final isLightTheme = chosen.backgroundColor.computeLuminance() > 0.5;
+                settingsProvider.updateSettings(
+                  settings.copyWith(
+                    syntaxHighlightTheme: newValue,
+                    accentColor: chosen.colors.first,
+                    themeMode: isLightTheme ? ThemeMode.light : ThemeMode.dark,
+                  ),
+                );
               }
             },
             items: SyntaxHighlightTheme.all.map((map) {
@@ -653,17 +724,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ui,
           'Default Project Path',
           'Initial directory loaded when no project is specified.',
-          SizedBox(
-            width: 250,
-            child: TextField(
-              controller: _defaultProjectPathController,
-              onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: val)),
-              decoration: const InputDecoration(
-                hintText: '/home/user/unilab_projects',
-                isDense: true,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _defaultProjectPathController,
+                  onChanged: (val) => settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: val)),
+                  onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: val)),
+                  decoration: const InputDecoration(
+                    hintText: '/home/user/unilab_projects',
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 11),
+                ),
               ),
-              style: const TextStyle(fontSize: 11),
-            ),
+              const SizedBox(width: 8),
+              UiButton(
+                label: 'Browse',
+                size: UiButtonSize.sm,
+                variant: UiButtonVariant.secondary,
+                onPressed: () async {
+                  final selected = await FilePicker.platform.getDirectoryPath();
+                  if (selected != null) {
+                    _defaultProjectPathController.text = selected;
+                    settingsProvider.updateSettings(settings.copyWith(defaultProjectPath: selected));
+                  }
+                },
+              ),
+            ],
           ),
         ),
         _buildSettingToggle(
@@ -693,23 +783,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showCustomizeShortcutsDialog(BuildContext context, UiTheme ui) {
+    final currentMap = Map<String, String>.from(ref.read(keyboardShortcutsProvider));
+    final controllers = <String, TextEditingController>{
+      for (final e in currentMap.entries) e.key: TextEditingController(text: e.value),
+    };
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: ui.colors.panel,
+        surfaceTintColor: Colors.transparent,
+        title: const UiText(text: 'Customize Keyboard Shortcuts', variant: UiTextVariant.body, fontWeight: FontWeight.bold),
+        content: SizedBox(
+          width: 440,
+          height: 360,
+          child: ListView(
+            children: controllers.entries.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: UiText(text: entry.key, variant: UiTextVariant.body),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: entry.value,
+                        style: TextStyle(color: ui.colors.accent, fontSize: 12, fontFamily: 'JetBrains Mono'),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: true,
+                          fillColor: ui.colors.canvas,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          UiButton(
+            label: 'Reset Defaults',
+            variant: UiButtonVariant.secondary,
+            onPressed: () {
+              ref.read(keyboardShortcutsProvider.notifier).resetDefaults();
+              Navigator.pop(dialogContext);
+            },
+          ),
+          UiButton(
+            label: 'Cancel',
+            variant: UiButtonVariant.ghost,
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+          UiButton(
+            label: 'Save Shortcuts',
+            variant: UiButtonVariant.primary,
+            onPressed: () {
+              ref.read(keyboardShortcutsProvider.notifier).replaceAll({
+                for (final e in controllers.entries) e.key: e.value.text.trim(),
+              });
+              Navigator.pop(dialogContext);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildShortcutsSettings(UiTheme ui, SettingsProvider settingsProvider) {
+    final shortcuts = ref.watch(keyboardShortcutsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(ui, 'Keyboard Mapping'),
-        _buildShortcutItem(ui, 'Execute Script', 'F5'),
-        _buildShortcutItem(ui, 'Command Palette', 'Ctrl+Shift+P'),
-        _buildShortcutItem(ui, 'Find in File', 'Ctrl+F'),
-        _buildShortcutItem(ui, 'Save All', 'Ctrl+S'),
-        _buildShortcutItem(ui, 'Toggle Sidebar', 'Ctrl+B'),
-        _buildShortcutItem(ui, 'Toggle Console', 'Ctrl+J'),
+        ...shortcuts.entries.map((e) => _buildShortcutItem(ui, e.key, e.value)),
         SizedBox(height: ui.spacing.lg),
         Center(
           child: UiButton(
             label: 'Customize All Shortcuts',
             variant: UiButtonVariant.secondary,
-            onPressed: () {},
+            onPressed: () => _showCustomizeShortcutsDialog(context, ui),
           ),
         ),
       ],
@@ -756,6 +915,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 200,
             child: TextField(
               controller: _kernelAddressController,
+              onChanged: (val) => settingsProvider.updateSettings(settings.copyWith(kernelAddress: val)),
               onSubmitted: (val) => settingsProvider.updateSettings(settings.copyWith(kernelAddress: val)),
               decoration: const InputDecoration(
                 hintText: 'http://localhost:8000',
@@ -900,7 +1060,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: ui.colors.accent,
+        activeThumbColor: ui.colors.accent,
       ),
     );
   }

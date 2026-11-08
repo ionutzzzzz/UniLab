@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'syntax_themes.dart';
 
 @immutable
 class UiColors {
@@ -240,4 +241,109 @@ class UiColors {
           ),
         ],
       );
+
+  /// Derive a full-application UI color palette from a [SyntaxHighlightTheme]
+  /// so changing the code highlight theme transforms the entire IDE shell.
+  factory UiColors.fromSyntaxTheme(
+    SyntaxHighlightTheme syntaxTheme, {
+    Color? customAccent,
+  }) {
+    final bg = syntaxTheme.backgroundColor;
+    final fg = syntaxTheme.foregroundColor;
+    final isLight = bg.computeLuminance() > 0.5;
+    final themePrimary = syntaxTheme.colors.isNotEmpty
+        ? syntaxTheme.colors.first
+        : (isLight ? const Color(0xFF0078D4) : const Color(0xFF4AA3FF));
+
+    // Use the syntax theme's signature highlight color unless the user picked a non-default custom accent
+    final bool hasCustomAccent = customAccent != null &&
+        customAccent.toARGB32() != const Color(0xFF4AA3FF).toARGB32();
+    final Color accent = hasCustomAccent ? customAccent : themePrimary;
+
+    final Color panel = isLight
+        ? Color.lerp(bg, const Color(0xFF000000), 0.04)!
+        : Color.lerp(bg, const Color(0xFF000000), 0.16)!;
+    final Color panelHeader = isLight
+        ? Color.lerp(bg, const Color(0xFF000000), 0.08)!
+        : Color.lerp(bg, const Color(0xFFFFFFFF), 0.05)!;
+    final Color ribbonTabs = isLight
+        ? Color.lerp(bg, const Color(0xFF000000), 0.12)!
+        : Color.lerp(bg, const Color(0xFF000000), 0.26)!;
+    final Color overlay = isLight
+        ? bg
+        : Color.lerp(bg, const Color(0xFFFFFFFF), 0.07)!;
+    final Color hover = Color.lerp(bg, fg, 0.09)!;
+    final Color selected = Color.lerp(bg, accent, isLight ? 0.18 : 0.24)!;
+    final Color selectedMuted = Color.lerp(bg, fg, 0.11)!;
+    final Color divider = Color.lerp(bg, fg, isLight ? 0.18 : 0.15)!;
+    final Color border = Color.lerp(bg, fg, isLight ? 0.22 : 0.18)!;
+
+    final Color textPrimary = fg;
+    final Color textSecondary = Color.lerp(fg, bg, 0.25)!;
+    final Color textMuted = Color.lerp(fg, bg, 0.44)!;
+    final Color textDisabled = Color.lerp(fg, bg, 0.62)!;
+    final Color textInverse = accent.computeLuminance() > 0.55
+        ? const Color(0xFF121212)
+        : const Color(0xFFFFFFFF);
+
+    final Color accentHover =
+        Color.lerp(accent, isLight ? Colors.black : Colors.white, 0.16)!;
+    final Color accentMuted = accent.withValues(alpha: 0.22);
+
+    return UiColors(
+      canvas: bg,
+      panel: panel,
+      panelHeader: panelHeader,
+      ribbonTabs: ribbonTabs,
+      overlay: overlay,
+      hover: hover,
+      selected: selected,
+      selectedMuted: selectedMuted,
+      divider: divider,
+      border: border,
+      textPrimary: textPrimary,
+      textSecondary: textSecondary,
+      textMuted: textMuted,
+      textDisabled: textDisabled,
+      textInverse: textInverse,
+      accent: accent,
+      accentHover: accentHover,
+      accentMuted: accentMuted,
+      success: syntaxTheme.colors.length > 1
+          ? syntaxTheme.colors[1]
+          : (isLight ? const Color(0xFF107C10) : const Color(0xFF23D18B)),
+      warning: syntaxTheme.colors.length > 2
+          ? syntaxTheme.colors[2]
+          : (isLight ? const Color(0xFF797700) : const Color(0xFFE5E510)),
+      danger: isLight ? const Color(0xFFD13438) : const Color(0xFFF14C4C),
+      info: syntaxTheme.colors.length > 3 ? syntaxTheme.colors[3] : accent,
+      tan: isLight ? const Color(0xFF8B7355) : const Color(0xFFE5D8BD),
+      yellow: isLight ? const Color(0xFFB8860B) : const Color(0xFFFFFFCC),
+      icon: textSecondary,
+      glassBackground: panelHeader.withValues(alpha: 0.85),
+      glassBorder: accent.withValues(alpha: 0.25),
+      shadowSm: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isLight ? 0.06 : 0.22),
+          blurRadius: 4,
+          offset: const Offset(0, 2),
+        ),
+      ],
+      shadowMd: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isLight ? 0.10 : 0.40),
+          blurRadius: 12,
+          offset: const Offset(0, 8),
+        ),
+      ],
+      shadowLg: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isLight ? 0.14 : 0.50),
+          blurRadius: 30,
+          offset: const Offset(0, 15),
+          spreadRadius: -5,
+        ),
+      ],
+    );
+  }
 }

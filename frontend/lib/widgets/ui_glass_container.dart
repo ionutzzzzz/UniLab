@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/ui_theme.dart';
 
 class UiGlassContainer extends StatelessWidget {
@@ -28,6 +30,23 @@ class UiGlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
     final effectiveRadius = borderRadius ?? ui.spacing.radiusMd;
+    final settingsProvider = Provider.of<SettingsProvider?>(context);
+    final glassEnabled = settingsProvider?.settings.glassmorphismEnabled ?? true;
+    final effectiveBlur = glassEnabled ? blur : 0.0;
+    final effectiveOpacity = glassEnabled ? opacity : 0.96;
+
+    final content = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: ui.colors.glassBackground.withValues(alpha: effectiveOpacity),
+        borderRadius: effectiveRadius,
+        border: Border.all(
+          color: ui.colors.glassBorder,
+          width: ui.spacing.strokeHair,
+        ),
+      ),
+      child: child,
+    );
 
     return Container(
       width: width,
@@ -39,21 +58,12 @@ class UiGlassContainer extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: effectiveRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: ui.colors.glassBackground.withValues(alpha: opacity),
-              borderRadius: effectiveRadius,
-              border: Border.all(
-                color: ui.colors.glassBorder,
-                width: ui.spacing.strokeHair,
-              ),
-            ),
-            child: child,
-          ),
-        ),
+        child: effectiveBlur > 0
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
+                child: content,
+              )
+            : content,
       ),
     );
   }

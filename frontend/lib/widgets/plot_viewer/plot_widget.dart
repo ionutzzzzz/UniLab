@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:math' as math;
 import '../../models/editor_models.dart';
+import '../../utils/platform_io.dart' as io;
 
 class PlotWidget extends StatefulWidget {
   final PlotData? plot;
@@ -136,7 +138,8 @@ class _PlotWidgetState extends State<PlotWidget> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.save, size: 14),
-                              onPressed: () {},
+                              tooltip: 'Save Plot',
+                              onPressed: () => _savePlot(context, displayTitle),
                               constraints:
                                   const BoxConstraints(minWidth: 24, minHeight: 24),
                               padding: const EdgeInsets.all(4),
@@ -267,6 +270,49 @@ class _PlotWidgetState extends State<PlotWidget> {
     }
 
     return const [];
+  }
+
+  Future<void> _savePlot(BuildContext context, String displayTitle) async {
+    try {
+      final sanitized = displayTitle.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      if (_decodedImage != null) {
+        String? out = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Plot Image',
+          fileName: '$sanitized.png',
+          type: FileType.custom,
+          allowedExtensions: ['png'],
+        );
+        if (out == null) return;
+        if (!out.toLowerCase().endsWith('.png')) out += '.png';
+        await io.File(out).writeAsBytes(_decodedImage!);
+      } else {
+        final spots = _getSpots();
+        String? out = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Plot Data (CSV)',
+          fileName: '$sanitized.csv',
+          type: FileType.custom,
+          allowedExtensions: ['csv'],
+        );
+        if (out == null) return;
+        if (!out.toLowerCase().endsWith('.csv')) out += '.csv';
+        final buf = StringBuffer('x,y\n');
+        for (final s in spots) {
+          buf.writeln('${s.x},${s.y}');
+        }
+        await io.File(out).writeAsString(buf.toString());
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Plot saved successfully.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save plot: $e')),
+        );
+      }
+    }
   }
 
   void _showZoomedPlot(BuildContext context) {

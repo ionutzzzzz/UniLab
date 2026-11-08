@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -26,11 +27,50 @@ class _AudioViewerState extends State<AudioViewer> {
   double _totalDurationSeconds = 0.0;
   List<double> _waveformBars = [];
   bool _isLoading = true;
+  Timer? _playbackTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAudioFile();
+  }
+
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    super.dispose();
+  }
+
+  void _togglePlayback() {
+    setState(() {
+      if (_isPlaying) {
+        _isPlaying = false;
+        _playbackTimer?.cancel();
+      } else {
+        if (_position >= 100.0) {
+          _position = 0.0;
+        }
+        _isPlaying = true;
+        final duration = _totalDurationSeconds > 0 ? _totalDurationSeconds : 10.0;
+        const tickMs = 50;
+        final stepPercent = (tickMs / 1000.0) / duration * 100.0;
+        _playbackTimer?.cancel();
+        _playbackTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _position += stepPercent;
+            if (_position >= 100.0) {
+              _position = 100.0;
+              _isPlaying = false;
+              timer.cancel();
+            }
+          });
+        });
+      }
+    });
   }
 
   Future<void> _loadAudioFile() async {
@@ -224,9 +264,7 @@ class _AudioViewerState extends State<AudioViewer> {
                     ),
                     child: IconButton(
                       icon: Icon(_isPlaying ? LucideIcons.pause : LucideIcons.play, color: Colors.white, size: 26),
-                      onPressed: () {
-                        setState(() => _isPlaying = !_isPlaying);
-                      },
+                      onPressed: _togglePlayback,
                     ),
                   ),
                   const SizedBox(width: 16),

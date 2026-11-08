@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/app_provider.dart';
 import '../../../theme/ui_theme.dart';
 import '../../../widgets/ui_text.dart';
 import '../../../widgets/ui_icon.dart';
@@ -93,6 +95,59 @@ class _EditorTab extends StatefulWidget {
 class _EditorTabState extends State<_EditorTab> {
   bool _isHovered = false;
 
+  void _showTabContextMenu(BuildContext context, Offset globalPosition) {
+    final ui = UiTheme.of(context);
+    final appProvider = Provider.of<AppProvider?>(context, listen: false);
+    if (appProvider == null) return;
+    final tabIndex = appProvider.openFiles.indexWhere((f) => f.id == widget.tab.id);
+    if (tabIndex == -1) return;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx + 1,
+        globalPosition.dy + 1,
+      ),
+      color: ui.colors.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(color: ui.colors.border),
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'close',
+          child: UiText(text: 'Close', variant: UiTextVariant.label),
+        ),
+        PopupMenuItem(
+          value: 'close_others',
+          enabled: appProvider.openFiles.length > 1,
+          child: UiText(text: 'Close Others', variant: UiTextVariant.label),
+        ),
+        PopupMenuItem(
+          value: 'close_all',
+          child: UiText(text: 'Close All', variant: UiTextVariant.label),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'split_right',
+          child: UiText(text: 'Open in Split Editor', variant: UiTextVariant.label),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'close') {
+        appProvider.closeFile(tabIndex);
+      } else if (value == 'close_others') {
+        appProvider.closeOtherFiles(tabIndex);
+      } else if (value == 'close_all') {
+        appProvider.closeAllFiles();
+      } else if (value == 'split_right') {
+        appProvider.setSecondaryFile(tabIndex);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = UiTheme.of(context);
@@ -102,6 +157,7 @@ class _EditorTabState extends State<_EditorTab> {
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
+        onSecondaryTapUp: (details) => _showTabContextMenu(context, details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,

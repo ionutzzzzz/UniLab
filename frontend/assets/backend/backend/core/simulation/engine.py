@@ -22,7 +22,7 @@ try:
     import matplotlib    # Try to be more flexible with the backend
     if 'matplotlib.backends' not in sys.modules:
         try:
-            if IS_HEADLESS:
+            if IS_HEADLESS or os.environ.get('UNILAB_BRIDGE_MODE') == '1' or os.environ.get('UNILAB_WEB_MODE') == '1':
                 matplotlib.use('Agg')
             else:
                 matplotlib.use('Qt5Agg')
@@ -220,12 +220,30 @@ class BridgeAlgorithmSimulator(BridgeSimulator):
         self.emit_event('SIM_STOPPED', {'status': 'stopped'})
         _current_sim_window = None
 
+def stop_active_simulation():
+    global _current_sim_window
+    sw = _current_sim_window
+    if sw is not None:
+        try:
+            sw.is_running = False
+            if hasattr(sw, 'push_event'):
+                sw.push_event({'type': 'STOP'})
+        except Exception:
+            pass
+        _current_sim_window = None
+
+
 def push_sim_event(event_data):
     global _current_sim_window
+    if isinstance(event_data, str):
+        try:
+            event_data = json.loads(event_data)
+        except Exception:
+            pass
+    if isinstance(event_data, dict) and event_data.get('type') == 'STOP':
+        stop_active_simulation()
+        return
     if _current_sim_window and hasattr(_current_sim_window, 'push_event'):
-        if isinstance(event_data, str):
-            try: event_data = json.loads(event_data)
-            except: pass
         _current_sim_window.push_event(event_data)
 
 class DotDict(dict):
@@ -1803,6 +1821,7 @@ class SimulatorEngine:
     @staticmethod
     def simulate(model, **kwargs):
         global _current_sim_window
+        stop_active_simulation()
         is_bridge = os.environ.get('UNILAB_BRIDGE_MODE') == '1'
         
         if is_bridge:
@@ -1819,7 +1838,18 @@ class SimulatorEngine:
                 threading.Thread(target=sw.run, daemon=True).start()
                 return
             else:
-                print(f"[ Simulation model '{model}' not yet implemented for bridge mode ]")
+                from backend.core import runtime as _rt
+                if signal is not None and isinstance(model, (signal.TransferFunction, signal.StateSpace)):
+                    _rt.figure()
+                    _rt.step(model)
+                    _rt.title("System Step Response Simulation")
+                    _rt.grid('on')
+                elif callable(model):
+                    _rt.figure()
+                    x = np.linspace(-10, 10, 400)
+                    _rt.plot(x, model(x))
+                    _rt.title("Function Simulation")
+                    _rt.grid('on')
                 return
 
         try:

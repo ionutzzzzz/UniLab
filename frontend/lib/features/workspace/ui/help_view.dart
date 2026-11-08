@@ -23,6 +23,28 @@ class _HelpViewState extends State<HelpView> {
   String? _helpContent;
   bool _isMarkdown = false;
   bool _isLoading = false;
+  int _lastHandledRequestVersion = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final appProvider = Provider.of<AppProvider>(context);
+    if (appProvider.helpRequestVersion != _lastHandledRequestVersion) {
+      _lastHandledRequestVersion = appProvider.helpRequestVersion;
+      final topic = appProvider.requestedHelpTopic;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (topic == null) {
+          setState(() {
+            _selectedTopic = null;
+            _helpContent = null;
+          });
+        } else {
+          _fetchHelp(topic);
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -325,7 +347,15 @@ class _HelpViewState extends State<HelpView> {
           ),
           SizedBox(height: ui.spacing.md),
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              const forumUrl = 'https://github.com/UniLab-Project/UniLab/discussions';
+              Clipboard.setData(const ClipboardData(text: forumUrl));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Community Forum URL copied to clipboard: https://github.com/UniLab-Project/UniLab/discussions'),
+                ),
+              );
+            },
             style: TextButton.styleFrom(
               backgroundColor: ui.colors.accent,
               foregroundColor: ui.colors.textInverse,
