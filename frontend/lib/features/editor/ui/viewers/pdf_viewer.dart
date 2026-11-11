@@ -81,7 +81,6 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
               widget.path,
               controller: _controller,
               params: PdfViewerParams(
-                enableTextSelection: true,
                 maxScale: 8.0,
                 pagePaintCallbacks: [
                   _textSearcher.pageTextMatchPaintCallback,

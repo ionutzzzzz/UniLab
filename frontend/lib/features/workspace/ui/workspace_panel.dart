@@ -96,6 +96,14 @@ class _WorkspacePanelState extends ConsumerState<WorkspacePanel> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           UiIconButton(
+                            icon: LucideIcons.atom,
+                            tooltip: 'Launch Simulation Studio',
+                            size: 24,
+                            iconSize: 14,
+                            onPressed: () => appProvider.openSimulationStudio(),
+                          ),
+                          const SizedBox(width: 4),
+                          UiIconButton(
                             icon: LucideIcons.refreshCcw,
                             tooltip: 'Refresh Workspace',
                             size: 24,

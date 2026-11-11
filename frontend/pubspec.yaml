@@ -39,7 +39,7 @@ dependencies:
   flutter_awesome_context_menu: ^0.1.1
   lucide_icons_flutter: ^3.1.14+2
   flex_color_picker: ^3.6.0
-  pdfrx: ^1.0.86
+  pdfrx: ^2.12.0
   xterm: ^4.0.0
   flutter_pty: ^0.4.2
   desktop_multi_window: ^0.3.0

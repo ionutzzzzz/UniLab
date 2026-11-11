@@ -119,6 +119,10 @@ class MainShell extends ConsumerWidget {
       SingleActivator(LogicalKeyboardKey.keyJ, control: !isMac, meta: isMac): () {
         ref.read(shellLayoutProvider.notifier).toggleBottomPanel();
       },
+      // Simulation Studio: Ctrl/Cmd+Shift+M
+      SingleActivator(LogicalKeyboardKey.keyM, control: !isMac, meta: isMac, shift: true): () {
+        appProvider.openSimulationStudio();
+      },
     };
 
     return CallbackShortcuts(
@@ -131,8 +135,12 @@ class MainShell extends ConsumerWidget {
             builder: (context, constraints) {
               // Determine visibility based on user preference and active layout state
               final layoutState = ref.watch(shellLayoutProvider);
-              final bool showLeft = layoutState.showLeftPanel;
-              final bool showRight = layoutState.showRightPanel;
+              final activeFile = appProvider.activeFile;
+              final isSimStudio = activeFile?.path == 'unilab://simulations';
+
+              final bool showLeft = isSimStudio ? false : layoutState.showLeftPanel;
+              final bool showRight = isSimStudio ? false : layoutState.showRightPanel;
+              final bool showBottom = isSimStudio ? false : layoutState.showBottomPanel;
               
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -142,9 +150,10 @@ class MainShell extends ConsumerWidget {
                     const AppRibbon(),
                   Expanded(
                     child: SplitShell(
-                      key: ValueKey('split_shell_${layoutState.layoutId}'),
+                      key: ValueKey('split_shell_${layoutState.layoutId}_$isSimStudio'),
                       showLeftPanel: showLeft,
                       showRightPanel: showRight,
+                      showBottomPanel: showBottom,
                       leftPanel: const ExplorerPanel(),
                       leftRail: _buildSideRail(context, 'Explorer', LucideIcons.folder, showLeft, () {
                         ref.read(shellLayoutProvider.notifier).toggleLeftPanel();
@@ -170,6 +179,9 @@ class MainShell extends ConsumerWidget {
 
   Widget _buildSideRail(BuildContext context, String tooltip, IconData icon, bool isActive, VoidCallback onTap, {bool isRight = false}) {
     final ui = UiTheme.of(context);
+    final appProvider = p.Provider.of<AppProvider>(context, listen: false);
+    final isSimActive = appProvider.activeFile?.path == 'unilab://simulations';
+
     return Container(
       width: 48,
       decoration: BoxDecoration(
@@ -193,6 +205,21 @@ class MainShell extends ConsumerWidget {
               onTap: onTap,
             ),
           ),
+          if (!isRight) ...[
+            SizedBox(height: ui.spacing.sm),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: ui.spacing.xs),
+              child: _RailIcon(
+                icon: LucideIcons.atom,
+                tooltip: 'Simulation Studio (Ctrl+Shift+M)',
+                color: const Color(0xFF673AB7),
+                isActive: isSimActive,
+                onTap: () {
+                  appProvider.openSimulationStudio();
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

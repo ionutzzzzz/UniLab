@@ -23,6 +23,9 @@ import 'ribbon_button.dart';
 import 'quick_access_bar.dart';
 import '../../../widgets/ui_button.dart';
 import 'backstage/file_backstage.dart';
+import '../../simulation/services/simulation_controller.dart';
+import '../../simulation/services/simulation_registry.dart';
+import '../../simulation/ui/simulation_catalog_dialog.dart';
 
 class AppRibbon extends ConsumerStatefulWidget {
   const AppRibbon({super.key});
@@ -37,6 +40,9 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
   bool _isFileHovered = false;
 
   void _onTabTap(String tab) {
+    if (tab == 'SIMULATION') {
+      context.read<AppProvider>().openSimulationStudio();
+    }
     if (_isCollapsed && _activeTab == tab) {
       setState(() => _isCollapsed = false);
     } else {
@@ -1402,6 +1408,121 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
           ],
         ),
       ];
+    } else if (_activeTab == 'SIMULATION') {
+      final simCtrl = SimulationController.instance;
+
+      activeGroups = [
+        RibbonGroup(
+          title: 'Simulation Studio',
+          children: [
+            RibbonButton(
+              label: 'Open Studio',
+              icon: LucideIcons.atom,
+              isLarge: true,
+              onTap: () {
+                appProvider.openSimulationStudio();
+              },
+            ),
+            RibbonButton(
+              label: 'Browse Library',
+              icon: LucideIcons.boxes,
+              isLarge: true,
+              onTap: () {
+                SimulationCatalogDialog.show(context);
+              },
+            ),
+          ],
+        ),
+        RibbonGroup(
+          title: 'Playback & Time',
+          children: [
+            RibbonButton(
+              label: simCtrl.isPlaying ? 'Pause' : 'Play',
+              icon: simCtrl.isPlaying ? LucideIcons.pause : LucideIcons.play,
+              isLarge: true,
+              onTap: () {
+                appProvider.openSimulationStudio();
+                simCtrl.togglePlayPause();
+              },
+            ),
+            RibbonButton(
+              label: 'Step Back',
+              icon: LucideIcons.stepBack,
+              onTap: () {
+                appProvider.openSimulationStudio();
+                simCtrl.stepBackward();
+              },
+            ),
+            RibbonButton(
+              label: 'Step Forward',
+              icon: LucideIcons.stepForward,
+              onTap: () {
+                appProvider.openSimulationStudio();
+                simCtrl.stepForward();
+              },
+            ),
+            RibbonButton(
+              label: 'Reset (t=0)',
+              icon: LucideIcons.rotateCcw,
+              onTap: () {
+                appProvider.openSimulationStudio();
+                simCtrl.reset();
+              },
+            ),
+          ],
+        ),
+        RibbonGroup(
+          title: 'MP4 Recording',
+          children: [
+            RibbonButton(
+              label: simCtrl.videoRecorder.isRecording ? 'Stop & Save' : 'Record MP4',
+              icon: simCtrl.videoRecorder.isRecording ? Icons.stop : LucideIcons.video,
+              isLarge: true,
+              onTap: () async {
+                appProvider.openSimulationStudio();
+                if (simCtrl.videoRecorder.isRecording) {
+                  final path = await simCtrl.stopAndSaveVideoRecording(context);
+                  if (path != null && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Video saved: $path')),
+                    );
+                  }
+                } else {
+                  await simCtrl.startVideoRecording();
+                }
+              },
+            ),
+            RibbonButton(
+              label: 'Reset 3D Camera',
+              icon: LucideIcons.camera,
+              onTap: () {
+                simCtrl.camera3D.reset();
+              },
+            ),
+          ],
+        ),
+        RibbonGroup(
+          title: 'Model Code',
+          children: [
+            RibbonButton(
+              label: 'Export Script',
+              icon: LucideIcons.fileCode,
+              isLarge: true,
+              onTap: () {
+                final script = simCtrl.activeModel.toUniLabScript();
+                appProvider.insertCodeIntoActiveScript(
+                  script,
+                  suggestedFileName: '${simCtrl.activeModel.id}.m',
+                  replaceAll: false,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Model script exported to active editor.')),
+                );
+              },
+            ),
+          ],
+        ),
+      ];
     } else if (_activeTab == 'TOOLBOX') {
       void openInDock(EngineeringToolCategory cat) {
         if (!ref.read(shellLayoutProvider).showRightPanel) {
@@ -1874,7 +1995,7 @@ class _AppRibbonState extends ConsumerState<AppRibbon> {
               ),
               Expanded(
                 child: RibbonTabBar(
-                  tabs: const ['HOME', 'TOOLBOX', 'EDITOR', 'PLOTS', 'ANALYZE', 'VIEW', 'HELP'],
+                  tabs: const ['HOME', 'SIMULATION', 'TOOLBOX', 'EDITOR', 'PLOTS', 'ANALYZE', 'VIEW', 'HELP'],
                   activeTab: _activeTab,
                   onTabTap: _onTabTap,
                   onDoubleTap: _onDoubleTap,

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart' as p;
 import '../../providers/app_provider.dart';
 import '../layout/shell_layout_state.dart';
 import 'command.dart';
+import '../../features/simulation/services/simulation_controller.dart';
+import '../../features/simulation/ui/simulation_catalog_dialog.dart';
 
 final commandRegistryProvider = StateNotifierProvider<CommandRegistryNotifier, CommandRegistry>((ref) {
   return CommandRegistryNotifier(ref);
@@ -283,6 +285,52 @@ class CommandRegistryNotifier extends StateNotifier<CommandRegistry> {
         run: (ctx) async {
           final app = p.Provider.of<AppProvider>(ctx.context, listen: false);
           await app.restartBackend();
+        },
+      ),
+      AppCommand(
+        id: 'simulation.openStudio',
+        title: 'Open Real-Time Simulation Studio',
+        category: 'Simulation',
+        icon: LucideIcons.atom,
+        run: (ctx) async {
+          final app = p.Provider.of<AppProvider>(ctx.context, listen: false);
+          app.openSimulationStudio();
+        },
+      ),
+      AppCommand(
+        id: 'simulation.browseLibrary',
+        title: 'Browse Simulations Library',
+        category: 'Simulation',
+        icon: LucideIcons.boxes,
+        run: (ctx) async {
+          SimulationCatalogDialog.show(ctx.context);
+        },
+      ),
+      AppCommand(
+        id: 'simulation.togglePlay',
+        title: 'Simulation: Play / Pause',
+        category: 'Simulation',
+        icon: LucideIcons.play,
+        run: (ctx) async {
+          final app = p.Provider.of<AppProvider>(ctx.context, listen: false);
+          app.openSimulationStudio();
+          SimulationController.instance.togglePlayPause();
+        },
+      ),
+      AppCommand(
+        id: 'simulation.recordVideo',
+        title: 'Simulation: Record as MP4 Video',
+        category: 'Simulation',
+        icon: LucideIcons.video,
+        run: (ctx) async {
+          final app = p.Provider.of<AppProvider>(ctx.context, listen: false);
+          app.openSimulationStudio();
+          final simCtrl = SimulationController.instance;
+          if (simCtrl.videoRecorder.isRecording) {
+            await simCtrl.stopAndSaveVideoRecording(ctx.context);
+          } else {
+            await simCtrl.startVideoRecording();
+          }
         },
       ),
     ]);

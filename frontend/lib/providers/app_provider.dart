@@ -20,6 +20,7 @@ import '../bridge/unilab_bridge.dart';
 import '../utils/file_manager.dart';
 import 'settings_provider.dart';
 import '../utils/platform_io.dart' as io;
+import '../features/simulation/services/simulation_controller.dart';
 
 enum BackendStatus { connecting, connected, error }
 
@@ -833,6 +834,32 @@ class AppProvider with ChangeNotifier {
           id: 'import-data',
           name: 'Import Data',
           path: 'unilab://import-data',
+          content: '',
+        ),
+      );
+      _activeFileIndex = _openFiles.length - 1;
+    }
+    notifyListeners();
+  }
+
+  void openSimulationStudio({String? modelId}) {
+    if (_isWelcomeMode) {
+      _isWelcomeMode = false;
+    }
+    if (modelId != null) {
+      SimulationController.instance.selectModel(modelId);
+    }
+    final existingIndex = _openFiles.indexWhere(
+      (f) => f.path == 'unilab://simulations',
+    );
+    if (existingIndex != -1) {
+      _activeFileIndex = existingIndex;
+    } else {
+      _openFiles.add(
+        UniLabFile(
+          id: 'simulations',
+          name: 'Simulation Studio',
+          path: 'unilab://simulations',
           content: '',
         ),
       );

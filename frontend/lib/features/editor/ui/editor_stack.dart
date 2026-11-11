@@ -22,6 +22,7 @@ import 'viewers/image_viewer.dart';
 import 'viewers/pdf_viewer.dart';
 import 'viewers/audio_viewer.dart';
 import 'viewers/import_data_view.dart';
+import '../../simulation/ui/simulation_studio_view.dart';
 
 class EditorStack extends StatefulWidget {
   const EditorStack({super.key});
@@ -499,6 +500,8 @@ class _EditorStackState extends State<EditorStack> {
       content = AudioViewer(path: activeFile.path, name: activeFile.name);
     } else if (activeFile.path == 'unilab://import-data') {
       content = const ImportDataView();
+    } else if (activeFile.path == 'unilab://simulations') {
+      content = const SimulationStudioView();
     } else {
       if (!UniLabFileManager.isTextFile(activeFile.path) && activeFile.path.isNotEmpty) {
         debugPrint('EditorStack: Unknown or binary file type for path: ${activeFile.path}. Falling back to text editor.');

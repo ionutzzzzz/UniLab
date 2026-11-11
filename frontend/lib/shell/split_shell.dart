@@ -16,6 +16,7 @@ class SplitShell extends ConsumerStatefulWidget {
     required this.bottomPanel,
     this.showLeftPanel = true,
     this.showRightPanel = true,
+    this.showBottomPanel,
   });
 
   final Widget leftPanel;
@@ -26,6 +27,7 @@ class SplitShell extends ConsumerStatefulWidget {
   final Widget bottomPanel;
   final bool showLeftPanel;
   final bool showRightPanel;
+  final bool? showBottomPanel;
 
   @override
   ConsumerState<SplitShell> createState() => _SplitShellState();
@@ -196,7 +198,7 @@ class _SplitShellState extends ConsumerState<SplitShell> {
     final ui = UiTheme.of(context);
     final layoutState = ref.watch(shellLayoutProvider);
 
-    final showBottom = layoutState.showBottomPanel;
+    final showBottom = widget.showBottomPanel ?? layoutState.showBottomPanel;
     final isCommandOnly = layoutState.isCommandOnlyMode;
     final layoutId = layoutState.layoutId;
 

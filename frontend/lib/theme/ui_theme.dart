@@ -24,6 +24,8 @@ class UiTheme extends ThemeExtension<UiTheme> {
   final UiDensity density;
   final SyntaxPalette syntax;
 
+  bool get isDark => colors.canvas.computeLuminance() < 0.5;
+
   static UiTheme of(BuildContext context) => Theme.of(context).extension<UiTheme>()!;
 
   @override
