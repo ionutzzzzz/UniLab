@@ -70,8 +70,7 @@ for sample in $SAMPLES; do
     echo -n "[$TOTAL] Running $filename... "
 
     output_file=$(mktemp)
-
-    run_with_timeout 60 "$PYTHON_BIN" backend/cli/app.py run "$sample" > "$output_file" 2>&1
+    run_with_timeout 60 env DISPLAY= "$PYTHON_BIN" backend/cli/app.py run "$sample" > "$output_file" 2>&1
     exit_code=$?
 
     if [ $exit_code -eq 0 ]; then

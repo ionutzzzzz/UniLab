@@ -154,6 +154,22 @@ impl Evaluator {
     }
 
     pub fn eval_program(&mut self, program: &Program) -> Result<Value, String> {
+        // Set active environment for Python bridge
+        crate::runtime::bridge::ACTIVE_ENV.with(|env| {
+            *env.borrow_mut() = Some(self.env.clone());
+        });
+
+        let result = self.eval_program_internal(program);
+
+        // Clear active environment
+        crate::runtime::bridge::ACTIVE_ENV.with(|env| {
+            *env.borrow_mut() = None;
+        });
+
+        result
+    }
+
+    fn eval_program_internal(&mut self, program: &Program) -> Result<Value, String> {
         // Hoist all local functions first
         for stmt in &program.statements {
             if let Stmt::FunctionDef { name, params, returns, body } = stmt {
@@ -1208,7 +1224,7 @@ impl Evaluator {
         }
     }
 
-    fn call_function(&mut self, func: Value, args: Vec<Value>, nargout: usize) -> Result<Value, String> {
+    pub(crate) fn call_function(&mut self, func: Value, args: Vec<Value>, nargout: usize) -> Result<Value, String> {
         match func {
             Value::Function { name: _, params, returns, body } => {
                 let parent_env = self.env.clone();

@@ -1,8 +1,16 @@
 use crate::runtime::value::Value;
+use crate::runtime::env::Environment;
+use std::sync::{Arc, RwLock};
+use std::cell::RefCell;
+
+thread_local! {
+    pub static ACTIVE_ENV: RefCell<Option<Arc<RwLock<Environment>>>> = RefCell::new(None);
+}
 
 #[cfg(feature = "python-bridge")]
 mod imp {
     use super::Value;
+    use crate::runtime::env::Environment;
     use ndarray::Array2;
     use num_complex::Complex64;
     use numpy::{PyArray1, PyArray2, PyArrayMethods, ToPyArray};
@@ -10,7 +18,7 @@ mod imp {
     use pyo3::prelude::*;
     use pyo3::types::{PyBool, PyComplex, PyComplexMethods, PyDict, PyList, PyString, PyTuple};
     use std::collections::HashMap;
-    use std::sync::{Arc, OnceLock};
+    use std::sync::{Arc, OnceLock, RwLock};
 
     static PYTHON_PATH_INIT: OnceLock<()> = OnceLock::new();
 
@@ -49,9 +57,56 @@ mod imp {
             Ok(())
         }
 
-        pub fn call_simulate(_model: &Value, _args: Vec<Value>) -> Result<(), String> {
-            // Simulation is handled at a higher level or via message passing.
-            Ok(())
+        pub fn call_simulate(model: &Value, args: Vec<Value>) -> Result<(), String> {
+            Python::with_gil(|py| -> PyResult<()> {
+                Self::setup_python_path(py);
+
+                let sim_mod = match py.import("core.simulation.engine") {
+                    Ok(m) => m,
+                    Err(_) => py.import("backend.core.simulation.engine")?,
+                };
+
+                let unilab_simulate_func = sim_mod.getattr("unilab_simulate")?;
+
+                let mut py_args = Vec::new();
+                py_args.push(Self::value_to_py(py, model)?);
+                for arg in args {
+                    py_args.push(Self::value_to_py(py, &arg)?);
+                }
+
+                let _ = unilab_simulate_func.call1(PyTuple::new(py, py_args)?)?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())
+        }
+
+        pub fn rust_func_to_py_callable<'py>(
+            py: Python<'py>,
+            func_val: Value,
+            env_arc: Arc<RwLock<Environment>>,
+        ) -> PyResult<Bound<'py, PyAny>> {
+            let py_callable =
+                pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _kwargs| {
+                    let py = args.py();
+
+                    let mut rust_args = Vec::new();
+                    for item in args.iter() {
+                        rust_args.push(Self::py_to_value(&item)?);
+                    }
+
+                    let mut evaluator =
+                        crate::runtime::eval::Evaluator::new_with_env(env_arc.clone());
+
+                    let nargout = 1;
+                    let res_val = evaluator
+                        .call_function(func_val.clone(), rust_args, nargout)
+                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))?;
+
+                    let py_res = Self::value_to_py(py, &res_val)?;
+                    Ok::<PyObject, PyErr>(py_res.unbind())
+                })?;
+
+            Ok(py_callable.into_any())
         }
 
         pub fn call_runtime_func(
@@ -110,10 +165,10 @@ mod imp {
                     Ok(py_arr.into_any())
                 }
                 Value::Complex(re, im) => {
-                    let complex_type = py.import("builtins")?.getattr("complex")?;
-                    Ok(complex_type.call1((*re, *im))?)
+                    let c = PyComplex::from_doubles(py, *re, *im);
+                    Ok(c.into_any())
                 }
-                Value::CellArray(v) => {
+                Value::CellArray(v) | Value::List(v) => {
                     let mut list = Vec::with_capacity(v.len());
                     for item in v.iter() {
                         list.push(Self::value_to_py(py, item)?);
@@ -127,7 +182,36 @@ mod imp {
                     }
                     Ok(dict.into_any())
                 }
-                Value::FunctionHandle(name) => Ok(PyString::new(py, name).into_any()),
+                Value::FunctionHandle(name) => {
+                    let resolved_func = crate::runtime::bridge::ACTIVE_ENV.with(|env| {
+                        if let Some(env_arc) = &*env.borrow() {
+                            if let Some(f_val) = env_arc.read().unwrap().get(name) {
+                                match f_val {
+                                    Value::Function { .. } | Value::AnonymousFunction { .. } => {
+                                        return Some((f_val, env_arc.clone()));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                    if let Some((f_val, env_arc)) = resolved_func {
+                        Self::rust_func_to_py_callable(py, f_val, env_arc)
+                    } else {
+                        Ok(PyString::new(py, name).into_any())
+                    }
+                }
+                Value::Function { .. } | Value::AnonymousFunction { .. } => {
+                    let env_arc_opt =
+                        crate::runtime::bridge::ACTIVE_ENV.with(|env| env.borrow().clone());
+                    if let Some(env_arc) = env_arc_opt {
+                        Self::rust_func_to_py_callable(py, val.clone(), env_arc)
+                    } else {
+                        Ok(py.None().into_bound(py))
+                    }
+                }
                 _ => Ok(py.None().into_bound(py)),
             }
         }
@@ -268,22 +352,19 @@ mod imp {
             if let Ok(c) = obj.downcast::<PyComplex>() {
                 return Ok(Value::Complex(c.real(), c.imag()));
             }
-            if let Ok(n) = obj.extract::<f64>() {
-                return Ok(Value::Scalar(n));
+
+            if let Ok(f) = obj.extract::<f64>() {
+                return Ok(Value::Scalar(f));
             }
             if let Ok(s) = obj.extract::<String>() {
                 return Ok(Value::String(Arc::new(s)));
             }
-            if let Ok(b) = obj.extract::<bool>() {
-                return Ok(Value::Bool(b));
-            }
-
             if let Ok(list) = obj.downcast::<PyList>() {
                 let mut v = Vec::with_capacity(list.len());
                 for item in list {
                     v.push(Self::py_to_value(&item)?);
                 }
-                return Ok(Value::CellArray(Arc::new(v)));
+                return Ok(Value::List(Arc::new(v)));
             }
             if let Ok(tuple) = obj.downcast::<PyTuple>() {
                 let mut v = Vec::with_capacity(tuple.len());

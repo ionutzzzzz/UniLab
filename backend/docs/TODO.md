@@ -5,16 +5,16 @@
 - [x] Initialize Rust Workspace (`unilab_core`)
 - [x] Integrate `flutter_rust_bridge` for cross-language calls
 - [x] Proof of Concept: Native math execution (Rust) → UI display (Flutter)
-- [ ] Port Lark EBNF Grammar to Rust using `pest` or `nom` (In Progress)
+- [x] Port Lark EBNF Grammar to Rust using `pest` (Completed)
 - [x] Implement Abstract Syntax Tree (AST) structures in Rust
 
 ## 🔢 Phase 2: Core Math & Scripting (Q4 2026)
-- [ ] Build high-speed AST tree-walking interpreter in Rust
-- [ ] Implement 1-based indexing and slicing logic in Rust
-- [ ] Integrate `ndarray` for core matrix operations
+- [x] Build high-speed AST tree-walking interpreter in Rust (Completed)
+- [x] Implement 1-based indexing and slicing logic in Rust (Completed)
+- [x] Integrate `ndarray` for core matrix operations (Completed)
 - [ ] Build Flutter-native data-driven plotting (Line, Scatter, Bar)
-- [ ] Implement basic math library port (sin, cos, exp, etc.) in Rust
-- [ ] Handle MATLAB-style variable scoping (local, global) in Rust
+- [x] Implement basic math library port (sin, cos, exp, etc.) in Rust (Completed)
+- [x] Handle MATLAB-style variable scoping (local, global) in Rust (Completed)
 
 ## 🎨 Phase 3: Unified Workspace (Q1 2027)
 - [x] Build local File/Workspace manager in Flutter (Base implementation)
