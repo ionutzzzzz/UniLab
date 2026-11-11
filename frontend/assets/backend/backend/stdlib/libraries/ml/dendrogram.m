@@ -1,6 +1,0 @@
-function varargout = dendrogram(varargin)
-    % DENDROGRAM Machine Learning library function
-    if nargout > 0
-        varargout{1} = 0;
-    end
-end
