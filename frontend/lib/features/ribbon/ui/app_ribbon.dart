@@ -24,7 +24,6 @@ import 'quick_access_bar.dart';
 import '../../../widgets/ui_button.dart';
 import 'backstage/file_backstage.dart';
 import '../../simulation/services/simulation_controller.dart';
-import '../../simulation/services/simulation_registry.dart';
 import '../../simulation/ui/simulation_catalog_dialog.dart';
 
 class AppRibbon extends ConsumerStatefulWidget {

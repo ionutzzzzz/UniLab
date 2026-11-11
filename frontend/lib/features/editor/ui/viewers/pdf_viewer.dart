@@ -81,7 +81,7 @@ class _UniLabPdfViewerState extends State<UniLabPdfViewer> {
               widget.path,
               controller: _controller,
               params: PdfViewerParams(
-                maxScale: 8.0,
+                sizeDelegateProvider: const PdfViewerSizeDelegateProviderLegacy(maxScale: 8.0),
                 pagePaintCallbacks: [
                   _textSearcher.pageTextMatchPaintCallback,
                 ],

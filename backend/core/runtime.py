@@ -5604,9 +5604,13 @@ def scatter(*args, **kwargs):
         p_kwargs.setdefault('color', p_kwargs.pop('markerfacecolor'))
     if 'markeredgecolor' in p_kwargs:
         p_kwargs.setdefault('edgecolors', p_kwargs.pop('markeredgecolor'))
-    if builtins.len(p_args) >= 4 and not isinstance(p_args[3], str):
-        p_kwargs.setdefault('c', p_args[3])
-        p_kwargs.setdefault('cmap', str(_unilab_plot_config.get('colormap', 'viridis')).lower())
+    if builtins.len(p_args) >= 4:
+        c_arg = p_args[3]
+        if isinstance(c_arg, str):
+            p_kwargs.setdefault('color', _normalize_matlab_color(c_arg))
+        else:
+            p_kwargs.setdefault('c', c_arg)
+            p_kwargs.setdefault('cmap', str(_unilab_plot_config.get('colormap', 'viridis')).lower())
         p_args = p_args[:3]
     if builtins.len(p_args) == 3:
         if isinstance(p_args[2], str):
@@ -6338,9 +6342,13 @@ def scatter3(*args, **kwargs):
     p_args = [a for a in p_args if not (isinstance(a, str) and a.lower() == 'filled')]
     if 'markersize' in p_kwargs:
         p_kwargs['s'] = float(p_kwargs.pop('markersize'))
-    if builtins.len(p_args) >= 5 and not isinstance(p_args[4], str):
-        p_kwargs.setdefault('c', p_args[4])
-        p_kwargs.setdefault('cmap', str(_unilab_plot_config.get('colormap', 'viridis')).lower())
+    if builtins.len(p_args) >= 5:
+        c_arg = p_args[4]
+        if isinstance(c_arg, str):
+            p_kwargs.setdefault('color', _normalize_matlab_color(c_arg))
+        else:
+            p_kwargs.setdefault('c', c_arg)
+            p_kwargs.setdefault('cmap', str(_unilab_plot_config.get('colormap', 'viridis')).lower())
         p_args = p_args[:4]
     if builtins.len(p_args) == 4:
         if isinstance(p_args[3], str):

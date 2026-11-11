@@ -231,6 +231,43 @@ pub extern "C" fn unilab_init(backend_path: *const c_char) -> i32 {
                 add_venv_site_packages(py, &pypath, &base.join(".venv"));
             }
 
+            if let Ok(site) = py.import("site") {
+                if let Ok(site_pkgs) = site.call_method0("getsitepackages") {
+                    if let Ok(pkgs) = site_pkgs.extract::<Vec<String>>() {
+                        for pkg in pkgs {
+                            let _ = pypath.call_method1("append", (pkg,));
+                        }
+                    }
+                }
+                if let Ok(user_site) = site.call_method0("getusersitepackages") {
+                    if let Ok(pkg) = user_site.extract::<String>() {
+                        let _ = pypath.call_method1("append", (pkg,));
+                    }
+                }
+            }
+
+            if let Ok(home) = std::env::var("HOME") {
+                let home_path = std::path::Path::new(&home);
+                for v in &["3.13", "3.12", "3.11", "3.10"] {
+                    let user_p = home_path.join(".local/lib").join(format!("python{}", v)).join("site-packages");
+                    if user_p.exists() {
+                        let _ = pypath.call_method1("append", (user_p.to_string_lossy().to_string(),));
+                    }
+                }
+            }
+
+            for sys_pkg in &[
+                "/usr/lib/python3/dist-packages",
+                "/usr/local/lib/python3.13/dist-packages",
+                "/usr/lib/python3.13/dist-packages",
+                "/usr/lib/python3.12/dist-packages",
+                "/usr/lib/python3.11/dist-packages",
+            ] {
+                if std::path::Path::new(sys_pkg).exists() {
+                    let _ = pypath.call_method1("append", (*sys_pkg,));
+                }
+            }
+
             pypath.call_method1("insert", (0, &abs_path_str))?;
 
             if let Ok(m) = py.import("matplotlib") {

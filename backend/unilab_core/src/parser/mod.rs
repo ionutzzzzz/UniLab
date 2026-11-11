@@ -590,6 +590,11 @@ fn split_row_range(pair: pest::iterators::Pair<Rule>) -> Vec<Expr> {
 }
 
 fn split_row_addition(pair: pest::iterators::Pair<Rule>) -> Vec<Expr> {
+    let pair_span = pair.as_span();
+    let pair_start = pair_span.start();
+    let pair_str = pair.as_str();
+    let pair_bytes = pair_str.as_bytes();
+
     let mut inner = pair.into_inner();
     let Some(first_term) = inner.next() else {
         return Vec::new();
@@ -607,8 +612,14 @@ fn split_row_addition(pair: pest::iterators::Pair<Rule>) -> Vec<Expr> {
         let next_span = next_term.as_span();
         let next_end = next_span.end();
 
-        let has_space_before = op_span.start() > prev_end;
-        let has_space_after = next_span.start() > op_span.end();
+        let op_start = op_span.start().saturating_sub(pair_start);
+        let op_end = op_span.end().saturating_sub(pair_start);
+
+        let space_before_in_slice = op_start > 0 && pair_bytes.get(op_start - 1).map_or(false, |b| b.is_ascii_whitespace());
+        let space_after_in_slice = op_end < pair_bytes.len() && pair_bytes.get(op_end).map_or(false, |b| b.is_ascii_whitespace());
+
+        let has_space_before = (op_span.start() > prev_end) || space_before_in_slice;
+        let has_space_after = (next_span.start() > op_span.end()) || space_after_in_slice;
         let is_unary_sign = op_str == "+" || op_str == "-";
 
         if has_space_before && !has_space_after && is_unary_sign {

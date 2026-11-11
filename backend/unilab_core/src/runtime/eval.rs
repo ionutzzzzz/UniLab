@@ -145,7 +145,7 @@ impl Evaluator {
             "real", "imag", "sort", "sign", "fft", "ifft",
             "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
             "ischar", "iscell", "isnumeric", "strcmp", "isequal",
-            "argmin", "argmax", "isempty",
+            "argmin", "argmax", "isempty", "table",
         ];
 
         for name in builtins {
@@ -396,7 +396,6 @@ impl Evaluator {
             }
             Stmt::Switch { expression, cases, otherwise } => {
                 let switch_val = self.eval_expression(expression)?;
-                let mut matched = false;
                 for (case_expr, case_block) in cases {
                     let case_val = self.eval_expression(case_expr)?;
                     let is_match = match (&switch_val, &case_val) {
@@ -405,14 +404,11 @@ impl Evaluator {
                         (a, b) => a == b,
                     };
                     if is_match {
-                        matched = true;
                         return self.eval_block(case_block);
                     }
                 }
-                if !matched {
-                    if let Some(other_block) = otherwise {
-                        return self.eval_block(other_block);
-                    }
+                if let Some(other_block) = otherwise {
+                    return self.eval_block(other_block);
                 }
                 Ok(EvalOutcome::Value(Value::Void))
             }
@@ -616,9 +612,34 @@ impl Evaluator {
                 }
                 return Err(format!("Indexed assignment not fully supported for {:?}", l));
             }
+            Expr::CellIndexing { target, args } => {
+                if let Expr::Identifier(name) = &**target {
+                    let target_val_opt = self.env.read().unwrap_or_else(|e| e.into_inner()).get(name);
+                    let mut v = if let Some(Value::CellArray(v_arc)) = target_val_opt {
+                        (*v_arc).clone()
+                    } else {
+                        Vec::new()
+                    };
+                    if args.len() == 1 {
+                        let idx_val = self.eval_expression(&args[0])?;
+                        if let Value::Scalar(i) = idx_val {
+                            let idx = i as usize;
+                            if idx >= 1 {
+                                if idx > v.len() {
+                                    v.resize(idx, Value::Void);
+                                }
+                                v[idx - 1] = val;
+                                self.env.write().unwrap_or_else(|e| e.into_inner()).define(name.clone(), Value::CellArray(Arc::new(v)));
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+                return Err(format!("Cell indexing assignment failed for {:?}", l));
+            }
             Expr::PropertyAccess { target, property } => {
                 if let Expr::Identifier(struct_name) = &**target {
-                    let mut current = self.env.read().unwrap_or_else(|e| e.into_inner()).get(struct_name)
+                    let current = self.env.read().unwrap_or_else(|e| e.into_inner()).get(struct_name)
                         .unwrap_or_else(|| Value::Struct(Arc::new(std::collections::HashMap::new())));
                     
                     if let Value::Struct(map) = current {
@@ -795,7 +816,18 @@ impl Evaluator {
                 }
 
                 let is_complex = evaluated_rows.iter().any(|r| r.iter().any(|v| matches!(v, Value::Complex(_, _) | Value::ComplexMatrix(_))));
-                
+                let is_string = evaluated_rows.iter().any(|r| r.iter().any(|v| matches!(v, Value::String(_))));
+
+                if is_string {
+                    let mut cells = Vec::new();
+                    for r in evaluated_rows {
+                        for v in r {
+                            cells.push(v);
+                        }
+                    }
+                    return Ok(Value::CellArray(Arc::new(cells)));
+                }
+
                 if is_complex {
                     let mut final_rows: Vec<Array2<Complex64>> = Vec::new();
                     for r in evaluated_rows {
@@ -1217,6 +1249,15 @@ impl Evaluator {
                     }
                     _ => Err(format!("Operator {:?} not implemented for LogicalMatrix", op)),
                 }
+            }
+            (Value::String(a), BinaryOperator::Add | BinaryOperator::DotAdd, Value::String(b)) => {
+                Ok(Value::String(Arc::new(format!("{}{}", a, b))))
+            }
+            (Value::String(a), BinaryOperator::Add | BinaryOperator::DotAdd, r) => {
+                Ok(Value::String(Arc::new(format!("{}{}", a, r.format_disp()))))
+            }
+            (l, BinaryOperator::Add | BinaryOperator::DotAdd, Value::String(b)) => {
+                Ok(Value::String(Arc::new(format!("{}{}", l.format_disp(), b))))
             }
             (Value::String(a), BinaryOperator::Eq, Value::String(b)) => Ok(Value::Bool(*a == *b)),
             (Value::String(a), BinaryOperator::Ne, Value::String(b)) => Ok(Value::Bool(*a != *b)),
@@ -1761,6 +1802,23 @@ impl Evaluator {
                             return Ok(Value::Scalar(*n));
                         }
                         Ok(Value::Scalar(0.0))
+                    }
+                    "table" => {
+                        let mut map = std::collections::HashMap::new();
+                        let mut col_idx = 1;
+                        let mut i = 0;
+                        while i < args.len() {
+                            if let Value::String(s) = &args[i] {
+                                if s.as_str() == "VariableNames" && i + 1 < args.len() {
+                                    i += 2;
+                                    continue;
+                                }
+                            }
+                            map.insert(format!("Var{}", col_idx), args[i].clone());
+                            col_idx += 1;
+                            i += 1;
+                        }
+                        Ok(Value::Struct(Arc::new(map)))
                     }
                     "round" => {
                         if let Some(Value::Scalar(n)) = args.first() {

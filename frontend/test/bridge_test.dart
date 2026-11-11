@@ -149,5 +149,5 @@ end
       print('Stack: $stack');
       rethrow;
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

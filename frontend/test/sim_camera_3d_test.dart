@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unilab/features/simulation/models/sim_camera_3d.dart';
@@ -73,8 +72,8 @@ void main() {
       const baseColor = Color(0xFFFFFFFF);
 
       final litColor = camera.calculateLighting(normal, baseColor);
-      expect(litColor.alpha, 255);
-      expect(litColor.red, greaterThan(50));
+      expect((litColor.a * 255).round(), 255);
+      expect((litColor.r * 255).round(), greaterThan(50));
     });
   });
 }

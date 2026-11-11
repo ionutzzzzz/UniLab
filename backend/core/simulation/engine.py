@@ -67,6 +67,17 @@ try:
     HAS_PYQT = True
 except ImportError:
     HAS_PYQT = False
+    class QDialog:
+        def __init__(self, *args, **kwargs): pass
+    class QMainWindow:
+        def __init__(self, *args, **kwargs): pass
+    class QThread:
+        def __init__(self, *args, **kwargs): pass
+    def pyqtSignal(*args, **kwargs):
+        class _Signal:
+            def connect(self, *a, **kw): pass
+            def emit(self, *a, **kw): pass
+        return _Signal()
 
 # Try importing ML package
 try:

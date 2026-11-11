@@ -3,5 +3,10 @@ function c = matrix_condition_number(A)
     if nargin < 1, A = []; end
     [~, S, ~] = svd(A);
     s = diag(S);
-    c = max(s) / min(s);
+    min_s = min(s);
+    if min_s == 0
+        c = Inf;
+    else
+        c = max(s) / min_s;
+    end
 end

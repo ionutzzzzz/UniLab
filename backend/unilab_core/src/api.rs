@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::runtime::eval::Evaluator;
 use crate::runtime::value::Value;
 use crate::parser::parse_unilab;
-use crate::{ExecutionResult, PlotData};
+use crate::ExecutionResult;
 
 pub struct UniLabEngine {
     pub evaluator: Evaluator,

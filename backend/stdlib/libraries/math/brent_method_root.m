@@ -12,7 +12,7 @@ function x = brent_method_root(f, a, b, tol)
         [a, b] = deal(b, a);
         [fa, fb] = deal(fb, fa);
     end
-    c = a; fc = fa; mflag = true;
+    c = a; fc = fa; d = c; mflag = true;
     while fb ~= 0 && abs(b - a) > tol
         if fa ~= fc && fb ~= fc
             % Inverse quadratic interpolation

@@ -334,6 +334,7 @@ release-windows/
 dist/
 backend/target/
 backend/unilab_cli/unilab_cli_bin
+frontend/assets/backend/
 frontend/build/
 frontend/dist/
 frontend/.dart_tool/

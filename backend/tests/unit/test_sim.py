@@ -1,7 +1,10 @@
 import sys
 import time
 from backend.core.simulation.engine import SimulatorEngine
-from PyQt5.QtWidgets import QApplication
+try:
+    from PyQt5.QtWidgets import QApplication
+except ImportError:
+    QApplication = None
 
 def dummy_step(state, params):
     state['x'] += 1

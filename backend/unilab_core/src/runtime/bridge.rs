@@ -32,12 +32,52 @@ mod imp {
                     let path = sys.getattr("path")?;
                     let existing: Vec<String> = path.extract().unwrap_or_default();
 
-                    let mut paths = vec![".".to_string(), "..".to_string(), "backend".to_string()];
+                    let mut paths = vec![
+                        ".".to_string(),
+                        "..".to_string(),
+                        "backend".to_string(),
+                        "/usr/local/lib/python3.13/dist-packages".to_string(),
+                        "/usr/lib/python3/dist-packages".to_string(),
+                        "/usr/lib/python3.13/dist-packages".to_string(),
+                    ];
+
+                    if let Ok(vi) = sys.getattr("version_info") {
+                        if let (Ok(major), Ok(minor)) = (vi.getattr("major"), vi.getattr("minor")) {
+                            if let (Ok(maj), Ok(min)) = (major.extract::<u32>(), minor.extract::<u32>()) {
+                                paths.push(format!("/usr/lib/python{}.{}/dist-packages", maj, min));
+                                paths.push(format!("/usr/local/lib/python{}.{}/dist-packages", maj, min));
+                                paths.push(format!("/usr/lib/python{}.{}", maj, min));
+                            }
+                        }
+                    }
 
                     if let Ok(cwd) = std::env::current_dir() {
                         paths.push(cwd.to_string_lossy().to_string());
                         if let Some(parent) = cwd.parent() {
                             paths.push(parent.to_string_lossy().to_string());
+                        }
+                    }
+
+                    if let Ok(site) = py.import("site") {
+                        if let Ok(site_pkgs) = site.call_method0("getsitepackages") {
+                            if let Ok(pkgs) = site_pkgs.extract::<Vec<String>>() {
+                                paths.extend(pkgs);
+                            }
+                        }
+                        if let Ok(user_site) = site.call_method0("getusersitepackages") {
+                            if let Ok(pkg) = user_site.extract::<String>() {
+                                paths.push(pkg);
+                            }
+                        }
+                    }
+
+                    if let Ok(home) = std::env::var("HOME") {
+                        let home_path = std::path::Path::new(&home);
+                        for v in &["3.13", "3.12", "3.11", "3.10"] {
+                            let user_p = home_path.join(".local/lib").join(format!("python{}", v)).join("site-packages");
+                            if user_p.exists() {
+                                paths.push(user_p.to_string_lossy().to_string());
+                            }
                         }
                     }
 
